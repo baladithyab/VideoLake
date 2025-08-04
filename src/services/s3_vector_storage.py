@@ -17,6 +17,34 @@ from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+def _normalize_encryption_type(value: Optional[str]) -> Optional[str]:
+    """
+    Map friendly encryption types to AWS API values:
+      - "SSE-S3" -> "AES256"
+      - "SSE-KMS" -> "aws:kms"
+    Accept already-correct forms ("AES256", "aws:kms") and return as-is.
+    """
+    if value is None:
+        return None
+    v = str(value).strip()
+    if v.lower() in ("sse-s3", "aes256"):
+        return "AES256"
+    if v.lower() in ("sse-kms", "aws:kms", "aws:kms"):
+        return "aws:kms"
+    return v
+
+def _to_vectors_resource_id(bucket: str, index: str) -> str:
+    """Return S3 Vectors resource-id format expected by certain API params."""
+    return f"bucket/{bucket}/index/{index}"
+
+
+def _to_resource_id(bucket: str, index: str) -> str:
+    """
+    Minimal helper for callers to generate a normalized resource-id for an index.
+    This is intentionally identical to _to_vectors_resource_id but exposed for external use.
+    """
+    return f"bucket/{bucket}/index/{index}"
+
 
 class S3VectorStorageManager:
     """Manages S3 vector bucket operations with proper error handling and validation."""
@@ -50,6 +78,36 @@ class S3VectorStorageManager:
                     time.sleep(delay)
                     continue
                 raise
+
+    def _parse_index_identifier(self, identifier: str) -> Dict[str, str]:
+        """
+        Accept either:
+          - ARN starting with 'arn:' -> {'indexArn': identifier}
+          - Resource-id 'bucket/<bucket>/index/<index>' -> {'vectorBucketName': bucket, 'indexName': index}
+        """
+        if not identifier or not isinstance(identifier, str):
+            raise ValidationError(
+                "Index identifier must be a non-empty string",
+                error_code="INVALID_INDEX_IDENTIFIER",
+                error_details={"identifier": identifier}
+            )
+        if identifier.startswith("arn:"):
+            return {"indexArn": identifier}
+        # resource-id pattern
+        if identifier.startswith("bucket/"):
+            try:
+                parts = identifier.split("/")
+                # Expect ['bucket', '<bucket>', 'index', '<index>']
+                if len(parts) >= 4 and parts[0] == "bucket" and parts[2] == "index":
+                    return {"vectorBucketName": parts[1], "indexName": parts[3]}
+            except Exception:
+                pass
+        # Fallback: treat as invalid
+        raise ValidationError(
+            "Index identifier must be an ARN or 'bucket/<bucket>/index/<index>'",
+            error_code="INVALID_INDEX_IDENTIFIER",
+            error_details={"identifier": identifier}
+        )
     
     def _validate_bucket_name(self, bucket_name: str) -> None:
         """Validate vector bucket name according to S3 Vectors requirements."""
@@ -114,35 +172,32 @@ class S3VectorStorageManager:
         # Validate bucket name
         self._validate_bucket_name(bucket_name)
         
-        # Validate encryption configuration
-        if encryption_type not in ["SSE-S3", "SSE-KMS"]:
+        # Validate and normalize encryption configuration
+        norm_enc = _normalize_encryption_type(encryption_type)
+        if norm_enc not in ["AES256", "aws:kms"]:
             raise ValidationError(
-                f"Invalid encryption type: {encryption_type}. Must be 'SSE-S3' or 'SSE-KMS'",
+                f"Invalid encryption type: {encryption_type}. Must be 'SSE-S3'/'AES256' or 'SSE-KMS'/'aws:kms'",
                 error_code="INVALID_ENCRYPTION_TYPE",
                 error_details={"encryption_type": encryption_type}
             )
-        
-        if encryption_type == "SSE-KMS" and not kms_key_arn:
+
+        if norm_enc == "aws:kms" and not kms_key_arn:
             raise ValidationError(
                 "KMS key ARN is required when using SSE-KMS encryption",
                 error_code="MISSING_KMS_KEY_ARN"
             )
-        
+
         # Prepare request parameters
         request_params = {
             "vectorBucketName": bucket_name
         }
-        
+
         # Add encryption configuration if specified
-        if encryption_type == "SSE-KMS" and kms_key_arn:
-            request_params["encryptionConfiguration"] = {
-                "sseType": encryption_type,
-                "kmsKeyArn": kms_key_arn
-            }
-        elif encryption_type == "SSE-S3":
-            request_params["encryptionConfiguration"] = {
-                "sseType": encryption_type
-            }
+        if norm_enc:
+            enc_cfg = {"sseType": norm_enc}
+            if norm_enc == "aws:kms" and kms_key_arn:
+                enc_cfg["kmsKeyArn"] = kms_key_arn
+            request_params["encryptionConfiguration"] = enc_cfg
         
         def _create_bucket():
             return self.s3vectors_client.create_vector_bucket(**request_params)
@@ -232,17 +287,21 @@ class S3VectorStorageManager:
             response = self._retry_with_backoff(_get_bucket)
             
             logger.info(f"Successfully retrieved vector bucket attributes: {bucket_name}")
+            # Normalize: ensure vectorBucketName present at top level for tests
+            if isinstance(response, dict) and 'vectorBucketName' not in response:
+                response = dict(response)
+                response['vectorBucketName'] = bucket_name
             return response
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
             
-            if error_code == 'NoSuchBucket':
+            if error_code in ['NoSuchBucket', 'NotFoundException']:
                 raise VectorStorageError(
                     f"Vector bucket {bucket_name} does not exist",
                     error_code="BUCKET_NOT_FOUND",
-                    error_details={"bucket_name": bucket_name}
+                    error_details={"bucket_name": bucket_name, "aws_error_code": error_code}
                 )
             elif error_code == 'AccessDeniedException':
                 raise VectorStorageError(
@@ -751,11 +810,11 @@ class S3VectorStorageManager:
                         "index_name": index_name
                     }
                 )
-            logger.info(f"Deleting vector index by ARN: {index_arn}")
+            logger.info(f"Deleting vector index by identifier: {index_arn}")
         else:
             if not bucket_name or not index_name:
                 raise ValidationError(
-                    "Must specify either index_arn or both bucket_name and index_name",
+                    "Must specify either index_arn (ARN or resource-id) or both bucket_name and index_name",
                     error_code="MISSING_PARAMETERS",
                     error_details={
                         "bucket_name": bucket_name,
@@ -773,7 +832,11 @@ class S3VectorStorageManager:
         # Prepare request parameters
         request_params = {}
         if index_arn:
-            request_params["indexArn"] = index_arn
+            # Accept both full arn and short resource-id
+            if str(index_arn).startswith("arn:"):
+                request_params["indexArn"] = index_arn
+            else:
+                request_params["indexResourceName"] = index_arn
         else:
             request_params["vectorBucketName"] = bucket_name
             request_params["indexName"] = index_name
@@ -847,7 +910,66 @@ class S3VectorStorageManager:
                     "error": str(e)
                 }
             )
-    
+     
+    def delete_index_with_retries(self, bucket: str, index: str, max_attempts: int = 6, backoff_base: float = 1.0) -> bool:
+        """
+        Delete index using resource-id normalization with retries for eventual consistency.
+        Retries on NotFoundException and ConflictException as these can flap during propagation.
+        Returns True if the index is deleted or confirmed NotFound by the end.
+        """
+        identifier = _to_resource_id(bucket, index)
+        attempt = 0
+        while attempt < max_attempts:
+            attempt += 1
+            try:
+                logger.info(f"[cleanup] Deleting index (attempt {attempt}/{max_attempts}): {identifier}")
+                self.delete_vector_index(index_arn=identifier)
+                # Verify deletion via describe/list
+                time.sleep(0.5)
+                try:
+                    if not self.index_exists(bucket, index):
+                        logger.info(f"[cleanup] Verified deletion of {identifier}")
+                        return True
+                except VectorStorageError as e:
+                    if getattr(e, "error_code", None) == "INDEX_NOT_FOUND":
+                        logger.info(f"[cleanup] Verified deletion (INDEX_NOT_FOUND) of {identifier}")
+                        return True
+                # If still exists, fall through to retry
+                raise VectorStorageError("Index still exists after delete", error_code="DELETE_NOT_CONSISTENT")
+            except VectorStorageError as e:
+                code = getattr(e, "error_code", None) or ""
+                if code in ("INDEX_NOT_FOUND", "NotFoundException"):
+                    if attempt == max_attempts:
+                        logger.info(f"[cleanup] Index not found on final attempt; treating as deleted: {identifier}")
+                        return True
+                    # Backoff and retry in case of inconsistent listing
+                elif code in ("ConflictException",):
+                    # Retry on conflict
+                    pass
+                else:
+                    # For other errors, log and continue to retry cautiously
+                    logger.warning(f"[cleanup] Delete attempt error ({code}): {e}")
+                # Exponential backoff
+                delay = backoff_base * (2 ** (attempt - 1))
+                logger.info(f"[cleanup] Retry in {delay:.1f}s for {identifier}")
+                time.sleep(delay)
+            except Exception as e:
+                # Unknown errors - still retry with backoff
+                delay = backoff_base * (2 ** (attempt - 1))
+                logger.warning(f"[cleanup] Unexpected error deleting {identifier}: {e}; retrying in {delay:.1f}s")
+                time.sleep(delay)
+        # Final verification
+        try:
+            if not self.index_exists(bucket, index):
+                logger.info(f"[cleanup] Post-retry verification shows index absent: {identifier}")
+                return True
+        except VectorStorageError as e:
+            if getattr(e, "error_code", None) == "INDEX_NOT_FOUND":
+                logger.info(f"[cleanup] Post-retry verification INDEX_NOT_FOUND for {identifier}")
+                return True
+        logger.warning(f"[cleanup] Unable to confirm deletion of {identifier} after {max_attempts} attempts")
+        return False
+     
     def index_exists(self,
                    bucket_name: str,
                    index_name: str) -> bool:
@@ -991,8 +1113,8 @@ class S3VectorStorageManager:
         # Validate inputs
         if not index_arn or not isinstance(index_arn, str):
             raise ValidationError(
-                "Index ARN must be a non-empty string",
-                error_code="INVALID_INDEX_ARN",
+                "Index ARN or resource-id must be a non-empty string",
+                error_code="INVALID_INDEX_IDENTIFIER",
                 error_details={"index_arn": index_arn}
             )
         
@@ -1018,8 +1140,10 @@ class S3VectorStorageManager:
             formatted_vectors.append(formatted_vector)
         
         def _put_vectors():
+            # Accept ARN or resource-id; map to supported params
+            mapped = self._parse_index_identifier(index_arn)
             return self.s3vectors_client.put_vectors(
-                indexArn=index_arn,
+                **mapped,
                 vectors=formatted_vectors
             )
         
@@ -1126,8 +1250,8 @@ class S3VectorStorageManager:
         # Validate inputs
         if not index_arn or not isinstance(index_arn, str):
             raise ValidationError(
-                "Index ARN must be a non-empty string",
-                error_code="INVALID_INDEX_ARN",
+                "Index ARN or resource-id must be a non-empty string",
+                error_code="INVALID_INDEX_IDENTIFIER",
                 error_details={"index_arn": index_arn}
             )
         
@@ -1164,7 +1288,8 @@ class S3VectorStorageManager:
         # Prepare request parameters
         request_params = {
             'indexArn': index_arn,
-            'queryVector': [float(x) for x in query_vector],  # Ensure float32 conversion
+            # Placeholder; converted to required dict form in _query_vectors
+            'queryVector': [float(x) for x in query_vector],
             'topK': top_k,
             'returnDistance': return_distance,
             'returnMetadata': return_metadata
@@ -1174,7 +1299,17 @@ class S3VectorStorageManager:
             request_params['filter'] = metadata_filter
         
         def _query_vectors():
-            return self.s3vectors_client.query_vectors(**request_params)
+            # Map identifier to supported params
+            mapped = self._parse_index_identifier(index_arn)
+            req = dict(request_params)
+            # Coerce queryVector to union type dict expected by API if it's a list
+            qv = req.get('queryVector')
+            if isinstance(qv, list):
+                req['queryVector'] = {'float32': [float(x) for x in qv]}
+            # Replace placeholder 'indexArn' with mapped keys
+            req.pop('indexArn', None)
+            req.update(mapped)
+            return self.s3vectors_client.query_vectors(**req)
         
         try:
             response = self._retry_with_backoff(_query_vectors)
@@ -1283,8 +1418,8 @@ class S3VectorStorageManager:
         # Validate inputs
         if not index_arn or not isinstance(index_arn, str):
             raise ValidationError(
-                "Index ARN must be a non-empty string",
-                error_code="INVALID_INDEX_ARN",
+                "Index ARN or resource-id must be a non-empty string",
+                error_code="INVALID_INDEX_IDENTIFIER",
                 error_details={"index_arn": index_arn}
             )
         
@@ -1356,7 +1491,11 @@ class S3VectorStorageManager:
             request_params['segmentIndex'] = segment_index
         
         def _list_vectors():
-            return self.s3vectors_client.list_vectors(**request_params)
+            mapped = self._parse_index_identifier(index_arn)
+            req = dict(request_params)
+            req.pop('indexArn')
+            req.update(mapped)
+            return self.s3vectors_client.list_vectors(**req)
         
         try:
             response = self._retry_with_backoff(_list_vectors)
