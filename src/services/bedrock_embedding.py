@@ -197,13 +197,28 @@ class BedrockEmbeddingService:
             logger.error(f"Failed to generate embedding: {str(e)}")
             raise
     
-    def batch_generate_embeddings(self, texts: List[str], model_id: Optional[str] = None) -> List[EmbeddingResult]:
+    def batch_generate_embeddings(self, 
+                                texts: List[str], 
+                                model_id: Optional[str] = None,
+                                batch_size: Optional[int] = None,
+                                max_concurrent: int = 5,
+                                rate_limit_delay: float = 0.1) -> List[EmbeddingResult]:
         """
-        Generate embeddings for multiple text inputs with batch processing.
+        Generate embeddings for multiple text inputs with advanced batch processing.
+        
+        Features:
+        - Configurable batch sizes for optimal performance
+        - Rate limiting and throttling management
+        - Concurrent processing with limits
+        - Comprehensive error handling and retry logic
+        - Progress tracking for large batches
         
         Args:
             texts: List of input texts to embed
             model_id: Bedrock model ID (uses default if not specified)
+            batch_size: Override default batch size for processing
+            max_concurrent: Maximum concurrent requests (default: 5)
+            rate_limit_delay: Delay between batches in seconds (default: 0.1)
             
         Returns:
             List of EmbeddingResult objects
@@ -235,22 +250,25 @@ class BedrockEmbeddingService:
                     error_details={"index": i}
                 )
         
+        # Determine optimal batch size
+        if batch_size is None:
+            batch_size = self._get_optimal_batch_size(model_id, len(texts))
+        
         start_time = time.time()
         results = []
+        failed_items = []
         
         try:
             if model_info.supports_batch and model_id.startswith('cohere'):
-                # Use Cohere batch processing
-                results = self._generate_cohere_batch_embeddings(texts, model_id)
+                # Use Cohere native batch processing with rate limiting
+                results = self._generate_cohere_batch_embeddings_with_rate_limiting(
+                    texts, model_id, batch_size, rate_limit_delay
+                )
             else:
-                # Process individually for Titan models
-                for text in texts:
-                    embedding = self._generate_single_embedding(text, model_id)
-                    results.append(EmbeddingResult(
-                        embedding=embedding,
-                        input_text=text,
-                        model_id=model_id
-                    ))
+                # Process individually for Titan models with concurrency control
+                results, failed_items = self._generate_titan_batch_embeddings_with_concurrency(
+                    texts, model_id, batch_size, max_concurrent, rate_limit_delay
+                )
             
             processing_time_ms = int((time.time() - start_time) * 1000)
             
@@ -259,7 +277,18 @@ class BedrockEmbeddingService:
                 if result.processing_time_ms is None:
                     result.processing_time_ms = processing_time_ms // len(results)
             
-            logger.info(f"Generated {len(results)} embeddings using {model_id}")
+            # Handle partial failures
+            if failed_items:
+                logger.warning(f"Failed to process {len(failed_items)} out of {len(texts)} texts")
+                # Optionally retry failed items or raise partial failure error
+                if len(failed_items) == len(texts):
+                    raise VectorEmbeddingError(
+                        "All batch items failed to process",
+                        error_code="BATCH_COMPLETE_FAILURE",
+                        error_details={"failed_count": len(failed_items), "total_count": len(texts)}
+                    )
+            
+            logger.info(f"Generated {len(results)} embeddings using {model_id} (batch size: {batch_size})")
             return results
             
         except Exception as e:
@@ -394,6 +423,208 @@ class BedrockEmbeddingService:
                 ))
         
         return results
+    
+    def _generate_cohere_batch_embeddings_with_rate_limiting(self, 
+                                                           texts: List[str], 
+                                                           model_id: str,
+                                                           batch_size: int,
+                                                           rate_limit_delay: float) -> List[EmbeddingResult]:
+        """Generate embeddings using Cohere batch processing with rate limiting."""
+        # Cohere supports up to 96 texts per call, but respect user's batch_size
+        effective_batch_size = min(96, batch_size)
+        results = []
+        total_batches = (len(texts) + effective_batch_size - 1) // effective_batch_size
+        
+        for batch_num, i in enumerate(range(0, len(texts), effective_batch_size)):
+            batch_texts = texts[i:i + effective_batch_size]
+            
+            def _process_cohere_batch():
+                request_body = {
+                    "texts": batch_texts,
+                    "input_type": "search_document",
+                    "embedding_types": ["float"]
+                }
+                
+                response = self.bedrock_client.invoke_model(
+                    modelId=model_id,
+                    body=json.dumps(request_body),
+                    contentType='application/json',
+                    accept='application/json'
+                )
+                
+                response_body = json.loads(response['body'].read())
+                return response_body['embeddings']['float']
+            
+            try:
+                # Use retry logic for each batch
+                embeddings = self._retry_with_backoff(_process_cohere_batch, max_retries=3)
+                
+                for j, embedding in enumerate(embeddings):
+                    results.append(EmbeddingResult(
+                        embedding=embedding,
+                        input_text=batch_texts[j],
+                        model_id=model_id
+                    ))
+                
+                logger.debug(f"Processed batch {batch_num + 1}/{total_batches} ({len(batch_texts)} texts)")
+                
+                # Rate limiting delay between batches (except for the last batch)
+                if batch_num < total_batches - 1 and rate_limit_delay > 0:
+                    time.sleep(rate_limit_delay)
+                    
+            except Exception as e:
+                logger.error(f"Failed to process Cohere batch {batch_num + 1}: {str(e)}")
+                raise VectorEmbeddingError(
+                    f"Batch processing failed at batch {batch_num + 1}",
+                    error_code="BATCH_PROCESSING_ERROR",
+                    error_details={
+                        "batch_number": batch_num + 1,
+                        "total_batches": total_batches,
+                        "batch_size": len(batch_texts),
+                        "original_error": str(e)
+                    }
+                )
+        
+        return results
+    
+    def _generate_titan_batch_embeddings_with_concurrency(self, 
+                                                        texts: List[str], 
+                                                        model_id: str,
+                                                        batch_size: int,
+                                                        max_concurrent: int,
+                                                        rate_limit_delay: float) -> tuple[List[EmbeddingResult], List[str]]:
+        """Generate embeddings for Titan models with concurrency control and rate limiting."""
+        import concurrent.futures
+        import threading
+        
+        results = []
+        failed_items = []
+        results_lock = threading.Lock()
+        
+        # Create batches for processing
+        batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
+        
+        def _process_batch(batch_texts: List[str], batch_index: int) -> None:
+            """Process a single batch of texts."""
+            batch_results = []
+            batch_failures = []
+            
+            for text in batch_texts:
+                try:
+                    embedding = self._generate_single_embedding(text, model_id)
+                    batch_results.append(EmbeddingResult(
+                        embedding=embedding,
+                        input_text=text,
+                        model_id=model_id
+                    ))
+                except Exception as e:
+                    logger.warning(f"Failed to generate embedding for text in batch {batch_index}: {str(e)}")
+                    batch_failures.append(text)
+            
+            # Thread-safe update of results
+            with results_lock:
+                results.extend(batch_results)
+                failed_items.extend(batch_failures)
+            
+            logger.debug(f"Completed batch {batch_index + 1}/{len(batches)} ({len(batch_results)} successful, {len(batch_failures)} failed)")
+            
+            # Rate limiting delay
+            if rate_limit_delay > 0:
+                time.sleep(rate_limit_delay)
+        
+        # Process batches with controlled concurrency
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+            # Submit all batch processing tasks
+            future_to_batch = {
+                executor.submit(_process_batch, batch, i): i 
+                for i, batch in enumerate(batches)
+            }
+            
+            # Wait for completion and handle any exceptions
+            for future in concurrent.futures.as_completed(future_to_batch):
+                batch_index = future_to_batch[future]
+                try:
+                    future.result()  # This will raise any exception that occurred
+                except Exception as e:
+                    logger.error(f"Batch {batch_index + 1} processing failed: {str(e)}")
+                    # Continue processing other batches
+        
+        return results, failed_items
+    
+    def _get_optimal_batch_size(self, model_id: str, total_texts: int) -> int:
+        """Determine optimal batch size based on model and input size."""
+        model_info = self.SUPPORTED_MODELS[model_id]
+        
+        if model_id.startswith('cohere') and model_info.supports_batch:
+            # Cohere can handle up to 96 texts per call
+            if total_texts <= 10:
+                return min(total_texts, 5)  # Small batches for small inputs
+            elif total_texts <= 100:
+                return min(total_texts, 20)  # Medium batches
+            else:
+                return min(total_texts, 50)  # Larger batches for efficiency
+        else:
+            # Titan models process individually, so batch size affects concurrency
+            if total_texts <= 10:
+                return min(total_texts, 3)  # Small batches
+            elif total_texts <= 100:
+                return min(total_texts, 10)  # Medium batches
+            else:
+                return min(total_texts, 25)  # Larger batches for efficiency
+    
+    def get_batch_processing_recommendations(self, texts: List[str], model_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get recommendations for optimal batch processing parameters.
+        
+        Args:
+            texts: List of input texts
+            model_id: Bedrock model ID (uses default if not specified)
+            
+        Returns:
+            Dictionary with recommended batch processing parameters
+        """
+        if model_id is None:
+            model_id = self.config.bedrock_models['text_embedding']
+        
+        model_info = self.SUPPORTED_MODELS[model_id]
+        total_texts = len(texts)
+        
+        # Calculate optimal parameters
+        optimal_batch_size = self._get_optimal_batch_size(model_id, total_texts)
+        
+        # Estimate processing time and cost
+        cost_estimate = self.estimate_cost(texts, model_id)
+        
+        # Determine recommended concurrency
+        if model_info.supports_batch:
+            recommended_concurrent = 1  # Native batch processing
+            estimated_requests = (total_texts + optimal_batch_size - 1) // optimal_batch_size
+        else:
+            recommended_concurrent = min(5, max(1, total_texts // 10))  # Scale with input size
+            estimated_requests = total_texts
+        
+        # Estimate processing time (rough calculation)
+        avg_request_time = 2.0  # seconds per request
+        estimated_time_sequential = estimated_requests * avg_request_time
+        estimated_time_concurrent = estimated_time_sequential / recommended_concurrent
+        
+        return {
+            "model_id": model_id,
+            "total_texts": total_texts,
+            "supports_native_batch": model_info.supports_batch,
+            "recommended_batch_size": optimal_batch_size,
+            "recommended_concurrent_requests": recommended_concurrent,
+            "estimated_api_requests": estimated_requests,
+            "estimated_processing_time_seconds": {
+                "sequential": round(estimated_time_sequential, 1),
+                "concurrent": round(estimated_time_concurrent, 1)
+            },
+            "cost_estimate": cost_estimate,
+            "rate_limiting_recommendations": {
+                "delay_between_batches": 0.1 if total_texts > 100 else 0.05,
+                "max_concurrent_requests": recommended_concurrent
+            }
+        }
     
     def _handle_bedrock_error(self, error: ClientError, model_id: str) -> None:
         """Handle Bedrock-specific errors with appropriate exceptions."""

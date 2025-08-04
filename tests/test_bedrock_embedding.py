@@ -423,3 +423,319 @@ class TestBedrockEmbeddingService:
             embedding_service.generate_text_embedding("test", "amazon.titan-embed-text-v2:0")
         
         assert exc_info.value.error_code == "SERVICE_UNAVAILABLE"
+
+
+class TestBatchProcessingEnhancements:
+    """Test cases for enhanced batch processing capabilities."""
+    
+    @pytest.fixture
+    def mock_bedrock_client(self):
+        """Mock Bedrock Runtime client."""
+        with patch('src.services.bedrock_embedding.aws_client_factory') as mock_factory:
+            mock_client = Mock()
+            mock_factory.get_bedrock_runtime_client.return_value = mock_client
+            yield mock_client
+    
+    @pytest.fixture
+    def embedding_service(self, mock_bedrock_client):
+        """Create BedrockEmbeddingService instance with mocked client."""
+        return BedrockEmbeddingService()
+    
+    @pytest.fixture
+    def sample_embedding(self):
+        """Sample embedding vector for testing."""
+        return [0.1, 0.2, 0.3] * 341 + [0.1]  # 1024 dimensions
+    
+    def test_batch_generate_embeddings_with_custom_batch_size(self, embedding_service, mock_bedrock_client, sample_embedding):
+        """Test batch processing with custom batch size."""
+        texts = ["text 1", "text 2", "text 3", "text 4", "text 5"]
+        custom_batch_size = 2
+        
+        # Mock validation call
+        validation_response = {
+            'body': Mock(read=lambda: json.dumps({'embedding': sample_embedding}).encode())
+        }
+        # Mock individual embedding calls
+        embedding_response = {
+            'body': Mock(read=lambda: json.dumps({'embedding': sample_embedding}).encode())
+        }
+        mock_bedrock_client.invoke_model.side_effect = [validation_response] + [embedding_response] * len(texts)
+        
+        results = embedding_service.batch_generate_embeddings(
+            texts, 
+            "amazon.titan-embed-text-v2:0",
+            batch_size=custom_batch_size
+        )
+        
+        assert len(results) == len(texts)
+        for result in results:
+            assert isinstance(result, EmbeddingResult)
+            assert result.embedding == sample_embedding
+    
+    def test_batch_generate_embeddings_with_rate_limiting(self, embedding_service, mock_bedrock_client, sample_embedding):
+        """Test batch processing with rate limiting."""
+        texts = ["text 1", "text 2", "text 3"]
+        rate_limit_delay = 0.01  # Small delay for testing
+        
+        # Mock validation call
+        validation_response = {
+            'body': Mock(read=lambda: json.dumps({'embeddings': {'float': [sample_embedding]}}).encode())
+        }
+        # Mock batch embedding calls for Cohere
+        batch_response = {
+            'body': Mock(read=lambda: json.dumps({
+                'embeddings': {'float': [sample_embedding] * len(texts)}
+            }).encode())
+        }
+        mock_bedrock_client.invoke_model.side_effect = [validation_response, batch_response]
+        
+        with patch('src.services.bedrock_embedding.time.sleep') as mock_sleep:
+            results = embedding_service.batch_generate_embeddings(
+                texts, 
+                "cohere.embed-english-v3",
+                rate_limit_delay=rate_limit_delay
+            )
+        
+        assert len(results) == len(texts)
+        # Sleep should not be called for single batch
+        assert not mock_sleep.called
+    
+    def test_batch_generate_embeddings_cohere_with_multiple_batches(self, embedding_service, mock_bedrock_client, sample_embedding):
+        """Test Cohere batch processing with multiple batches and rate limiting."""
+        # Create enough texts to require multiple batches
+        texts = [f"text {i}" for i in range(10)]
+        batch_size = 3
+        rate_limit_delay = 0.01
+        
+        # Mock validation call
+        validation_response = {
+            'body': Mock(read=lambda: json.dumps({'embeddings': {'float': [sample_embedding]}}).encode())
+        }
+        
+        # Mock multiple batch responses
+        def create_batch_response(batch_texts):
+            return {
+                'body': Mock(read=lambda: json.dumps({
+                    'embeddings': {'float': [sample_embedding] * len(batch_texts)}
+                }).encode())
+            }
+        
+        # Calculate expected batches
+        expected_batches = (len(texts) + batch_size - 1) // batch_size
+        batch_responses = [create_batch_response(texts[i:i+batch_size]) for i in range(0, len(texts), batch_size)]
+        
+        mock_bedrock_client.invoke_model.side_effect = [validation_response] + batch_responses
+        
+        with patch('src.services.bedrock_embedding.time.sleep') as mock_sleep:
+            results = embedding_service.batch_generate_embeddings(
+                texts, 
+                "cohere.embed-english-v3",
+                batch_size=batch_size,
+                rate_limit_delay=rate_limit_delay
+            )
+        
+        assert len(results) == len(texts)
+        # Sleep should be called between batches (expected_batches - 1 times)
+        assert mock_sleep.call_count == expected_batches - 1
+        for call in mock_sleep.call_args_list:
+            assert call[0][0] == rate_limit_delay
+    
+    def test_batch_generate_embeddings_titan_with_concurrency(self, embedding_service, mock_bedrock_client, sample_embedding):
+        """Test Titan batch processing with concurrency control."""
+        texts = ["text 1", "text 2", "text 3", "text 4"]
+        max_concurrent = 2
+        
+        # Mock validation call
+        validation_response = {
+            'body': Mock(read=lambda: json.dumps({'embedding': sample_embedding}).encode())
+        }
+        # Mock individual embedding calls
+        embedding_response = {
+            'body': Mock(read=lambda: json.dumps({'embedding': sample_embedding}).encode())
+        }
+        mock_bedrock_client.invoke_model.side_effect = [validation_response] + [embedding_response] * len(texts)
+        
+        results = embedding_service.batch_generate_embeddings(
+            texts, 
+            "amazon.titan-embed-text-v2:0",
+            max_concurrent=max_concurrent
+        )
+        
+        assert len(results) == len(texts)
+        for result in results:
+            assert isinstance(result, EmbeddingResult)
+            assert result.embedding == sample_embedding
+    
+    def test_batch_processing_partial_failure_handling(self, embedding_service, mock_bedrock_client, sample_embedding):
+        """Test handling of partial failures in batch processing."""
+        texts = ["text 1", "text 2", "text 3"]
+        
+        # Mock validation call
+        validation_response = {
+            'body': Mock(read=lambda: json.dumps({'embedding': sample_embedding}).encode())
+        }
+        
+        # Mock responses: success, failure, success
+        success_response = {
+            'body': Mock(read=lambda: json.dumps({'embedding': sample_embedding}).encode())
+        }
+        failure_error = ClientError(
+            {'Error': {'Code': 'ValidationException', 'Message': 'Invalid input'}},
+            'InvokeModel'
+        )
+        
+        mock_bedrock_client.invoke_model.side_effect = [
+            validation_response,  # Validation
+            success_response,     # First text succeeds
+            failure_error,        # Second text fails
+            success_response      # Third text succeeds
+        ]
+        
+        # Should still return successful results
+        results = embedding_service.batch_generate_embeddings(texts, "amazon.titan-embed-text-v2:0")
+        
+        # Should have 2 successful results (first and third texts)
+        assert len(results) == 2
+        assert all(result.embedding == sample_embedding for result in results)
+    
+    def test_batch_processing_complete_failure(self, embedding_service, mock_bedrock_client, sample_embedding):
+        """Test handling when all batch items fail."""
+        texts = ["text 1", "text 2"]
+        
+        # Mock validation call
+        validation_response = {
+            'body': Mock(read=lambda: json.dumps({'embedding': sample_embedding}).encode())
+        }
+        
+        # Mock all embedding calls to fail
+        failure_error = ClientError(
+            {'Error': {'Code': 'ValidationException', 'Message': 'Invalid input'}},
+            'InvokeModel'
+        )
+        
+        mock_bedrock_client.invoke_model.side_effect = [
+            validation_response,  # Validation succeeds
+            failure_error,        # All embedding calls fail
+            failure_error
+        ]
+        
+        with pytest.raises(VectorEmbeddingError) as exc_info:
+            embedding_service.batch_generate_embeddings(texts, "amazon.titan-embed-text-v2:0")
+        
+        assert exc_info.value.error_code == "BATCH_COMPLETE_FAILURE"
+        assert exc_info.value.error_details["failed_count"] == 2
+        assert exc_info.value.error_details["total_count"] == 2
+    
+    def test_get_optimal_batch_size(self, embedding_service):
+        """Test optimal batch size calculation."""
+        # Test small input
+        batch_size = embedding_service._get_optimal_batch_size("amazon.titan-embed-text-v2:0", 5)
+        assert batch_size <= 5
+        
+        # Test medium input
+        batch_size = embedding_service._get_optimal_batch_size("amazon.titan-embed-text-v2:0", 50)
+        assert batch_size <= 50
+        
+        # Test large input
+        batch_size = embedding_service._get_optimal_batch_size("amazon.titan-embed-text-v2:0", 200)
+        assert batch_size <= 200
+        
+        # Test Cohere model
+        batch_size = embedding_service._get_optimal_batch_size("cohere.embed-english-v3", 200)
+        assert batch_size <= 200
+    
+    def test_get_batch_processing_recommendations(self, embedding_service):
+        """Test batch processing recommendations."""
+        texts = ["text 1", "text 2", "text 3"] * 10  # 30 texts
+        
+        recommendations = embedding_service.get_batch_processing_recommendations(
+            texts, "amazon.titan-embed-text-v2:0"
+        )
+        
+        assert isinstance(recommendations, dict)
+        assert recommendations["model_id"] == "amazon.titan-embed-text-v2:0"
+        assert recommendations["total_texts"] == 30
+        assert recommendations["supports_native_batch"] is False
+        assert "recommended_batch_size" in recommendations
+        assert "recommended_concurrent_requests" in recommendations
+        assert "estimated_api_requests" in recommendations
+        assert "estimated_processing_time_seconds" in recommendations
+        assert "cost_estimate" in recommendations
+        assert "rate_limiting_recommendations" in recommendations
+    
+    def test_get_batch_processing_recommendations_cohere(self, embedding_service):
+        """Test batch processing recommendations for Cohere model."""
+        texts = ["text 1", "text 2", "text 3"] * 20  # 60 texts
+        
+        recommendations = embedding_service.get_batch_processing_recommendations(
+            texts, "cohere.embed-english-v3"
+        )
+        
+        assert recommendations["model_id"] == "cohere.embed-english-v3"
+        assert recommendations["total_texts"] == 60
+        assert recommendations["supports_native_batch"] is True
+        assert recommendations["recommended_concurrent_requests"] == 1  # Native batch processing
+    
+    @patch('src.services.bedrock_embedding.time.sleep')
+    def test_cohere_batch_processing_with_retry_logic(self, mock_sleep, embedding_service, mock_bedrock_client, sample_embedding):
+        """Test Cohere batch processing with retry logic on failures."""
+        texts = ["text 1", "text 2"]
+        
+        # Mock validation call
+        validation_response = {
+            'body': Mock(read=lambda: json.dumps({'embeddings': {'float': [sample_embedding]}}).encode())
+        }
+        
+        # Mock throttling error on first call, success on retry
+        throttling_error = ClientError(
+            {'Error': {'Code': 'Throttling', 'Message': 'Rate exceeded'}},
+            'InvokeModel'
+        )
+        success_response = {
+            'body': Mock(read=lambda: json.dumps({
+                'embeddings': {'float': [sample_embedding, sample_embedding]}
+            }).encode())
+        }
+        
+        mock_bedrock_client.invoke_model.side_effect = [
+            validation_response,  # Validation
+            throttling_error,     # First batch call fails
+            success_response      # Retry succeeds
+        ]
+        
+        results = embedding_service.batch_generate_embeddings(texts, "cohere.embed-english-v3")
+        
+        assert len(results) == len(texts)
+        assert all(result.embedding == sample_embedding for result in results)
+        assert mock_sleep.called  # Verify retry logic was used
+    
+    def test_batch_processing_error_details(self, embedding_service, mock_bedrock_client, sample_embedding):
+        """Test that batch processing errors include detailed information."""
+        texts = ["text 1", "text 2"]
+        
+        # Mock validation call
+        validation_response = {
+            'body': Mock(read=lambda: json.dumps({'embeddings': {'float': [sample_embedding]}}).encode())
+        }
+        
+        # Mock persistent error in batch processing
+        persistent_error = ClientError(
+            {'Error': {'Code': 'ServiceUnavailable', 'Message': 'Service unavailable'}},
+            'InvokeModel'
+        )
+        
+        mock_bedrock_client.invoke_model.side_effect = [
+            validation_response,  # Validation
+            persistent_error,     # Batch processing fails
+            persistent_error,     # Retry fails
+            persistent_error      # Final retry fails
+        ]
+        
+        with pytest.raises(VectorEmbeddingError) as exc_info:
+            embedding_service.batch_generate_embeddings(texts, "cohere.embed-english-v3")
+        
+        assert exc_info.value.error_code == "BATCH_PROCESSING_ERROR"
+        assert "batch_number" in exc_info.value.error_details
+        assert "total_batches" in exc_info.value.error_details
+        assert "batch_size" in exc_info.value.error_details
+        assert "original_error" in exc_info.value.error_details
