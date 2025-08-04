@@ -200,5 +200,31 @@ def setup_logging(
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
 
+def get_logger(name: str) -> logging.Logger:
+    """
+    Get a logger instance with the specified name.
+    
+    Args:
+        name: Logger name (typically __name__)
+    
+    Returns:
+        Logger instance
+    """
+    return logging.getLogger(name)
+
+
+def get_structured_logger(name: str) -> StructuredLogger:
+    """
+    Get a structured logger instance with the specified name.
+    
+    Args:
+        name: Logger name (typically __name__)
+    
+    Returns:
+        StructuredLogger instance
+    """
+    return StructuredLogger(name)
+
+
 # Create module-level structured logger
 structured_logger = StructuredLogger(__name__)
