@@ -59,16 +59,16 @@ class TestEmbeddingStorageIntegration:
             
             # Mock query response
             mock_query_response = {
-                'results': [
+                'vectors': [
                     {
                         'key': 'test-vector-1',
-                        'score': 0.95,
+                        'distance': 0.05,
                         'metadata': {
                             'content_type': 'text',
                             'source_text': 'similar test text',
                             'model_id': 'amazon.titan-embed-text-v2:0'
                         },
-                        'embedding': [0.1, 0.2, 0.3] * 341 + [0.1]
+                        'data': {'float32': [0.1, 0.2, 0.3] * 341 + [0.1]}
                     }
                 ]
             }
@@ -80,7 +80,7 @@ class TestEmbeddingStorageIntegration:
                 'vectors': [
                     {
                         'key': 'test-vector-1',
-                        'embedding': [0.1, 0.2, 0.3] * 341 + [0.1],
+                        'data': {'float32': [0.1, 0.2, 0.3] * 341 + [0.1]},
                         'metadata': {
                             'content_type': 'text',
                             'source_text': 'test text'
@@ -599,18 +599,18 @@ class TestEmbeddingStorageIntegration:
         
         # Mock search results favoring The Crown
         mock_search_response = {
-            'results': [
+            'vectors': [
                 {
                     'key': crown_result.vector_key,
-                    'score': 0.92,
+                    'distance': 0.08,
                     'metadata': crown_result.metadata.to_dict(),
-                    'embedding': crown_result.embedding
+                    'data': {'float32': crown_result.embedding}
                 },
                 {
                     'key': st_result.vector_key,
-                    'score': 0.65,
+                    'distance': 0.35,
                     'metadata': st_result.metadata.to_dict(),
-                    'embedding': st_result.embedding
+                    'data': {'float32': st_result.embedding}
                 }
             ]
         }

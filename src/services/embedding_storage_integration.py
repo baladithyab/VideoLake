@@ -416,9 +416,9 @@ class EmbeddingStorageIntegration:
             for result in results:
                 processed_result = {
                     'vector_key': result.get('key'),
-                    'similarity_score': result.get('score'),
+                    'similarity_score': round(1 - result.get('distance', 1.0), 4),
                     'metadata': result.get('metadata', {}),
-                    'embedding': result.get('embedding', [])  # Include if needed
+                    'embedding': result.get('data', {}).get('float32', [])
                 }
                 processed_results.append(processed_result)
             
@@ -548,7 +548,7 @@ class EmbeddingStorageIntegration:
                     logger.info(f"Successfully retrieved embedding by key: {vector_key}")
                     return {
                         'vector_key': vector.get('key'),
-                        'embedding': vector.get('embedding', []),
+                        'embedding': vector.get('data', {}).get('float32', []),
                         'metadata': vector.get('metadata', {}),
                         'index_arn': index_arn
                     }

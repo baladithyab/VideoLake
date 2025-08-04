@@ -487,69 +487,61 @@ class BedrockEmbeddingService:
         
         return results
     
-    def _generate_titan_batch_embeddings_with_concurrency(self, 
-                                                        texts: List[str], 
+    def _generate_titan_batch_embeddings_with_concurrency(self,
+                                                        texts: List[str],
                                                         model_id: str,
-                                                        batch_size: int,
+                                                        batch_size: int, # Kept for signature consistency, but not used directly
                                                         max_concurrent: int,
                                                         rate_limit_delay: float) -> tuple[List[EmbeddingResult], List[str]]:
-        """Generate embeddings for Titan models with concurrency control and rate limiting."""
+        """
+        Generate embeddings for Titan models with concurrency, ensuring result order is preserved.
+        """
         import concurrent.futures
-        import threading
-        
-        results = []
-        failed_items = []
-        results_lock = threading.Lock()
-        
-        # Create batches for processing
-        batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
-        
-        def _process_batch(batch_texts: List[str], batch_index: int) -> None:
-            """Process a single batch of texts."""
-            batch_results = []
-            batch_failures = []
-            
-            for text in batch_texts:
-                try:
-                    embedding = self._generate_single_embedding(text, model_id)
-                    batch_results.append(EmbeddingResult(
-                        embedding=embedding,
-                        input_text=text,
-                        model_id=model_id
-                    ))
-                except Exception as e:
-                    logger.warning(f"Failed to generate embedding for text in batch {batch_index}: {str(e)}")
-                    batch_failures.append(text)
-            
-            # Thread-safe update of results
-            with results_lock:
-                results.extend(batch_results)
-                failed_items.extend(batch_failures)
-            
-            logger.debug(f"Completed batch {batch_index + 1}/{len(batches)} ({len(batch_results)} successful, {len(batch_failures)} failed)")
-            
-            # Rate limiting delay
-            if rate_limit_delay > 0:
-                time.sleep(rate_limit_delay)
-        
-        # Process batches with controlled concurrency
+
+        def _process_text_with_index(indexed_text: tuple[int, str]) -> tuple[int, Union[EmbeddingResult, Exception]]:
+            """
+            Process a single text with its index, returning the index and result.
+            """
+            index, text = indexed_text
+            try:
+                # Optional: slight delay to distribute requests
+                if rate_limit_delay > 0:
+                    time.sleep(random.uniform(0, rate_limit_delay))
+                    
+                embedding = self._generate_single_embedding(text, model_id)
+                result = EmbeddingResult(
+                    embedding=embedding,
+                    input_text=text,
+                    model_id=model_id
+                )
+                return index, result
+            except Exception as e:
+                logger.warning(f"Failed to generate embedding for text at index {index}: {str(e)}")
+                return index, e
+
+        results_with_indices = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrent) as executor:
-            # Submit all batch processing tasks
-            future_to_batch = {
-                executor.submit(_process_batch, batch, i): i 
-                for i, batch in enumerate(batches)
-            }
-            
-            # Wait for completion and handle any exceptions
-            for future in concurrent.futures.as_completed(future_to_batch):
-                batch_index = future_to_batch[future]
-                try:
-                    future.result()  # This will raise any exception that occurred
-                except Exception as e:
-                    logger.error(f"Batch {batch_index + 1} processing failed: {str(e)}")
-                    # Continue processing other batches
+            # Use map to preserve the order of submission, though we sort explicitly later
+            future_results = executor.map(_process_text_with_index, enumerate(texts))
+            results_with_indices = list(future_results)
+
+        # Separate successful results from failures
+        successful_results = []
+        failed_items = []
+        for index, result in results_with_indices:
+            if isinstance(result, EmbeddingResult):
+                successful_results.append((index, result))
+            else:
+                # Original text is needed for the failed_items list
+                failed_items.append(texts[index])
         
-        return results, failed_items
+        # Sort results by the original index to restore order
+        successful_results.sort(key=lambda x: x[0])
+        
+        # Extract the final ordered results
+        ordered_results = [result for index, result in successful_results]
+        
+        return ordered_results, failed_items
     
     def _get_optimal_batch_size(self, model_id: str, total_texts: int) -> int:
         """Determine optimal batch size based on model and input size."""

@@ -8,6 +8,7 @@ with proper IAM permissions, validation, and error handling.
 import time
 import random
 from typing import Dict, Any, Optional, List
+import numpy as np
 from botocore.exceptions import ClientError, BotoCoreError
 import logging
 
@@ -1075,22 +1076,29 @@ class S3VectorStorageManager:
                     error_details={"index": i, "type": type(float32_data).__name__}
                 )
             
-            # Validate vector dimensions and values
-            for j, value in enumerate(float32_data):
-                if not isinstance(value, (int, float)):
+            # Validate vector dimensions and values with NumPy
+            try:
+                np_vector = np.array(float32_data, dtype=np.float32)
+                
+                if not np.issubdtype(np_vector.dtype, np.number):
                     raise ValidationError(
-                        f"Vector float32 data at index {i}, dimension {j} must be a number",
+                        f"Vector float32 data at index {i} must contain only numbers",
                         error_code="INVALID_VECTOR_VALUE_TYPE",
-                        error_details={"vector_index": i, "dimension": j, "value": value}
+                        error_details={"vector_index": i}
                     )
                 
-                # Check for invalid values (NaN, Infinity)
-                if not (-float('inf') < float(value) < float('inf')):
+                if not np.isfinite(np_vector).all():
                     raise ValidationError(
-                        f"Vector float32 data at index {i}, dimension {j} contains invalid value (NaN or Infinity)",
+                        f"Vector float32 data at index {i} contains invalid values (NaN or Infinity)",
                         error_code="INVALID_VECTOR_VALUE",
-                        error_details={"vector_index": i, "dimension": j, "value": value}
+                        error_details={"vector_index": i}
                     )
+            except (ValueError, TypeError) as e:
+                raise ValidationError(
+                    f"Vector float32 data at index {i} could not be converted to a numeric array: {e}",
+                    error_code="INVALID_VECTOR_CONVERSION",
+                    error_details={"vector_index": i, "error": str(e)}
+                )
             
             # Validate metadata if present
             if 'metadata' in vector:
@@ -1141,7 +1149,7 @@ class S3VectorStorageManager:
             formatted_vector = {
                 'key': vector['key'],
                 'data': {
-                    'float32': [float(x) for x in float32_data]  # Ensure float32 conversion
+                    'float32': np.array(float32_data, dtype=np.float32).tolist()
                 }
             }
             
@@ -1275,13 +1283,19 @@ class S3VectorStorageManager:
             )
         
         # Validate query vector values
-        for i, value in enumerate(query_vector):
-            if not isinstance(value, (int, float)):
+        try:
+            np_query_vector = np.array(query_vector, dtype=np.float32)
+            if not np.isfinite(np_query_vector).all():
                 raise ValidationError(
-                    f"Query vector value at dimension {i} must be a number",
-                    error_code="INVALID_QUERY_VECTOR_VALUE",
-                    error_details={"dimension": i, "value": value}
+                    "Query vector contains invalid values (NaN or Infinity)",
+                    error_code="INVALID_QUERY_VECTOR_VALUE"
                 )
+        except (ValueError, TypeError) as e:
+            raise ValidationError(
+                f"Query vector could not be converted to a numeric array: {e}",
+                error_code="INVALID_QUERY_VECTOR_CONVERSION",
+                error_details={"error": str(e)}
+            )
         
         if not isinstance(top_k, int) or top_k < 1 or top_k > 1000:
             raise ValidationError(
@@ -1300,8 +1314,7 @@ class S3VectorStorageManager:
         # Prepare request parameters
         request_params = {
             'indexArn': index_arn,
-            # Placeholder; converted to required dict form in _query_vectors
-            'queryVector': [float(x) for x in query_vector],
+            'queryVector': np.array(query_vector, dtype=np.float32).tolist(),
             'topK': top_k,
             'returnDistance': return_distance,
             'returnMetadata': return_metadata
