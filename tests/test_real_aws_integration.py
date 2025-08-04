@@ -63,7 +63,7 @@ CLEANUP_TIMEOUT = 300  # 5 minutes max for cleanup
 from datetime import datetime
 TEST_RUN_ID = f"{datetime.utcnow().strftime('%Y%m%dT%H%M%S')}-{str(uuid.uuid4())[:8]}"
 # Optional bucket deletion flag for safety
-DELETE_BUCKET_FLAG = os.getenv("REAL_AWS_TEST_DELETE_BUCKET", "0") == "1"
+DELETE_BUCKET_FLAG = os.getenv("REAL_AWS_TEST_DELETE_BUCKET", "1") == "1"
 
 # Helper utilities for gated execution
 
@@ -85,11 +85,9 @@ def _has_explicit_env_creds() -> bool:
 
 def _sts_profile_ok() -> bool:
     try:
-        region = os.getenv("AWS_REGION", "us-west-2")
-        session = boto3.Session(region_name=region)
-        cred_source = os.getenv("AWS_PROFILE") or (session.profile_name if getattr(session, 'profile_name', None) else None)
-        source_str = f"Profile '{cred_source}'" if cred_source else "Default credential chain (profile/SSO/IMDS/assume-role)"
-        sts = session.client("sts")
+        # Let boto3 handle credential resolution from the default chain (IMDS on EC2)
+        source_str = "Default credential chain (IMDS/assume-role)"
+        sts = boto3.client("sts", region_name=os.getenv("AWS_REGION", "us-west-2"))
         identity = sts.get_caller_identity()
         acct = identity.get("Account", "unknown")
         arn = identity.get("Arn", "unknown")
@@ -106,10 +104,10 @@ def _sts_profile_ok() -> bool:
         return False
 
 def _credentials_ok() -> bool:
-    # Accept either explicit env creds or any profile/assumed-role creds that pass STS
-    if _has_explicit_env_creds():
-        # Even with explicit creds, ensure they are actually valid via STS to avoid surprises
-        return _sts_profile_ok() or True  # STS will use current session resolution; keep permissive as env present
+    """
+    Checks if AWS credentials are valid.
+    Relies on the STS get-caller-identity check.
+    """
     return _sts_profile_ok()
 
 def _bucket_ok() -> bool:

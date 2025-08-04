@@ -832,11 +832,23 @@ class S3VectorStorageManager:
         # Prepare request parameters
         request_params = {}
         if index_arn:
-            # Accept both full arn and short resource-id
-            if str(index_arn).startswith("arn:"):
-                request_params["indexArn"] = index_arn
-            else:
-                request_params["indexResourceName"] = index_arn
+            # If an ARN or resource-id is provided, parse it to extract bucket and index names
+            try:
+                parsed_id = self._parse_index_identifier(index_arn)
+                if "vectorBucketName" in parsed_id and "indexName" in parsed_id:
+                    request_params["vectorBucketName"] = parsed_id["vectorBucketName"]
+                    request_params["indexName"] = parsed_id["indexName"]
+                elif "indexArn" in parsed_id:
+                    request_params["indexArn"] = parsed_id["indexArn"]
+                else:
+                    # Fallback for unexpected parsing result
+                    raise ValidationError(f"Could not determine parameters from identifier: {index_arn}", error_code="INVALID_IDENTIFIER_PARSE")
+            except ValidationError:
+                 # Re-raise validation errors from parser
+                 raise
+            except Exception as e:
+                # Catch other potential errors during parsing
+                raise VectorStorageError(f"Failed to parse index identifier '{index_arn}': {e}", error_code="IDENTIFIER_PARSE_FAILED") from e
         else:
             request_params["vectorBucketName"] = bucket_name
             request_params["indexName"] = index_name
