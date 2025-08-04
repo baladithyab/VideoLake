@@ -31,7 +31,7 @@
     - _Requirements: 1.3, 1.5, 5.1, 5.2, 5.3_
 
 - [ ] 3. Implement Bedrock Embedding Service
-  - [ ] 3.1 Create text embedding generation functionality
+  - [x] 3.1 Create text embedding generation functionality
     - Implement single text embedding using Bedrock Runtime client
     - Add support for multiple embedding models (Titan, Cohere)
     - Create model validation and access checking
