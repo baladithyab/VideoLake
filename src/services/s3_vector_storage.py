@@ -340,3 +340,531 @@ class S3VectorStorageManager:
             if e.error_code == "BUCKET_NOT_FOUND":
                 return False
             raise
+    
+    def _validate_index_name(self, index_name: str) -> None:
+        """Validate vector index name according to S3 Vectors requirements."""
+        if not index_name:
+            raise ValidationError(
+                "Vector index name cannot be empty",
+                error_code="EMPTY_INDEX_NAME"
+            )
+        
+        if len(index_name) < 3 or len(index_name) > 63:
+            raise ValidationError(
+                f"Vector index name must be between 3 and 63 characters, got {len(index_name)}",
+                error_code="INVALID_INDEX_NAME_LENGTH",
+                error_details={"index_name": index_name, "length": len(index_name)}
+            )
+        
+        # Check for valid characters (lowercase letters, numbers, hyphens)
+        if not all(c.islower() or c.isdigit() or c == '-' for c in index_name):
+            raise ValidationError(
+                "Vector index name can only contain lowercase letters, numbers, and hyphens",
+                error_code="INVALID_INDEX_NAME_CHARS",
+                error_details={"index_name": index_name}
+            )
+        
+        # Cannot start or end with hyphen
+        if index_name.startswith('-') or index_name.endswith('-'):
+            raise ValidationError(
+                "Vector index name cannot start or end with a hyphen",
+                error_code="INVALID_INDEX_NAME_HYPHEN",
+                error_details={"index_name": index_name}
+            )
+    
+    def _validate_vector_dimensions(self, dimensions: int) -> None:
+        """Validate vector dimensions according to S3 Vectors requirements."""
+        if not isinstance(dimensions, int):
+            raise ValidationError(
+                f"Vector dimensions must be an integer, got {type(dimensions).__name__}",
+                error_code="INVALID_DIMENSIONS_TYPE",
+                error_details={"dimensions": dimensions, "type": type(dimensions).__name__}
+            )
+        
+        if dimensions < 1 or dimensions > 4096:
+            raise ValidationError(
+                f"Vector dimensions must be between 1 and 4096, got {dimensions}",
+                error_code="INVALID_DIMENSIONS_RANGE",
+                error_details={"dimensions": dimensions}
+            )
+    
+    def create_vector_index(self,
+                          bucket_name: str,
+                          index_name: str,
+                          dimensions: int,
+                          distance_metric: str = "cosine",
+                          data_type: str = "float32",
+                          non_filterable_metadata_keys: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Create a vector index within a vector bucket.
+        
+        Args:
+            bucket_name: Name of the vector bucket
+            index_name: Name of the vector index to create
+            dimensions: Dimensions of the vectors (1-4096)
+            distance_metric: Distance metric for similarity search ("cosine" or "euclidean")
+            data_type: Data type of vectors ("float32")
+            non_filterable_metadata_keys: List of metadata keys that won't be filterable
+        
+        Returns:
+            Dict containing index creation response and metadata
+        
+        Raises:
+            ValidationError: If parameters are invalid
+            VectorStorageError: If index creation fails
+        """
+        logger.info(f"Creating vector index: {index_name} in bucket: {bucket_name}")
+        
+        # Validate inputs
+        self._validate_bucket_name(bucket_name)
+        self._validate_index_name(index_name)
+        self._validate_vector_dimensions(dimensions)
+        
+        if distance_metric not in ["cosine", "euclidean"]:
+            raise ValidationError(
+                f"Invalid distance metric: {distance_metric}. Must be 'cosine' or 'euclidean'",
+                error_code="INVALID_DISTANCE_METRIC",
+                error_details={"distance_metric": distance_metric}
+            )
+        
+        if data_type != "float32":
+            raise ValidationError(
+                f"Invalid data type: {data_type}. Must be 'float32'",
+                error_code="INVALID_DATA_TYPE",
+                error_details={"data_type": data_type}
+            )
+        
+        # Prepare request parameters
+        request_params = {
+            "vectorBucketName": bucket_name,
+            "indexName": index_name,
+            "dimension": dimensions,
+            "distanceMetric": distance_metric,
+            "dataType": data_type
+        }
+        
+        # Add metadata configuration if specified
+        if non_filterable_metadata_keys:
+            request_params["metadataConfiguration"] = {
+                "nonFilterableMetadataKeys": non_filterable_metadata_keys
+            }
+        
+        def _create_index():
+            return self.s3vectors_client.create_index(**request_params)
+        
+        try:
+            response = self._retry_with_backoff(_create_index)
+            
+            logger.info(f"Successfully created vector index: {index_name} in bucket: {bucket_name}")
+            
+            return {
+                "bucket_name": bucket_name,
+                "index_name": index_name,
+                "dimensions": dimensions,
+                "distance_metric": distance_metric,
+                "data_type": data_type,
+                "non_filterable_metadata_keys": non_filterable_metadata_keys,
+                "status": "created",
+                "response": response
+            }
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_message = e.response['Error']['Message']
+            
+            if error_code == 'ConflictException':
+                logger.warning(f"Vector index {index_name} already exists in bucket {bucket_name}")
+                return {
+                    "bucket_name": bucket_name,
+                    "index_name": index_name,
+                    "dimensions": dimensions,
+                    "distance_metric": distance_metric,
+                    "data_type": data_type,
+                    "status": "already_exists",
+                    "message": "Index already exists"
+                }
+            elif error_code == 'NotFoundException':
+                raise VectorStorageError(
+                    f"Vector bucket {bucket_name} not found",
+                    error_code="BUCKET_NOT_FOUND",
+                    error_details={"bucket_name": bucket_name}
+                )
+            elif error_code == 'AccessDeniedException':
+                raise VectorStorageError(
+                    f"Access denied when creating vector index: {error_message}",
+                    error_code="ACCESS_DENIED",
+                    error_details={
+                        "bucket_name": bucket_name,
+                        "index_name": index_name,
+                        "required_permission": "s3vectors:CreateIndex"
+                    }
+                )
+            elif error_code == 'ServiceQuotaExceededException':
+                raise VectorStorageError(
+                    f"Service quota exceeded when creating vector index: {error_message}",
+                    error_code="QUOTA_EXCEEDED",
+                    error_details={
+                        "bucket_name": bucket_name,
+                        "index_name": index_name
+                    }
+                )
+            else:
+                raise VectorStorageError(
+                    f"Failed to create vector index {index_name}: {error_message}",
+                    error_code=error_code,
+                    error_details={
+                        "bucket_name": bucket_name,
+                        "index_name": index_name,
+                        "aws_error_code": error_code,
+                        "aws_error_message": error_message
+                    }
+                )
+        
+        except Exception as e:
+            logger.error(f"Unexpected error creating vector index {index_name}: {e}")
+            raise VectorStorageError(
+                f"Unexpected error creating vector index {index_name}: {str(e)}",
+                error_code="UNEXPECTED_ERROR",
+                error_details={
+                    "bucket_name": bucket_name,
+                    "index_name": index_name,
+                    "error": str(e)
+                }
+            )
+    
+    def list_vector_indexes(self,
+                          bucket_name: str,
+                          prefix: Optional[str] = None,
+                          max_results: Optional[int] = None,
+                          next_token: Optional[str] = None) -> Dict[str, Any]:
+        """
+        List vector indexes within a vector bucket.
+        
+        Args:
+            bucket_name: Name of the vector bucket
+            prefix: Prefix to filter index names
+            max_results: Maximum number of results to return (1-500)
+            next_token: Token for pagination
+        
+        Returns:
+            Dict containing list of indexes and pagination info
+        
+        Raises:
+            ValidationError: If parameters are invalid
+            VectorStorageError: If operation fails
+        """
+        logger.info(f"Listing vector indexes in bucket: {bucket_name}")
+        
+        # Validate inputs
+        self._validate_bucket_name(bucket_name)
+        
+        if max_results is not None:
+            if not isinstance(max_results, int) or max_results < 1 or max_results > 500:
+                raise ValidationError(
+                    f"max_results must be an integer between 1 and 500, got {max_results}",
+                    error_code="INVALID_MAX_RESULTS",
+                    error_details={"max_results": max_results}
+                )
+        
+        if prefix is not None:
+            if not isinstance(prefix, str) or len(prefix) < 1 or len(prefix) > 63:
+                raise ValidationError(
+                    f"prefix must be a string between 1 and 63 characters, got {prefix}",
+                    error_code="INVALID_PREFIX",
+                    error_details={"prefix": prefix}
+                )
+        
+        if next_token is not None:
+            if not isinstance(next_token, str) or len(next_token) < 1 or len(next_token) > 512:
+                raise ValidationError(
+                    f"next_token must be a string between 1 and 512 characters",
+                    error_code="INVALID_NEXT_TOKEN",
+                    error_details={"next_token": next_token}
+                )
+        
+        # Prepare request parameters
+        request_params = {
+            "vectorBucketName": bucket_name
+        }
+        
+        if prefix is not None:
+            request_params["prefix"] = prefix
+        if max_results is not None:
+            request_params["maxResults"] = max_results
+        if next_token is not None:
+            request_params["nextToken"] = next_token
+        
+        def _list_indexes():
+            return self.s3vectors_client.list_indexes(**request_params)
+        
+        try:
+            response = self._retry_with_backoff(_list_indexes)
+            
+            indexes = response.get('indexes', [])
+            next_token = response.get('nextToken')
+            
+            logger.info(f"Successfully listed {len(indexes)} vector indexes in bucket: {bucket_name}")
+            
+            return {
+                "bucket_name": bucket_name,
+                "indexes": indexes,
+                "next_token": next_token,
+                "count": len(indexes)
+            }
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_message = e.response['Error']['Message']
+            
+            if error_code == 'NotFoundException':
+                raise VectorStorageError(
+                    f"Vector bucket {bucket_name} not found",
+                    error_code="BUCKET_NOT_FOUND",
+                    error_details={"bucket_name": bucket_name}
+                )
+            elif error_code == 'AccessDeniedException':
+                raise VectorStorageError(
+                    f"Access denied when listing vector indexes: {error_message}",
+                    error_code="ACCESS_DENIED",
+                    error_details={
+                        "bucket_name": bucket_name,
+                        "required_permission": "s3vectors:ListIndexes"
+                    }
+                )
+            else:
+                raise VectorStorageError(
+                    f"Failed to list vector indexes in bucket {bucket_name}: {error_message}",
+                    error_code=error_code,
+                    error_details={
+                        "bucket_name": bucket_name,
+                        "aws_error_code": error_code,
+                        "aws_error_message": error_message
+                    }
+                )
+        
+        except Exception as e:
+            logger.error(f"Unexpected error listing vector indexes in bucket {bucket_name}: {e}")
+            raise VectorStorageError(
+                f"Unexpected error listing vector indexes in bucket {bucket_name}: {str(e)}",
+                error_code="UNEXPECTED_ERROR",
+                error_details={"bucket_name": bucket_name, "error": str(e)}
+            )
+    
+    def get_vector_index_metadata(self,
+                                bucket_name: str,
+                                index_name: str) -> Dict[str, Any]:
+        """
+        Get metadata for a specific vector index.
+        
+        Args:
+            bucket_name: Name of the vector bucket
+            index_name: Name of the vector index
+        
+        Returns:
+            Dict containing index metadata
+        
+        Raises:
+            ValidationError: If parameters are invalid
+            VectorStorageError: If operation fails
+        """
+        logger.info(f"Getting metadata for vector index: {index_name} in bucket: {bucket_name}")
+        
+        # Validate inputs
+        self._validate_bucket_name(bucket_name)
+        self._validate_index_name(index_name)
+        
+        # List indexes with the specific name as prefix to find the exact match
+        try:
+            response = self.list_vector_indexes(bucket_name, prefix=index_name, max_results=500)
+            indexes = response.get('indexes', [])
+            
+            # Find exact match
+            matching_index = None
+            for index in indexes:
+                if index.get('indexName') == index_name:
+                    matching_index = index
+                    break
+            
+            if not matching_index:
+                raise VectorStorageError(
+                    f"Vector index {index_name} not found in bucket {bucket_name}",
+                    error_code="INDEX_NOT_FOUND",
+                    error_details={
+                        "bucket_name": bucket_name,
+                        "index_name": index_name
+                    }
+                )
+            
+            logger.info(f"Successfully retrieved metadata for vector index: {index_name}")
+            
+            return {
+                "bucket_name": bucket_name,
+                "index_name": index_name,
+                "index_arn": matching_index.get('indexArn'),
+                "creation_time": matching_index.get('creationTime'),
+                "metadata": matching_index
+            }
+            
+        except VectorStorageError:
+            # Re-raise VectorStorageError as-is
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error getting vector index metadata: {e}")
+            raise VectorStorageError(
+                f"Unexpected error getting vector index metadata: {str(e)}",
+                error_code="UNEXPECTED_ERROR",
+                error_details={
+                    "bucket_name": bucket_name,
+                    "index_name": index_name,
+                    "error": str(e)
+                }
+            )
+    
+    def delete_vector_index(self,
+                          bucket_name: Optional[str] = None,
+                          index_name: Optional[str] = None,
+                          index_arn: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Delete a vector index.
+        
+        Args:
+            bucket_name: Name of the vector bucket (required if index_arn not provided)
+            index_name: Name of the vector index (required if index_arn not provided)
+            index_arn: ARN of the vector index (alternative to bucket_name + index_name)
+        
+        Returns:
+            Dict containing deletion response
+        
+        Raises:
+            ValidationError: If parameters are invalid
+            VectorStorageError: If deletion fails
+        """
+        # Validate input combinations
+        if index_arn:
+            if bucket_name or index_name:
+                raise ValidationError(
+                    "Cannot specify both index_arn and bucket_name/index_name",
+                    error_code="CONFLICTING_PARAMETERS",
+                    error_details={
+                        "index_arn": index_arn,
+                        "bucket_name": bucket_name,
+                        "index_name": index_name
+                    }
+                )
+            logger.info(f"Deleting vector index by ARN: {index_arn}")
+        else:
+            if not bucket_name or not index_name:
+                raise ValidationError(
+                    "Must specify either index_arn or both bucket_name and index_name",
+                    error_code="MISSING_PARAMETERS",
+                    error_details={
+                        "bucket_name": bucket_name,
+                        "index_name": index_name,
+                        "index_arn": index_arn
+                    }
+                )
+            
+            # Validate individual parameters
+            self._validate_bucket_name(bucket_name)
+            self._validate_index_name(index_name)
+            
+            logger.info(f"Deleting vector index: {index_name} in bucket: {bucket_name}")
+        
+        # Prepare request parameters
+        request_params = {}
+        if index_arn:
+            request_params["indexArn"] = index_arn
+        else:
+            request_params["vectorBucketName"] = bucket_name
+            request_params["indexName"] = index_name
+        
+        def _delete_index():
+            return self.s3vectors_client.delete_index(**request_params)
+        
+        try:
+            response = self._retry_with_backoff(_delete_index)
+            
+            if index_arn:
+                logger.info(f"Successfully deleted vector index: {index_arn}")
+            else:
+                logger.info(f"Successfully deleted vector index: {index_name} in bucket: {bucket_name}")
+            
+            return {
+                "bucket_name": bucket_name,
+                "index_name": index_name,
+                "index_arn": index_arn,
+                "status": "deleted",
+                "response": response
+            }
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_message = e.response['Error']['Message']
+            
+            if error_code == 'NotFoundException':
+                # Index doesn't exist - this could be considered success
+                logger.warning(f"Vector index not found (may already be deleted)")
+                return {
+                    "bucket_name": bucket_name,
+                    "index_name": index_name,
+                    "index_arn": index_arn,
+                    "status": "not_found",
+                    "message": "Index not found (may already be deleted)"
+                }
+            elif error_code == 'AccessDeniedException':
+                raise VectorStorageError(
+                    f"Access denied when deleting vector index: {error_message}",
+                    error_code="ACCESS_DENIED",
+                    error_details={
+                        "bucket_name": bucket_name,
+                        "index_name": index_name,
+                        "index_arn": index_arn,
+                        "required_permission": "s3vectors:DeleteIndex"
+                    }
+                )
+            else:
+                raise VectorStorageError(
+                    f"Failed to delete vector index: {error_message}",
+                    error_code=error_code,
+                    error_details={
+                        "bucket_name": bucket_name,
+                        "index_name": index_name,
+                        "index_arn": index_arn,
+                        "aws_error_code": error_code,
+                        "aws_error_message": error_message
+                    }
+                )
+        
+        except Exception as e:
+            logger.error(f"Unexpected error deleting vector index: {e}")
+            raise VectorStorageError(
+                f"Unexpected error deleting vector index: {str(e)}",
+                error_code="UNEXPECTED_ERROR",
+                error_details={
+                    "bucket_name": bucket_name,
+                    "index_name": index_name,
+                    "index_arn": index_arn,
+                    "error": str(e)
+                }
+            )
+    
+    def index_exists(self,
+                   bucket_name: str,
+                   index_name: str) -> bool:
+        """
+        Check if a vector index exists.
+        
+        Args:
+            bucket_name: Name of the vector bucket
+            index_name: Name of the vector index
+        
+        Returns:
+            True if index exists, False otherwise
+        """
+        try:
+            self.get_vector_index_metadata(bucket_name, index_name)
+            return True
+        except VectorStorageError as e:
+            if e.error_code == "INDEX_NOT_FOUND":
+                return False
+            raise

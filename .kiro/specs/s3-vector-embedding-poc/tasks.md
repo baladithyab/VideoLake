@@ -16,7 +16,7 @@
     - Write unit tests for bucket creation scenarios
     - _Requirements: 1.1, 1.4_
 
-  - [ ] 2.2 Implement vector index operations
+  - [x] 2.2 Implement vector index operations
     - Create vector index creation with configurable dimensions
     - Implement index listing and metadata retrieval
     - Add index deletion and management capabilities
