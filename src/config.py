@@ -41,7 +41,7 @@ class AWSConfig:
     @classmethod
     def from_environment(cls) -> 'AWSConfig':
         """Create configuration from environment variables."""
-        region = os.getenv('AWS_REGION', 'us-west-2')
+        region = os.getenv('AWS_REGION', 'us-east-1')
         s3_vectors_bucket = os.getenv('S3_VECTORS_BUCKET')
         
         if not s3_vectors_bucket:

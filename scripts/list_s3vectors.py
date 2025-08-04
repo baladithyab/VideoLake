@@ -2,7 +2,7 @@ import os
 from src.services.s3_vector_storage import S3VectorStorageManager
 
 def main():
-    region = os.getenv("AWS_REGION", "us-west-2")
+    region = os.getenv("AWS_REGION", "us-east-1")
     print(f"Region: {region}")
     mgr = S3VectorStorageManager()
 

@@ -80,7 +80,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="List what would be deleted without deleting")
     args = parser.parse_args()
 
-    region = os.getenv("AWS_REGION", "us-west-2")
+    region = os.getenv("AWS_REGION", "us-east-1")
     print(f"Region: {region}")
     print(f"Options: pattern={args.pattern} prefix={args.prefix or ''} dry_run={args.dry_run}")
     mgr = S3VectorStorageManager()

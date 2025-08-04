@@ -25,7 +25,7 @@ def main():
     
     # Configuration is automatically loaded from .env file
     print(f"Using AWS Profile: {os.getenv('AWS_PROFILE', 'default')}")
-    print(f"Using AWS Region: {os.getenv('AWS_REGION', 'us-west-2')}")
+    print(f"Using AWS Region: {os.getenv('AWS_REGION', 'us-east-1')}")
     print(f"Using S3 Bucket: {os.getenv('S3_VECTORS_BUCKET', 'not-configured')}")
     print()
     
@@ -72,7 +72,7 @@ def main():
         
         print("\nPlease check your environment variables:")
         print("- S3_VECTORS_BUCKET: S3 bucket name for vector storage")
-        print("- AWS_REGION: AWS region (default: us-west-2)")
+        print("- AWS_REGION: AWS region (default: us-east-1)")
         print("- AWS credentials should be configured via AWS CLI or IAM roles")
         
     except VectorEmbeddingError as e:
