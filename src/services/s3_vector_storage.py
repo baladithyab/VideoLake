@@ -916,21 +916,45 @@ class S3VectorStorageManager:
                     error_details={"index": i, "key": key}
                 )
             
-            # Validate vector data
+            # Validate vector data (AWS S3 Vectors format)
             vector_data = vector['data']
-            if not isinstance(vector_data, list):
+            if not isinstance(vector_data, dict):
                 raise ValidationError(
-                    f"Vector data at index {i} must be a list of floats",
+                    f"Vector data at index {i} must be a dictionary with VectorData format",
                     error_code="INVALID_VECTOR_DATA_TYPE",
                     error_details={"index": i, "type": type(vector_data).__name__}
                 )
             
+            # Check for float32 field (union type)
+            if 'float32' not in vector_data:
+                raise ValidationError(
+                    f"Vector data at index {i} must contain 'float32' field",
+                    error_code="MISSING_FLOAT32_DATA",
+                    error_details={"index": i, "available_fields": list(vector_data.keys())}
+                )
+            
+            float32_data = vector_data['float32']
+            if not isinstance(float32_data, list):
+                raise ValidationError(
+                    f"Vector float32 data at index {i} must be a list of floats",
+                    error_code="INVALID_FLOAT32_DATA_TYPE",
+                    error_details={"index": i, "type": type(float32_data).__name__}
+                )
+            
             # Validate vector dimensions and values
-            for j, value in enumerate(vector_data):
+            for j, value in enumerate(float32_data):
                 if not isinstance(value, (int, float)):
                     raise ValidationError(
-                        f"Vector data at index {i}, dimension {j} must be a number",
+                        f"Vector float32 data at index {i}, dimension {j} must be a number",
                         error_code="INVALID_VECTOR_VALUE_TYPE",
+                        error_details={"vector_index": i, "dimension": j, "value": value}
+                    )
+                
+                # Check for invalid values (NaN, Infinity)
+                if not (-float('inf') < float(value) < float('inf')):
+                    raise ValidationError(
+                        f"Vector float32 data at index {i}, dimension {j} contains invalid value (NaN or Infinity)",
+                        error_code="INVALID_VECTOR_VALUE",
                         error_details={"vector_index": i, "dimension": j, "value": value}
                     )
             
@@ -953,7 +977,7 @@ class S3VectorStorageManager:
         Args:
             index_arn: ARN of the vector index
             vectors_data: List of vector dictionaries with keys: 'key', 'data', 'metadata' (optional)
-                         Each vector data should be a list of float32 values
+                         Each 'data' should be a VectorData object: {'float32': [list of float values]}
         
         Returns:
             Dict containing storage response and metadata
@@ -974,12 +998,17 @@ class S3VectorStorageManager:
         
         self._validate_vector_data(vectors_data)
         
-        # Convert vector data to float32 format as required by S3 Vectors
+        # Convert vector data to AWS S3 Vectors format
         formatted_vectors = []
         for vector in vectors_data:
+            # Extract float32 data from the VectorData union type
+            float32_data = vector['data']['float32']
+            
             formatted_vector = {
                 'key': vector['key'],
-                'data': [float(x) for x in vector['data']]  # Ensure float32 conversion
+                'data': {
+                    'float32': [float(x) for x in float32_data]  # Ensure float32 conversion
+                }
             }
             
             # Add metadata if present
@@ -1401,4 +1430,36 @@ class S3VectorStorageManager:
                     "index_arn": index_arn,
                     "error": str(e)
                 }
-            )
+            )  
+  
+    def put_vectors_batch(self, index_arn: str, vectors_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Alias for put_vectors method to match integration service expectations.
+        
+        Args:
+            index_arn: ARN of the vector index
+            vectors_data: List of vector data dictionaries
+            
+        Returns:
+            Dictionary containing the storage response
+        """
+        return self.put_vectors(index_arn, vectors_data)
+    
+    def query_similar_vectors(self,
+                            index_arn: str,
+                            query_vector: List[float],
+                            top_k: int = 10,
+                            metadata_filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Alias for query_vectors method to match integration service expectations.
+        
+        Args:
+            index_arn: ARN of the vector index
+            query_vector: Query vector for similarity search
+            top_k: Number of similar results to return
+            metadata_filters: Optional metadata filters
+            
+        Returns:
+            Dictionary containing the query results
+        """
+        return self.query_vectors(index_arn, query_vector, top_k, metadata_filters)
