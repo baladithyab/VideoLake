@@ -30,7 +30,7 @@
     - Write unit tests for vector operations
     - _Requirements: 1.3, 1.5, 5.1, 5.2, 5.3_
 
-- [ ] 3. Implement Bedrock Embedding Service
+- [X] 3. Implement Bedrock Embedding Service
   - [x] 3.1 Create text embedding generation functionality
     - Implement single text embedding using Bedrock Runtime client
     - Add support for multiple embedding models (Titan, Cohere)
