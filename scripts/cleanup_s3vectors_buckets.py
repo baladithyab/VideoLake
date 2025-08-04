@@ -74,20 +74,21 @@ def main() -> None:
       python scripts/cleanup_s3vectors_buckets.py  # discovers buckets with 's3vector-integration-test-' prefix
     """
     parser = argparse.ArgumentParser(description="Cleanup S3 Vectors buckets and indexes safely.")
-    parser.add_argument("buckets", nargs="*", help="Vector bucket names to clean")
+    parser.add_argument("buckets", nargs="*", help="Vector bucket names to clean (optional if using --pattern for discovery)")
+    parser.add_argument("--pattern", required=True, help="REQUIRED: Bucket name pattern for discovery or validation (e.g., 's3vector-demo-', 's3vector-test-')")
     parser.add_argument("--prefix", help="Only delete indexes whose names start with this prefix", default=None)
     parser.add_argument("--dry-run", action="store_true", help="List what would be deleted without deleting")
     args = parser.parse_args()
 
     region = os.getenv("AWS_REGION", "us-west-2")
     print(f"Region: {region}")
-    print(f"Options: prefix={args.prefix or ''} dry_run={args.dry_run}")
+    print(f"Options: pattern={args.pattern} prefix={args.prefix or ''} dry_run={args.dry_run}")
     mgr = S3VectorStorageManager()
 
     bucket_args: List[str] = args.buckets or []
     if not bucket_args:
-        # Discover buckets, filter by common test prefix for safety
-        print("\nDiscovering vector buckets with 's3vector-integration-test-' prefix...")
+        # Discover buckets, filter by provided pattern for safety
+        print(f"\nDiscovering vector buckets with '{args.pattern}' pattern...")
         try:
             buckets = mgr.list_vector_buckets()
             candidates = []
@@ -95,10 +96,10 @@ def main() -> None:
                 name = b.get("vectorBucketName") or b.get("name")
                 if not name:
                     continue
-                if name.startswith("s3vector-integration-test-"):
+                if name.startswith(args.pattern):
                     candidates.append(name)
             if not candidates:
-                print("  (no candidate test buckets found)")
+                print("  (no candidate buckets found matching pattern)")
                 return
             print("Candidates:")
             for c in candidates:
@@ -108,6 +109,14 @@ def main() -> None:
         except Exception as e:
             print("Error discovering buckets:", e)
             return
+    else:
+        # Validate explicit bucket names against pattern for safety
+        print(f"\nValidating explicit bucket names against pattern '{args.pattern}'...")
+        for bucket_name in bucket_args:
+            if not bucket_name.startswith(args.pattern):
+                print(f"ERROR: Bucket '{bucket_name}' does not match required pattern '{args.pattern}'")
+                print("This safety check prevents accidental deletion of non-test buckets.")
+                return
 
     for bucket in bucket_args:
         print(f"\nCleaning bucket: {bucket}")

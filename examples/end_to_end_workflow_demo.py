@@ -222,7 +222,9 @@ def demonstrate_vector_storage(storage_manager: S3VectorStorageManager,
         
         vectors_data.append({
             "key": vector_key,
-            "data": item["embedding"],  # S3 Vectors expects 'data' field
+            "data": {
+                "float32": item["embedding"]  # S3 Vectors format requires nested structure
+            },
             "metadata": {
                 "text": item["text"][:500],  # Truncate for metadata
                 "genre": item["metadata"]["genre"],
@@ -265,7 +267,7 @@ def demonstrate_similarity_search(storage_manager: S3VectorStorageManager,
             index_arn=index_arn,
             query_vector=query_vector,
             top_k=3,
-            metadata_filters=None
+            metadata_filter=None
         )
         search_time = time.time() - search_start
         
