@@ -1068,3 +1068,623 @@ class TestIndexExists:
         
         with pytest.raises(VectorStorageError):
             storage_manager.index_exists(bucket_name, index_name)
+
+
+class TestVectorDataValidation:
+    """Test vector data validation logic."""
+    
+    @pytest.fixture
+    def storage_manager(self):
+        with patch('src.services.s3_vector_storage.aws_client_factory'):
+            return S3VectorStorageManager()
+    
+    def test_valid_vector_data(self, storage_manager):
+        """Test that valid vector data passes validation."""
+        valid_vectors = [
+            {
+                'key': 'vector1',
+                'data': [0.1, 0.2, 0.3, 0.4],
+                'metadata': {'type': 'text', 'category': 'document'}
+            },
+            {
+                'key': 'vector2',
+                'data': [0.5, 0.6, 0.7, 0.8]
+            }
+        ]
+        
+        # Should not raise any exception
+        storage_manager._validate_vector_data(valid_vectors)
+    
+    def test_empty_vector_data(self, storage_manager):
+        """Test that empty vector data raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager._validate_vector_data([])
+        
+        assert exc_info.value.error_code == "EMPTY_VECTOR_DATA"
+    
+    def test_too_many_vectors(self, storage_manager):
+        """Test that more than 500 vectors raises ValidationError."""
+        vectors = [{'key': f'vector{i}', 'data': [0.1, 0.2]} for i in range(501)]
+        
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager._validate_vector_data(vectors)
+        
+        assert exc_info.value.error_code == "TOO_MANY_VECTORS"
+        assert exc_info.value.error_details["vector_count"] == 501
+    
+    def test_invalid_vector_type(self, storage_manager):
+        """Test that non-dictionary vectors raise ValidationError."""
+        invalid_vectors = [
+            {'key': 'vector1', 'data': [0.1, 0.2]},
+            "invalid_vector"  # Not a dictionary
+        ]
+        
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager._validate_vector_data(invalid_vectors)
+        
+        assert exc_info.value.error_code == "INVALID_VECTOR_TYPE"
+        assert exc_info.value.error_details["index"] == 1
+    
+    def test_missing_vector_key(self, storage_manager):
+        """Test that vectors without keys raise ValidationError."""
+        invalid_vectors = [
+            {'data': [0.1, 0.2, 0.3]}  # Missing 'key'
+        ]
+        
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager._validate_vector_data(invalid_vectors)
+        
+        assert exc_info.value.error_code == "MISSING_VECTOR_KEY"
+    
+    def test_missing_vector_data(self, storage_manager):
+        """Test that vectors without data raise ValidationError."""
+        invalid_vectors = [
+            {'key': 'vector1'}  # Missing 'data'
+        ]
+        
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager._validate_vector_data(invalid_vectors)
+        
+        assert exc_info.value.error_code == "MISSING_VECTOR_DATA"
+    
+    def test_invalid_vector_key(self, storage_manager):
+        """Test that invalid vector keys raise ValidationError."""
+        invalid_vectors = [
+            {'key': '', 'data': [0.1, 0.2]},  # Empty key
+            {'key': None, 'data': [0.1, 0.2]},  # None key
+            {'key': 123, 'data': [0.1, 0.2]}  # Non-string key
+        ]
+        
+        for i, vectors in enumerate([[v] for v in invalid_vectors]):
+            with pytest.raises(ValidationError) as exc_info:
+                storage_manager._validate_vector_data(vectors)
+            assert exc_info.value.error_code == "INVALID_VECTOR_KEY"
+    
+    def test_invalid_vector_data_type(self, storage_manager):
+        """Test that non-list vector data raises ValidationError."""
+        invalid_vectors = [
+            {'key': 'vector1', 'data': "not_a_list"}
+        ]
+        
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager._validate_vector_data(invalid_vectors)
+        
+        assert exc_info.value.error_code == "INVALID_VECTOR_DATA_TYPE"
+    
+    def test_invalid_vector_values(self, storage_manager):
+        """Test that non-numeric vector values raise ValidationError."""
+        invalid_vectors = [
+            {'key': 'vector1', 'data': [0.1, "invalid", 0.3]}
+        ]
+        
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager._validate_vector_data(invalid_vectors)
+        
+        assert exc_info.value.error_code == "INVALID_VECTOR_VALUE_TYPE"
+        assert exc_info.value.error_details["dimension"] == 1
+    
+    def test_invalid_metadata_type(self, storage_manager):
+        """Test that invalid metadata types raise ValidationError."""
+        invalid_vectors = [
+            {'key': 'vector1', 'data': [0.1, 0.2], 'metadata': "invalid_metadata"}
+        ]
+        
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager._validate_vector_data(invalid_vectors)
+        
+        assert exc_info.value.error_code == "INVALID_METADATA_TYPE"
+
+
+class TestPutVectors:
+    """Test vector storage functionality."""
+    
+    @pytest.fixture
+    def storage_manager(self):
+        with patch('src.services.s3_vector_storage.aws_client_factory') as mock_factory:
+            mock_client = Mock()
+            mock_factory.get_s3vectors_client.return_value = mock_client
+            mock_factory.get_s3_client.return_value = Mock()
+            manager = S3VectorStorageManager()
+            manager.s3vectors_client = mock_client
+            return manager
+    
+    def test_successful_put_vectors(self, storage_manager):
+        """Test successful vector storage."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        vectors_data = [
+            {
+                'key': 'doc1',
+                'data': [0.1, 0.2, 0.3, 0.4],
+                'metadata': {'type': 'document', 'category': 'news'}
+            },
+            {
+                'key': 'doc2',
+                'data': [0.5, 0.6, 0.7, 0.8],
+                'metadata': {'type': 'document', 'category': 'sports'}
+            }
+        ]
+        
+        # Mock successful response
+        storage_manager.s3vectors_client.put_vectors.return_value = {
+            'ResponseMetadata': {'HTTPStatusCode': 200}
+        }
+        
+        result = storage_manager.put_vectors(index_arn, vectors_data)
+        
+        # Verify the call was made with correct parameters
+        storage_manager.s3vectors_client.put_vectors.assert_called_once()
+        call_args = storage_manager.s3vectors_client.put_vectors.call_args[1]
+        
+        assert call_args['indexArn'] == index_arn
+        assert len(call_args['vectors']) == 2
+        assert call_args['vectors'][0]['key'] == 'doc1'
+        assert call_args['vectors'][0]['data'] == [0.1, 0.2, 0.3, 0.4]
+        assert call_args['vectors'][0]['metadata'] == {'type': 'document', 'category': 'news'}
+        
+        # Verify the result
+        assert result['index_arn'] == index_arn
+        assert result['vectors_stored'] == 2
+        assert result['status'] == 'success'
+    
+    def test_put_vectors_without_metadata(self, storage_manager):
+        """Test storing vectors without metadata."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        vectors_data = [
+            {
+                'key': 'doc1',
+                'data': [0.1, 0.2, 0.3, 0.4]
+            }
+        ]
+        
+        storage_manager.s3vectors_client.put_vectors.return_value = {
+            'ResponseMetadata': {'HTTPStatusCode': 200}
+        }
+        
+        result = storage_manager.put_vectors(index_arn, vectors_data)
+        
+        call_args = storage_manager.s3vectors_client.put_vectors.call_args[1]
+        assert 'metadata' not in call_args['vectors'][0]
+        assert result['vectors_stored'] == 1
+    
+    def test_put_vectors_invalid_index_arn(self, storage_manager):
+        """Test validation of index ARN."""
+        vectors_data = [{'key': 'doc1', 'data': [0.1, 0.2]}]
+        
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.put_vectors("", vectors_data)
+        
+        assert exc_info.value.error_code == "INVALID_INDEX_ARN"
+    
+    def test_put_vectors_index_not_found(self, storage_manager):
+        """Test handling when index does not exist."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/nonexistent"
+        vectors_data = [{'key': 'doc1', 'data': [0.1, 0.2]}]
+        
+        error_response = {
+            'Error': {
+                'Code': 'NotFoundException',
+                'Message': 'Vector index not found'
+            }
+        }
+        storage_manager.s3vectors_client.put_vectors.side_effect = ClientError(
+            error_response, 'PutVectors'
+        )
+        
+        with pytest.raises(VectorStorageError) as exc_info:
+            storage_manager.put_vectors(index_arn, vectors_data)
+        
+        assert exc_info.value.error_code == "INDEX_NOT_FOUND"
+    
+    def test_put_vectors_access_denied(self, storage_manager):
+        """Test handling of access denied errors."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        vectors_data = [{'key': 'doc1', 'data': [0.1, 0.2]}]
+        
+        error_response = {
+            'Error': {
+                'Code': 'AccessDeniedException',
+                'Message': 'Access denied'
+            }
+        }
+        storage_manager.s3vectors_client.put_vectors.side_effect = ClientError(
+            error_response, 'PutVectors'
+        )
+        
+        with pytest.raises(VectorStorageError) as exc_info:
+            storage_manager.put_vectors(index_arn, vectors_data)
+        
+        assert exc_info.value.error_code == "ACCESS_DENIED"
+        assert "s3vectors:PutVectors" in str(exc_info.value.error_details)
+    
+    def test_put_vectors_service_unavailable(self, storage_manager):
+        """Test handling of service unavailable errors."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        vectors_data = [{'key': 'doc1', 'data': [0.1, 0.2]}]
+        
+        error_response = {
+            'Error': {
+                'Code': 'ServiceUnavailableException',
+                'Message': 'Currently unable to handle the request'
+            }
+        }
+        storage_manager.s3vectors_client.put_vectors.side_effect = ClientError(
+            error_response, 'PutVectors'
+        )
+        
+        with pytest.raises(VectorStorageError) as exc_info:
+            storage_manager.put_vectors(index_arn, vectors_data)
+        
+        assert exc_info.value.error_code == "SERVICE_UNAVAILABLE"
+
+
+class TestQueryVectors:
+    """Test vector similarity search functionality."""
+    
+    @pytest.fixture
+    def storage_manager(self):
+        with patch('src.services.s3_vector_storage.aws_client_factory') as mock_factory:
+            mock_client = Mock()
+            mock_factory.get_s3vectors_client.return_value = mock_client
+            mock_factory.get_s3_client.return_value = Mock()
+            manager = S3VectorStorageManager()
+            manager.s3vectors_client = mock_client
+            return manager
+    
+    def test_successful_query_vectors(self, storage_manager):
+        """Test successful vector similarity search."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        query_vector = [0.1, 0.2, 0.3, 0.4]
+        
+        # Mock successful response
+        mock_response = {
+            'vectors': [
+                {
+                    'key': 'doc1',
+                    'distance': 0.1,
+                    'metadata': {'type': 'document', 'category': 'news'}
+                },
+                {
+                    'key': 'doc2',
+                    'distance': 0.2,
+                    'metadata': {'type': 'document', 'category': 'sports'}
+                }
+            ]
+        }
+        storage_manager.s3vectors_client.query_vectors.return_value = mock_response
+        
+        result = storage_manager.query_vectors(index_arn, query_vector, top_k=5)
+        
+        # Verify the call was made with correct parameters
+        storage_manager.s3vectors_client.query_vectors.assert_called_once()
+        call_args = storage_manager.s3vectors_client.query_vectors.call_args[1]
+        
+        assert call_args['indexArn'] == index_arn
+        assert call_args['queryVector'] == [0.1, 0.2, 0.3, 0.4]
+        assert call_args['topK'] == 5
+        assert call_args['returnDistance'] is True
+        assert call_args['returnMetadata'] is True
+        
+        # Verify the result
+        assert result['index_arn'] == index_arn
+        assert result['query_vector_dimensions'] == 4
+        assert result['top_k'] == 5
+        assert result['results_count'] == 2
+        assert len(result['vectors']) == 2
+        assert result['vectors'][0]['key'] == 'doc1'
+    
+    def test_query_vectors_with_metadata_filter(self, storage_manager):
+        """Test vector query with metadata filtering."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        query_vector = [0.1, 0.2, 0.3, 0.4]
+        metadata_filter = {'category': 'news'}
+        
+        mock_response = {'vectors': []}
+        storage_manager.s3vectors_client.query_vectors.return_value = mock_response
+        
+        result = storage_manager.query_vectors(
+            index_arn, 
+            query_vector, 
+            top_k=10,
+            metadata_filter=metadata_filter
+        )
+        
+        call_args = storage_manager.s3vectors_client.query_vectors.call_args[1]
+        assert call_args['filter'] == metadata_filter
+        assert result['metadata_filter'] == metadata_filter
+    
+    def test_query_vectors_minimal_response(self, storage_manager):
+        """Test vector query with minimal response options."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        query_vector = [0.1, 0.2, 0.3, 0.4]
+        
+        mock_response = {'vectors': []}
+        storage_manager.s3vectors_client.query_vectors.return_value = mock_response
+        
+        result = storage_manager.query_vectors(
+            index_arn, 
+            query_vector,
+            return_distance=False,
+            return_metadata=False
+        )
+        
+        call_args = storage_manager.s3vectors_client.query_vectors.call_args[1]
+        assert call_args['returnDistance'] is False
+        assert call_args['returnMetadata'] is False
+        assert result['return_distance'] is False
+        assert result['return_metadata'] is False
+    
+    def test_query_vectors_invalid_index_arn(self, storage_manager):
+        """Test validation of index ARN."""
+        query_vector = [0.1, 0.2, 0.3, 0.4]
+        
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.query_vectors("", query_vector)
+        
+        assert exc_info.value.error_code == "INVALID_INDEX_ARN"
+    
+    def test_query_vectors_invalid_query_vector(self, storage_manager):
+        """Test validation of query vector."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        
+        # Test empty vector
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.query_vectors(index_arn, [])
+        assert exc_info.value.error_code == "INVALID_QUERY_VECTOR"
+        
+        # Test non-list vector
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.query_vectors(index_arn, "not_a_list")
+        assert exc_info.value.error_code == "INVALID_QUERY_VECTOR"
+        
+        # Test vector with invalid values
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.query_vectors(index_arn, [0.1, "invalid", 0.3])
+        assert exc_info.value.error_code == "INVALID_QUERY_VECTOR_VALUE"
+    
+    def test_query_vectors_invalid_top_k(self, storage_manager):
+        """Test validation of top_k parameter."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        query_vector = [0.1, 0.2, 0.3, 0.4]
+        
+        # Test top_k too small
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.query_vectors(index_arn, query_vector, top_k=0)
+        assert exc_info.value.error_code == "INVALID_TOP_K"
+        
+        # Test top_k too large
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.query_vectors(index_arn, query_vector, top_k=1001)
+        assert exc_info.value.error_code == "INVALID_TOP_K"
+    
+    def test_query_vectors_invalid_metadata_filter(self, storage_manager):
+        """Test validation of metadata filter."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        query_vector = [0.1, 0.2, 0.3, 0.4]
+        
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.query_vectors(index_arn, query_vector, metadata_filter="invalid")
+        
+        assert exc_info.value.error_code == "INVALID_METADATA_FILTER"
+    
+    def test_query_vectors_access_denied_with_metadata(self, storage_manager):
+        """Test access denied error includes required permissions."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        query_vector = [0.1, 0.2, 0.3, 0.4]
+        
+        error_response = {
+            'Error': {
+                'Code': 'AccessDeniedException',
+                'Message': 'Access denied'
+            }
+        }
+        storage_manager.s3vectors_client.query_vectors.side_effect = ClientError(
+            error_response, 'QueryVectors'
+        )
+        
+        with pytest.raises(VectorStorageError) as exc_info:
+            storage_manager.query_vectors(index_arn, query_vector, return_metadata=True)
+        
+        assert exc_info.value.error_code == "ACCESS_DENIED"
+        required_permissions = exc_info.value.error_details["required_permissions"]
+        assert "s3vectors:QueryVectors" in required_permissions
+        assert "s3vectors:GetVectors" in required_permissions
+
+
+class TestListVectors:
+    """Test vector listing functionality."""
+    
+    @pytest.fixture
+    def storage_manager(self):
+        with patch('src.services.s3_vector_storage.aws_client_factory') as mock_factory:
+            mock_client = Mock()
+            mock_factory.get_s3vectors_client.return_value = mock_client
+            mock_factory.get_s3_client.return_value = Mock()
+            manager = S3VectorStorageManager()
+            manager.s3vectors_client = mock_client
+            return manager
+    
+    def test_successful_list_vectors(self, storage_manager):
+        """Test successful vector listing."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        
+        # Mock successful response
+        mock_response = {
+            'vectors': [
+                {
+                    'key': 'doc1',
+                    'metadata': {'type': 'document', 'category': 'news'}
+                },
+                {
+                    'key': 'doc2',
+                    'metadata': {'type': 'document', 'category': 'sports'}
+                }
+            ],
+            'nextToken': 'next_page_token'
+        }
+        storage_manager.s3vectors_client.list_vectors.return_value = mock_response
+        
+        result = storage_manager.list_vectors(index_arn, max_results=100)
+        
+        # Verify the call was made with correct parameters
+        storage_manager.s3vectors_client.list_vectors.assert_called_once()
+        call_args = storage_manager.s3vectors_client.list_vectors.call_args[1]
+        
+        assert call_args['indexArn'] == index_arn
+        assert call_args['maxResults'] == 100
+        assert call_args['returnData'] is False
+        assert call_args['returnMetadata'] is True
+        
+        # Verify the result
+        assert result['index_arn'] == index_arn
+        assert result['count'] == 2
+        assert result['next_token'] == 'next_page_token'
+        assert len(result['vectors']) == 2
+        assert result['vectors'][0]['key'] == 'doc1'
+    
+    def test_list_vectors_with_pagination(self, storage_manager):
+        """Test vector listing with pagination."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        next_token = "pagination_token"
+        
+        mock_response = {'vectors': [], 'nextToken': None}
+        storage_manager.s3vectors_client.list_vectors.return_value = mock_response
+        
+        result = storage_manager.list_vectors(index_arn, next_token=next_token)
+        
+        call_args = storage_manager.s3vectors_client.list_vectors.call_args[1]
+        assert call_args['nextToken'] == next_token
+        assert result['next_token'] is None
+    
+    def test_list_vectors_with_data(self, storage_manager):
+        """Test vector listing with vector data included."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        
+        mock_response = {'vectors': []}
+        storage_manager.s3vectors_client.list_vectors.return_value = mock_response
+        
+        result = storage_manager.list_vectors(index_arn, return_data=True)
+        
+        call_args = storage_manager.s3vectors_client.list_vectors.call_args[1]
+        assert call_args['returnData'] is True
+        assert result['return_data'] is True
+    
+    def test_list_vectors_parallel_segments(self, storage_manager):
+        """Test vector listing with parallel segments."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        
+        mock_response = {'vectors': []}
+        storage_manager.s3vectors_client.list_vectors.return_value = mock_response
+        
+        result = storage_manager.list_vectors(
+            index_arn, 
+            segment_count=4, 
+            segment_index=1
+        )
+        
+        call_args = storage_manager.s3vectors_client.list_vectors.call_args[1]
+        assert call_args['segmentCount'] == 4
+        assert call_args['segmentIndex'] == 1
+        assert result['segment_count'] == 4
+        assert result['segment_index'] == 1
+    
+    def test_list_vectors_invalid_index_arn(self, storage_manager):
+        """Test validation of index ARN."""
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.list_vectors("")
+        
+        assert exc_info.value.error_code == "INVALID_INDEX_ARN"
+    
+    def test_list_vectors_invalid_max_results(self, storage_manager):
+        """Test validation of max_results parameter."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        
+        # Test max_results too small
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.list_vectors(index_arn, max_results=0)
+        assert exc_info.value.error_code == "INVALID_MAX_RESULTS"
+        
+        # Test max_results too large
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.list_vectors(index_arn, max_results=1001)
+        assert exc_info.value.error_code == "INVALID_MAX_RESULTS"
+    
+    def test_list_vectors_invalid_next_token(self, storage_manager):
+        """Test validation of next_token parameter."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        
+        # Test next_token too long
+        long_token = "a" * 2049
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.list_vectors(index_arn, next_token=long_token)
+        assert exc_info.value.error_code == "INVALID_NEXT_TOKEN"
+    
+    def test_list_vectors_invalid_segment_parameters(self, storage_manager):
+        """Test validation of segment parameters."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        
+        # Test segment_count without segment_index
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.list_vectors(index_arn, segment_count=4)
+        assert exc_info.value.error_code == "MISSING_SEGMENT_INDEX"
+        
+        # Test segment_index without segment_count
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.list_vectors(index_arn, segment_index=1)
+        assert exc_info.value.error_code == "MISSING_SEGMENT_COUNT"
+        
+        # Test segment_index >= segment_count
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.list_vectors(index_arn, segment_count=4, segment_index=4)
+        assert exc_info.value.error_code == "INVALID_SEGMENT_RELATIONSHIP"
+        
+        # Test invalid segment_count range
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.list_vectors(index_arn, segment_count=17, segment_index=0)
+        assert exc_info.value.error_code == "INVALID_SEGMENT_COUNT"
+        
+        # Test invalid segment_index range
+        with pytest.raises(ValidationError) as exc_info:
+            storage_manager.list_vectors(index_arn, segment_count=4, segment_index=16)
+        assert exc_info.value.error_code == "INVALID_SEGMENT_INDEX"
+    
+    def test_list_vectors_access_denied_with_data(self, storage_manager):
+        """Test access denied error includes required permissions."""
+        index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
+        
+        error_response = {
+            'Error': {
+                'Code': 'AccessDeniedException',
+                'Message': 'Access denied'
+            }
+        }
+        storage_manager.s3vectors_client.list_vectors.side_effect = ClientError(
+            error_response, 'ListVectors'
+        )
+        
+        with pytest.raises(VectorStorageError) as exc_info:
+            storage_manager.list_vectors(index_arn, return_data=True)
+        
+        assert exc_info.value.error_code == "ACCESS_DENIED"
+        required_permissions = exc_info.value.error_details["required_permissions"]
+        assert "s3vectors:ListVectors" in required_permissions
+        assert "s3vectors:GetVectors" in required_permissions

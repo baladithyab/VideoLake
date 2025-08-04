@@ -868,3 +868,537 @@ class S3VectorStorageManager:
             if e.error_code == "INDEX_NOT_FOUND":
                 return False
             raise
+    
+    def _validate_vector_data(self, vectors_data: List[Dict[str, Any]]) -> None:
+        """Validate vector data before storage."""
+        if not vectors_data:
+            raise ValidationError(
+                "Vector data cannot be empty",
+                error_code="EMPTY_VECTOR_DATA"
+            )
+        
+        if len(vectors_data) > 500:
+            raise ValidationError(
+                f"Cannot store more than 500 vectors in a single request, got {len(vectors_data)}",
+                error_code="TOO_MANY_VECTORS",
+                error_details={"vector_count": len(vectors_data)}
+            )
+        
+        for i, vector in enumerate(vectors_data):
+            if not isinstance(vector, dict):
+                raise ValidationError(
+                    f"Vector at index {i} must be a dictionary",
+                    error_code="INVALID_VECTOR_TYPE",
+                    error_details={"index": i, "type": type(vector).__name__}
+                )
+            
+            # Validate required fields
+            if 'key' not in vector:
+                raise ValidationError(
+                    f"Vector at index {i} missing required 'key' field",
+                    error_code="MISSING_VECTOR_KEY",
+                    error_details={"index": i}
+                )
+            
+            if 'data' not in vector:
+                raise ValidationError(
+                    f"Vector at index {i} missing required 'data' field",
+                    error_code="MISSING_VECTOR_DATA",
+                    error_details={"index": i}
+                )
+            
+            # Validate key
+            key = vector['key']
+            if not isinstance(key, str) or not key.strip():
+                raise ValidationError(
+                    f"Vector key at index {i} must be a non-empty string",
+                    error_code="INVALID_VECTOR_KEY",
+                    error_details={"index": i, "key": key}
+                )
+            
+            # Validate vector data
+            vector_data = vector['data']
+            if not isinstance(vector_data, list):
+                raise ValidationError(
+                    f"Vector data at index {i} must be a list of floats",
+                    error_code="INVALID_VECTOR_DATA_TYPE",
+                    error_details={"index": i, "type": type(vector_data).__name__}
+                )
+            
+            # Validate vector dimensions and values
+            for j, value in enumerate(vector_data):
+                if not isinstance(value, (int, float)):
+                    raise ValidationError(
+                        f"Vector data at index {i}, dimension {j} must be a number",
+                        error_code="INVALID_VECTOR_VALUE_TYPE",
+                        error_details={"vector_index": i, "dimension": j, "value": value}
+                    )
+            
+            # Validate metadata if present
+            if 'metadata' in vector:
+                metadata = vector['metadata']
+                if metadata is not None and not isinstance(metadata, dict):
+                    raise ValidationError(
+                        f"Vector metadata at index {i} must be a dictionary or None",
+                        error_code="INVALID_METADATA_TYPE",
+                        error_details={"index": i, "type": type(metadata).__name__}
+                    )
+    
+    def put_vectors(self,
+                   index_arn: str,
+                   vectors_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Store vectors in a vector index with batch support and metadata attachment.
+        
+        Args:
+            index_arn: ARN of the vector index
+            vectors_data: List of vector dictionaries with keys: 'key', 'data', 'metadata' (optional)
+                         Each vector data should be a list of float32 values
+        
+        Returns:
+            Dict containing storage response and metadata
+        
+        Raises:
+            ValidationError: If vector data is invalid
+            VectorStorageError: If storage operation fails
+        """
+        logger.info(f"Storing {len(vectors_data)} vectors in index: {index_arn}")
+        
+        # Validate inputs
+        if not index_arn or not isinstance(index_arn, str):
+            raise ValidationError(
+                "Index ARN must be a non-empty string",
+                error_code="INVALID_INDEX_ARN",
+                error_details={"index_arn": index_arn}
+            )
+        
+        self._validate_vector_data(vectors_data)
+        
+        # Convert vector data to float32 format as required by S3 Vectors
+        formatted_vectors = []
+        for vector in vectors_data:
+            formatted_vector = {
+                'key': vector['key'],
+                'data': [float(x) for x in vector['data']]  # Ensure float32 conversion
+            }
+            
+            # Add metadata if present
+            if 'metadata' in vector and vector['metadata'] is not None:
+                formatted_vector['metadata'] = vector['metadata']
+            
+            formatted_vectors.append(formatted_vector)
+        
+        def _put_vectors():
+            return self.s3vectors_client.put_vectors(
+                indexArn=index_arn,
+                vectors=formatted_vectors
+            )
+        
+        try:
+            response = self._retry_with_backoff(_put_vectors)
+            
+            logger.info(f"Successfully stored {len(vectors_data)} vectors in index: {index_arn}")
+            
+            return {
+                "index_arn": index_arn,
+                "vectors_stored": len(vectors_data),
+                "status": "success",
+                "response": response
+            }
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_message = e.response['Error']['Message']
+            
+            if error_code == 'NotFoundException':
+                raise VectorStorageError(
+                    f"Vector index not found: {error_message}",
+                    error_code="INDEX_NOT_FOUND",
+                    error_details={"index_arn": index_arn}
+                )
+            elif error_code == 'AccessDeniedException':
+                raise VectorStorageError(
+                    f"Access denied when storing vectors: {error_message}",
+                    error_code="ACCESS_DENIED",
+                    error_details={
+                        "index_arn": index_arn,
+                        "required_permission": "s3vectors:PutVectors"
+                    }
+                )
+            elif error_code == 'ServiceUnavailableException':
+                raise VectorStorageError(
+                    f"Service unavailable when storing vectors: {error_message}",
+                    error_code="SERVICE_UNAVAILABLE",
+                    error_details={
+                        "index_arn": index_arn,
+                        "vector_count": len(vectors_data)
+                    }
+                )
+            elif error_code == 'ValidationException':
+                raise VectorStorageError(
+                    f"Vector data validation failed: {error_message}",
+                    error_code="VECTOR_VALIDATION_FAILED",
+                    error_details={
+                        "index_arn": index_arn,
+                        "aws_error_message": error_message
+                    }
+                )
+            else:
+                raise VectorStorageError(
+                    f"Failed to store vectors: {error_message}",
+                    error_code=error_code,
+                    error_details={
+                        "index_arn": index_arn,
+                        "vector_count": len(vectors_data),
+                        "aws_error_code": error_code,
+                        "aws_error_message": error_message
+                    }
+                )
+        
+        except Exception as e:
+            logger.error(f"Unexpected error storing vectors: {e}")
+            raise VectorStorageError(
+                f"Unexpected error storing vectors: {str(e)}",
+                error_code="UNEXPECTED_ERROR",
+                error_details={
+                    "index_arn": index_arn,
+                    "vector_count": len(vectors_data),
+                    "error": str(e)
+                }
+            )
+    
+    def query_vectors(self,
+                     index_arn: str,
+                     query_vector: List[float],
+                     top_k: int = 10,
+                     metadata_filter: Optional[Dict[str, Any]] = None,
+                     return_distance: bool = True,
+                     return_metadata: bool = True) -> Dict[str, Any]:
+        """
+        Perform similarity search with filtering capabilities.
+        
+        Args:
+            index_arn: ARN of the vector index to query
+            query_vector: Query vector as list of floats
+            top_k: Number of nearest neighbors to return (1-1000)
+            metadata_filter: Optional metadata filter for search results
+            return_distance: Whether to include similarity distances in results
+            return_metadata: Whether to include metadata in results
+        
+        Returns:
+            Dict containing search results with vectors, distances, and metadata
+        
+        Raises:
+            ValidationError: If query parameters are invalid
+            VectorStorageError: If query operation fails
+        """
+        logger.info(f"Querying vectors in index: {index_arn} with top_k={top_k}")
+        
+        # Validate inputs
+        if not index_arn or not isinstance(index_arn, str):
+            raise ValidationError(
+                "Index ARN must be a non-empty string",
+                error_code="INVALID_INDEX_ARN",
+                error_details={"index_arn": index_arn}
+            )
+        
+        if not isinstance(query_vector, list) or not query_vector:
+            raise ValidationError(
+                "Query vector must be a non-empty list of numbers",
+                error_code="INVALID_QUERY_VECTOR",
+                error_details={"query_vector_type": type(query_vector).__name__}
+            )
+        
+        # Validate query vector values
+        for i, value in enumerate(query_vector):
+            if not isinstance(value, (int, float)):
+                raise ValidationError(
+                    f"Query vector value at dimension {i} must be a number",
+                    error_code="INVALID_QUERY_VECTOR_VALUE",
+                    error_details={"dimension": i, "value": value}
+                )
+        
+        if not isinstance(top_k, int) or top_k < 1 or top_k > 1000:
+            raise ValidationError(
+                f"top_k must be an integer between 1 and 1000, got {top_k}",
+                error_code="INVALID_TOP_K",
+                error_details={"top_k": top_k}
+            )
+        
+        if metadata_filter is not None and not isinstance(metadata_filter, dict):
+            raise ValidationError(
+                "Metadata filter must be a dictionary or None",
+                error_code="INVALID_METADATA_FILTER",
+                error_details={"filter_type": type(metadata_filter).__name__}
+            )
+        
+        # Prepare request parameters
+        request_params = {
+            'indexArn': index_arn,
+            'queryVector': [float(x) for x in query_vector],  # Ensure float32 conversion
+            'topK': top_k,
+            'returnDistance': return_distance,
+            'returnMetadata': return_metadata
+        }
+        
+        if metadata_filter:
+            request_params['filter'] = metadata_filter
+        
+        def _query_vectors():
+            return self.s3vectors_client.query_vectors(**request_params)
+        
+        try:
+            response = self._retry_with_backoff(_query_vectors)
+            
+            vectors = response.get('vectors', [])
+            
+            logger.info(f"Successfully queried vectors, found {len(vectors)} results")
+            
+            return {
+                "index_arn": index_arn,
+                "query_vector_dimensions": len(query_vector),
+                "top_k": top_k,
+                "results_count": len(vectors),
+                "vectors": vectors,
+                "metadata_filter": metadata_filter,
+                "return_distance": return_distance,
+                "return_metadata": return_metadata,
+                "response": response
+            }
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_message = e.response['Error']['Message']
+            
+            if error_code == 'NotFoundException':
+                raise VectorStorageError(
+                    f"Vector index not found: {error_message}",
+                    error_code="INDEX_NOT_FOUND",
+                    error_details={"index_arn": index_arn}
+                )
+            elif error_code == 'AccessDeniedException':
+                required_permissions = ["s3vectors:QueryVectors"]
+                if return_metadata or metadata_filter:
+                    required_permissions.append("s3vectors:GetVectors")
+                
+                raise VectorStorageError(
+                    f"Access denied when querying vectors: {error_message}",
+                    error_code="ACCESS_DENIED",
+                    error_details={
+                        "index_arn": index_arn,
+                        "required_permissions": required_permissions
+                    }
+                )
+            elif error_code == 'ValidationException':
+                raise VectorStorageError(
+                    f"Query validation failed: {error_message}",
+                    error_code="QUERY_VALIDATION_FAILED",
+                    error_details={
+                        "index_arn": index_arn,
+                        "aws_error_message": error_message
+                    }
+                )
+            else:
+                raise VectorStorageError(
+                    f"Failed to query vectors: {error_message}",
+                    error_code=error_code,
+                    error_details={
+                        "index_arn": index_arn,
+                        "top_k": top_k,
+                        "aws_error_code": error_code,
+                        "aws_error_message": error_message
+                    }
+                )
+        
+        except Exception as e:
+            logger.error(f"Unexpected error querying vectors: {e}")
+            raise VectorStorageError(
+                f"Unexpected error querying vectors: {str(e)}",
+                error_code="UNEXPECTED_ERROR",
+                error_details={
+                    "index_arn": index_arn,
+                    "top_k": top_k,
+                    "error": str(e)
+                }
+            )
+    
+    def list_vectors(self,
+                    index_arn: str,
+                    max_results: Optional[int] = None,
+                    next_token: Optional[str] = None,
+                    return_data: bool = False,
+                    return_metadata: bool = True,
+                    segment_count: Optional[int] = None,
+                    segment_index: Optional[int] = None) -> Dict[str, Any]:
+        """
+        List vectors with pagination support.
+        
+        Args:
+            index_arn: ARN of the vector index
+            max_results: Maximum number of vectors to return (1-1000, default 500)
+            next_token: Token for pagination from previous request
+            return_data: Whether to include vector data in response
+            return_metadata: Whether to include metadata in response
+            segment_count: Number of segments for parallel listing (1-16)
+            segment_index: Index of segment to list (0-15, must be < segment_count)
+        
+        Returns:
+            Dict containing list of vectors and pagination info
+        
+        Raises:
+            ValidationError: If parameters are invalid
+            VectorStorageError: If operation fails
+        """
+        logger.info(f"Listing vectors in index: {index_arn}")
+        
+        # Validate inputs
+        if not index_arn or not isinstance(index_arn, str):
+            raise ValidationError(
+                "Index ARN must be a non-empty string",
+                error_code="INVALID_INDEX_ARN",
+                error_details={"index_arn": index_arn}
+            )
+        
+        if max_results is not None:
+            if not isinstance(max_results, int) or max_results < 1 or max_results > 1000:
+                raise ValidationError(
+                    f"max_results must be an integer between 1 and 1000, got {max_results}",
+                    error_code="INVALID_MAX_RESULTS",
+                    error_details={"max_results": max_results}
+                )
+        
+        if next_token is not None:
+            if not isinstance(next_token, str) or len(next_token) < 1 or len(next_token) > 2048:
+                raise ValidationError(
+                    f"next_token must be a string between 1 and 2048 characters",
+                    error_code="INVALID_NEXT_TOKEN",
+                    error_details={"next_token": next_token}
+                )
+        
+        if segment_count is not None:
+            if not isinstance(segment_count, int) or segment_count < 1 or segment_count > 16:
+                raise ValidationError(
+                    f"segment_count must be an integer between 1 and 16, got {segment_count}",
+                    error_code="INVALID_SEGMENT_COUNT",
+                    error_details={"segment_count": segment_count}
+                )
+        
+        if segment_index is not None:
+            if not isinstance(segment_index, int) or segment_index < 0 or segment_index > 15:
+                raise ValidationError(
+                    f"segment_index must be an integer between 0 and 15, got {segment_index}",
+                    error_code="INVALID_SEGMENT_INDEX",
+                    error_details={"segment_index": segment_index}
+                )
+            
+            if segment_count is None:
+                raise ValidationError(
+                    "segment_count is required when segment_index is specified",
+                    error_code="MISSING_SEGMENT_COUNT"
+                )
+            
+            if segment_index >= segment_count:
+                raise ValidationError(
+                    f"segment_index ({segment_index}) must be less than segment_count ({segment_count})",
+                    error_code="INVALID_SEGMENT_RELATIONSHIP",
+                    error_details={"segment_index": segment_index, "segment_count": segment_count}
+                )
+        
+        if segment_count is not None and segment_index is None:
+            raise ValidationError(
+                "segment_index is required when segment_count is specified",
+                error_code="MISSING_SEGMENT_INDEX"
+            )
+        
+        # Prepare request parameters
+        request_params = {
+            'indexArn': index_arn,
+            'returnData': return_data,
+            'returnMetadata': return_metadata
+        }
+        
+        if max_results is not None:
+            request_params['maxResults'] = max_results
+        if next_token is not None:
+            request_params['nextToken'] = next_token
+        if segment_count is not None:
+            request_params['segmentCount'] = segment_count
+        if segment_index is not None:
+            request_params['segmentIndex'] = segment_index
+        
+        def _list_vectors():
+            return self.s3vectors_client.list_vectors(**request_params)
+        
+        try:
+            response = self._retry_with_backoff(_list_vectors)
+            
+            vectors = response.get('vectors', [])
+            next_token = response.get('nextToken')
+            
+            logger.info(f"Successfully listed {len(vectors)} vectors from index: {index_arn}")
+            
+            return {
+                "index_arn": index_arn,
+                "vectors": vectors,
+                "next_token": next_token,
+                "count": len(vectors),
+                "return_data": return_data,
+                "return_metadata": return_metadata,
+                "segment_count": segment_count,
+                "segment_index": segment_index,
+                "response": response
+            }
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_message = e.response['Error']['Message']
+            
+            if error_code == 'NotFoundException':
+                raise VectorStorageError(
+                    f"Vector index not found: {error_message}",
+                    error_code="INDEX_NOT_FOUND",
+                    error_details={"index_arn": index_arn}
+                )
+            elif error_code == 'AccessDeniedException':
+                required_permissions = ["s3vectors:ListVectors"]
+                if return_data or return_metadata:
+                    required_permissions.append("s3vectors:GetVectors")
+                
+                raise VectorStorageError(
+                    f"Access denied when listing vectors: {error_message}",
+                    error_code="ACCESS_DENIED",
+                    error_details={
+                        "index_arn": index_arn,
+                        "required_permissions": required_permissions
+                    }
+                )
+            elif error_code == 'ValidationException':
+                raise VectorStorageError(
+                    f"List vectors validation failed: {error_message}",
+                    error_code="LIST_VALIDATION_FAILED",
+                    error_details={
+                        "index_arn": index_arn,
+                        "aws_error_message": error_message
+                    }
+                )
+            else:
+                raise VectorStorageError(
+                    f"Failed to list vectors: {error_message}",
+                    error_code=error_code,
+                    error_details={
+                        "index_arn": index_arn,
+                        "aws_error_code": error_code,
+                        "aws_error_message": error_message
+                    }
+                )
+        
+        except Exception as e:
+            logger.error(f"Unexpected error listing vectors: {e}")
+            raise VectorStorageError(
+                f"Unexpected error listing vectors: {str(e)}",
+                error_code="UNEXPECTED_ERROR",
+                error_details={
+                    "index_arn": index_arn,
+                    "error": str(e)
+                }
+            )
