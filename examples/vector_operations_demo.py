@@ -287,8 +287,12 @@ def main():
     # Note: This demo uses mock data and would require actual AWS credentials
     # and a real S3 Vectors index to run against live services
     
-    # Example index ARN (would be real in actual usage)
-    index_arn = "arn:aws:s3vectors:us-west-2:123456789012:index/media-embeddings/video-text-index"
+    # Get the correct region from configuration
+    from src.config import config_manager
+    region = config_manager.aws_config.region
+    
+    # Example index ARN using correct format: arn:partition:s3vectors:region:account:bucket/bucket-name/index/index-name
+    index_arn = f"arn:aws:s3vectors:{region}:123456789012:bucket/media-embeddings/index/video-text-index"
     
     print(f"\nUsing index ARN: {index_arn}")
     print("\n⚠️  Note: This demo shows the interface and validation.")
