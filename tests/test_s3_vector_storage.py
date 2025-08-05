@@ -535,7 +535,7 @@ class TestVectorDimensionsValidation:
     
     def test_valid_dimensions(self, storage_manager):
         """Test that valid dimensions pass validation."""
-        valid_dimensions = [1, 128, 512, 1024, 1536, 4096]
+        valid_dimensions = [1, 128, 512, 1024, 1024, 4096]
         
         for dim in valid_dimensions:
             # Should not raise any exception

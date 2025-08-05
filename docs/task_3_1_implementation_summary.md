@@ -27,7 +27,7 @@ Successfully implemented comprehensive text embedding generation functionality u
      - Cost: $0.0001 per 1K tokens
    
    - **Amazon Titan Text Embeddings V1** (`amazon.titan-embed-text-v1`)
-     - 1536 dimensions
+     - 1024 dimensions
      - Legacy G1 model support
      - Cost: $0.0001 per 1K tokens
    

@@ -264,7 +264,7 @@ python -m pytest tests/integration_test_end_to_end_text_processing.py -v  # End-
 │                                                                              │
 │  ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────────┐    │
 │  │   Text Input    │───▶│   Amazon Bedrock │───▶│   Text Embeddings   │    │
-│  │                 │    │   Titan Text V2  │    │   (1536D vectors)   │    │
+│  │                 │    │   Titan Text V2  │    │   (1024D vectors)   │    │
 │  └─────────────────┘    └──────────────────┘    └─────────────────────┘    │
 │                                                             │                │
 │                                                             ▼                │

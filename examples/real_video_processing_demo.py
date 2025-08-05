@@ -679,7 +679,7 @@ def demonstrate_video_search(
         print(f"   Total results: {search_result['total_results']}")
         
         print(f"\n📊 Similar video segments:")
-        for i, segment in enumerate(search_result['segments'][:3], 1):
+        for i, segment in enumerate(search_result['results'][:3], 1):
             similarity = segment['similarity_score']
             start_sec = segment['start_sec']
             end_sec = segment['end_sec']

@@ -53,7 +53,7 @@ class TestBedrockEmbeddingService:
         
         # Check model info structure for V1
         titan_v1_model = models['amazon.titan-embed-text-v1']
-        assert titan_v1_model.dimensions == 1536
+        assert titan_v1_model.dimensions == 1024
         assert titan_v1_model.max_input_tokens == 8192
         assert titan_v1_model.cost_per_1k_tokens == 0.0001
     

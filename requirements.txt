@@ -24,7 +24,8 @@ flake8>=6.0.0
 mypy>=1.0.0
 isort>=5.12.0
 
-# Optional dependencies for enhanced functionality
+# HTTP client for file downloads
+requests>=2.31.0
+
+# Vector operations and numerical computing
 numpy>=1.24.0
-pandas>=2.0.0
-pytest

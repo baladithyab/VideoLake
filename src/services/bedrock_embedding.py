@@ -54,11 +54,11 @@ class BedrockEmbeddingService:
             max_input_tokens=8192,
             supports_batch=False,
             cost_per_1k_tokens=0.0001,
-            description='Amazon Titan Text Embeddings V2 - Multilingual, configurable dimensions'
+            description='Amazon Titan Text Embeddings V2 - Multilingual, configurable dimensions (1024/512/256)'
         ),
         'amazon.titan-embed-text-v1': ModelInfo(
             model_id='amazon.titan-embed-text-v1',
-            dimensions=1536,
+            dimensions=1024,
             max_input_tokens=8192,
             supports_batch=False,
             cost_per_1k_tokens=0.0001,

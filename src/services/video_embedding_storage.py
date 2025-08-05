@@ -552,14 +552,62 @@ class VideoEmbeddingStorageService:
         metadata_filter = {"content_type": "video"}
         
         if time_range_filter:
-            # Add temporal filtering
+            # Add temporal filtering using S3 Vectors query operators
+            # S3 Vectors requires $and operator for combining multiple filter conditions
+            time_conditions = []
             if "start_sec" in time_range_filter:
-                metadata_filter["start_sec_gte"] = time_range_filter["start_sec"]
+                time_conditions.append({"start_sec": {"$gte": time_range_filter["start_sec"]}})
             if "end_sec" in time_range_filter:
-                metadata_filter["end_sec_lte"] = time_range_filter["end_sec"]
+                time_conditions.append({"end_sec": {"$lte": time_range_filter["end_sec"]}})
+            
+            # Combine base filter with time conditions using $and
+            if time_conditions:
+                base_conditions = [{"content_type": "video"}]
+                if content_filters:
+                    # Add content filters as individual conditions, but only valid fields
+                    valid_fields = {
+                        'content_type', 'start_sec', 'end_sec', 'embedding_option', 
+                        'model_id', 'video_duration_sec', 'source', 'confidence_score'
+                    }
+                    for key, value in content_filters.items():
+                        if key in valid_fields:
+                            base_conditions.append({key: value})
+                        else:
+                            logger.warning(f"Ignoring invalid content filter field in time query: {key}. Valid fields: {sorted(valid_fields)}")
+                
+                all_conditions = base_conditions + time_conditions
+                metadata_filter = {"$and": all_conditions}
+                content_filters = None  # Already included in $and
         
         if content_filters:
-            metadata_filter.update(content_filters)
+            # Filter out invalid metadata fields to prevent query failures
+            # Only include fields that exist in VideoVectorMetadata
+            valid_fields = {
+                'content_type', 'start_sec', 'end_sec', 'embedding_option', 
+                'model_id', 'video_duration_sec', 'source', 'confidence_score'
+            }
+            
+            # Check if we have complex S3 Vectors operators (like $gte, $lte) that need $and wrapping
+            has_operators = any(isinstance(v, dict) and any(k.startswith('$') for k in v.keys()) 
+                              for v in content_filters.values())
+            
+            valid_content_filters = {k: v for k, v in content_filters.items() if k in valid_fields}
+            invalid_filters = {k: v for k, v in content_filters.items() if k not in valid_fields}
+            
+            if invalid_filters:
+                logger.warning(f"Ignoring invalid content filter fields: {list(invalid_filters.keys())}. Valid fields: {sorted(valid_fields)}")
+            
+            if valid_content_filters:
+                if has_operators:
+                    # Need to use $and for S3 Vectors operators
+                    base_conditions = [{"content_type": "video"}]
+                    for key, value in valid_content_filters.items():
+                        if key != "content_type":  # Don't duplicate content_type
+                            base_conditions.append({key: value})
+                    metadata_filter = {"$and": base_conditions}
+                else:
+                    # Simple key-value filters can be added directly
+                    metadata_filter.update(valid_content_filters)
         
         # Perform vector search
         result = self.storage_manager.query_vectors(
@@ -592,7 +640,7 @@ class VideoEmbeddingStorageService:
         return {
             "total_results": len(processed_results),
             "query_time_ms": result.get("query_time_ms", 0),
-            "segments": processed_results
+            "results": processed_results  # Changed from "segments" to "results" for consistency
         }
     
     def get_video_segment_by_key(

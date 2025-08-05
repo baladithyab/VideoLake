@@ -1,7 +1,18 @@
+#!/usr/bin/env python3
+"""
+Cleanup S3 Vectors buckets and indexes safely.
+"""
 import os
+import sys
 import time
 import argparse
+from pathlib import Path
 from typing import List, Optional
+
+# Add project root to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from src.services.s3_vector_storage import S3VectorStorageManager
 
 def delete_all_indexes_in_bucket(mgr: S3VectorStorageManager, bucket_name: str, prefix: Optional[str] = None, dry_run: bool = False) -> None:
