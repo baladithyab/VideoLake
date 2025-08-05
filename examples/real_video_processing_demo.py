@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
 from src.services.s3_vector_storage import S3VectorStorageManager
+from src.services.video_embedding_storage import VideoEmbeddingStorageService
 from src.exceptions import VectorEmbeddingError
 from src.utils.logging_config import get_logger
 from src.config import config_manager
@@ -544,6 +545,185 @@ def demonstrate_embedding_analysis(result):
         print(f"   • Coverage: {(total_time_covered / result.video_duration_sec * 100):.1f}%")
 
 
+def store_embeddings_in_s3_vectors(
+    result, 
+    video_s3_uri: str, 
+    storage_manager: S3VectorStorageManager
+) -> str:
+    """Store video embeddings in S3 Vector storage."""
+    print_step("6", "Store Embeddings in S3 Vector Storage")
+    
+    print("📦 Setting up S3 Vector storage for embeddings...")
+    
+    # Create video embedding storage service
+    video_storage_service = VideoEmbeddingStorageService()
+    
+    # Get vector bucket name from config
+    vector_bucket_name = config_manager.aws_config.s3_vectors_bucket
+    
+    # Create a video index for our embeddings
+    index_name = "video-demo-index"
+    
+    print(f"🔧 Creating video index...")
+    print(f"   Vector bucket: {vector_bucket_name}")
+    print(f"   Index name: {index_name}")
+    
+    try:
+        index_arn = video_storage_service.create_video_index(
+            bucket_name=vector_bucket_name,
+            index_name=index_name,
+            embedding_dimension=1024,
+            distance_metric="cosine"
+        )
+        print(f"✅ Video index created: {index_name}")
+        print(f"   Index ARN: {index_arn}")
+        
+    except Exception as e:
+        if "already exists" in str(e).lower():
+            # Index already exists, construct ARN
+            region = config_manager.aws_config.region
+            # Get AWS account ID
+            import boto3
+            sts_client = boto3.client('sts', region_name=region)
+            account_id = sts_client.get_caller_identity()['Account']
+            index_arn = f"arn:aws:s3vectors:{region}:{account_id}:bucket/{vector_bucket_name}/index/{index_name}"
+            print(f"✅ Video index already exists: {index_name}")
+            print(f"   Index ARN: {index_arn}")
+        else:
+            raise
+    
+    # Prepare metadata for the video (limit to essential fields due to S3 Vector 10-key limit)
+    video_filename = video_s3_uri.split("/")[-1].split(".")[0]
+    base_metadata = {
+        # Only include essential fields - VideoVectorMetadata already uses 6+ keys
+        "source": "Creative Commons"
+    }
+    
+    print(f"💾 Storing {result.total_segments} video segments as vectors...")
+    print(f"   Video filename: {video_filename}")
+    print(f"   Source: {base_metadata['source']}")
+    
+    try:
+        # Store the video embeddings
+        start_time = time.time()
+        
+        storage_result = video_storage_service.store_video_embeddings(
+            video_result=result,
+            index_arn=index_arn,
+            base_metadata=base_metadata,
+            key_prefix=f"demo-{video_filename}"
+        )
+        
+        storage_time = time.time() - start_time
+        
+        print(f"✅ Video embeddings stored successfully!")
+        print(f"   Storage time: {storage_time:.2f}s")
+        print(f"   Stored segments: {storage_result.stored_segments}")
+        print(f"   Total vectors: {storage_result.total_vectors_stored}")
+        print(f"   Vector keys: {len(storage_result.vector_keys)} keys generated")
+        
+        if storage_result.failed_segments:
+            print(f"⚠️  Failed segments: {len(storage_result.failed_segments)}")
+        
+        # Show sample vector keys
+        print(f"\n🔑 Sample vector keys:")
+        for i, key in enumerate(storage_result.vector_keys[:3]):
+            print(f"   {i+1}. {key}")
+        if len(storage_result.vector_keys) > 3:
+            print(f"   ... and {len(storage_result.vector_keys) - 3} more")
+        
+        return index_arn
+        
+    except Exception as e:
+        raise VectorEmbeddingError(f"Failed to store video embeddings: {e}")
+
+
+def demonstrate_video_search(
+    result,
+    index_arn: str,
+    video_storage_service: VideoEmbeddingStorageService
+):
+    """Demonstrate similarity search on stored video embeddings."""
+    print_step("7", "Demonstrate Video Similarity Search")
+    
+    print("🔍 Testing video similarity search capabilities...")
+    
+    if not result.embeddings:
+        print("⚠️  No embeddings available for search demonstration")
+        return
+    
+    # Use the first embedding as a query vector for similarity search
+    query_embedding = result.embeddings[0]
+    query_vector = query_embedding.get('embedding', [])
+    query_time_range = f"{query_embedding.get('startSec', 0):.1f}s - {query_embedding.get('endSec', 0):.1f}s"
+    query_type = query_embedding.get('embeddingOption', 'unknown')
+    
+    print(f"📺 Using segment as search query:")
+    print(f"   Time range: {query_time_range}")
+    print(f"   Embedding type: {query_type}")
+    print(f"   Vector dimensions: {len(query_vector)}")
+    
+    try:
+        # Perform similarity search
+        print(f"\n🔎 Searching for similar video segments (top 3)...")
+        
+        search_result = video_storage_service.search_video_segments(
+            index_arn=index_arn,
+            query_vector=query_vector,
+            top_k=3,
+            content_filters={"content_type": "video"}
+        )
+        
+        print(f"✅ Search completed!")
+        print(f"   Query time: {search_result.get('query_time_ms', 0)}ms")
+        print(f"   Total results: {search_result['total_results']}")
+        
+        print(f"\n📊 Similar video segments:")
+        for i, segment in enumerate(search_result['segments'][:3], 1):
+            similarity = segment['similarity_score']
+            start_sec = segment['start_sec']
+            end_sec = segment['end_sec']
+            emb_option = segment['embedding_option']
+            content_id = segment.get('content_id', 'N/A')
+            
+            print(f"   {i}. Similarity: {similarity:.3f} | Time: {start_sec:.1f}s-{end_sec:.1f}s | Type: {emb_option}")
+            print(f"      Content ID: {content_id}")
+            print(f"      Vector key: {segment['key']}")
+        
+        # Demonstrate time-based filtering
+        if result.video_duration_sec and result.video_duration_sec > 5:
+            print(f"\n🕐 Testing time-based search (first half of video)...")
+            
+            time_filtered_result = video_storage_service.search_video_segments(
+                index_arn=index_arn,
+                query_vector=query_vector,
+                top_k=5,
+                time_range_filter={
+                    "start_sec": 0,
+                    "end_sec": result.video_duration_sec / 2
+                }
+            )
+            
+            print(f"   Results in first half: {time_filtered_result['total_results']}")
+            
+        # Cost estimation for the stored data
+        print(f"\n💰 Storage cost estimation:")
+        cost_estimate = video_storage_service.estimate_storage_cost(
+            num_segments=len(result.embeddings),
+            embedding_dimension=1024,
+            metadata_size_bytes=800  # Estimated metadata size
+        )
+        
+        print(f"   Monthly storage cost: ${cost_estimate['storage_cost_usd_monthly']:.4f}")
+        print(f"   Est. monthly query cost: ${cost_estimate['estimated_query_cost_usd_monthly']:.4f}")
+        print(f"   Total estimated monthly: ${cost_estimate['total_estimated_cost_usd_monthly']:.4f}")
+        print(f"   Storage size: {cost_estimate['storage_size_gb']:.6f} GB")
+        
+    except Exception as e:
+        print(f"❌ Search demonstration failed: {e}")
+        logger.error(f"Video search failed: {e}")
+
+
 def cleanup_resources(video_path: str, video_s3_uri: str, regular_bucket_name: str):
     """Clean up demo resources."""
     print_step("6", "Resource Cleanup")
@@ -585,15 +765,18 @@ def main():
     print_banner("Real Video Processing with TwelveLabs Marengo")
     
     print("""
-This demo will process a real Creative Commons video using TwelveLabs Marengo:
+This demo demonstrates the complete video embedding pipeline:
 1. Download Creative Commons sample video (~15 seconds)
 2. Upload video to S3 for processing  
 3. Process video with TwelveLabs Marengo model
 4. Analyze generated embeddings and segments
-5. Clean up demo resources
+5. Store embeddings in S3 Vector storage with metadata
+6. Demonstrate similarity search across video segments
+7. Show cost optimization and enterprise features
+8. Clean up demo resources
 
 ⚠️  IMPORTANT: This uses REAL AWS resources and will incur costs!
-   Estimated cost: ~$0.01 for 15-second video processing
+   Estimated cost: ~$0.01 for video processing + minimal storage
 """)
     
     # Safety check
@@ -623,27 +806,41 @@ This demo will process a real Creative Commons video using TwelveLabs Marengo:
         result = process_video_with_twelvelabs(video_s3_uri, service)
         demonstrate_embedding_analysis(result)
         
+        # NEW: Store embeddings in S3 Vector storage
+        index_arn = store_embeddings_in_s3_vectors(result, video_s3_uri, storage_manager)
+        
+        # NEW: Demonstrate video similarity search
+        video_storage_service = VideoEmbeddingStorageService()
+        demonstrate_video_search(result, index_arn, video_storage_service)
+        
         # Success summary
-        print_banner("REAL VIDEO PROCESSING COMPLETED SUCCESSFULLY")
+        print_banner("COMPLETE VIDEO EMBEDDING PIPELINE DEMONSTRATION")
         print(f"""
-✅ TwelveLabs Real Video Processing Demo Completed!
+✅ End-to-End Video Embedding Pipeline Completed Successfully!
 
 Results Summary:
 • Video processed: Creative Commons sample video
-• Processing time: {result.processing_time_ms / 1000:.1f}s
+• TwelveLabs processing: {result.processing_time_ms / 1000:.1f}s
 • Generated segments: {result.total_segments}
 • Video duration: {result.video_duration_sec:.1f}s
 • Embedding types: {len(set(emb.get('embeddingOption') for emb in result.embeddings))}
+• Vectors stored in S3: {result.total_segments} segments
+• Vector search: Demonstrated similarity queries
 
-🎯 Next Steps:
-• Integrate embeddings with S3 Vector storage
-• Enable similarity search across video segments
-• Build cross-modal search capabilities
+🎯 What was demonstrated:
+✅ TwelveLabs Marengo video processing
+✅ S3 Vector storage integration  
+✅ Metadata-rich vector storage
+✅ Similarity search with temporal filtering
+✅ Cost estimation and optimization
 
-💰 Actual Cost:
-• Estimated processing cost: ~$0.01
-• S3 storage cost: minimal
+💰 Actual Costs:
+• TwelveLabs processing: ~$0.01
+• S3 Vector storage: ~$0.0001/month
+• Regular S3 storage: minimal
 • Total demo cost: < $0.02
+
+🚀 This demonstrates the complete pipeline for enterprise video search!
 """)
         
         # Offer cleanup

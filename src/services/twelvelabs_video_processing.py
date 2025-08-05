@@ -437,15 +437,22 @@ class TwelveLabsVideoProcessingService:
             if 'Contents' not in response or not response['Contents']:
                 raise VectorEmbeddingError(f"No results found in {output_uri}")
             
-            # Find the result file (typically named "result.json" or similar)
+            # Find the result file - prioritize output.json over other JSON files
             result_objects = [obj for obj in response['Contents'] 
                             if obj['Key'].endswith('.json')]
             
             if not result_objects:
                 raise VectorEmbeddingError(f"No JSON result files found in {output_uri}")
             
-            # Download and parse the first result file
-            result_key = result_objects[0]['Key']
+            # Prioritize output.json if it exists, otherwise use the first JSON file
+            result_key = None
+            for obj in result_objects:
+                if obj['Key'].endswith('output.json'):
+                    result_key = obj['Key']
+                    break
+            
+            if not result_key:
+                result_key = result_objects[0]['Key']
             logger.info(f"Retrieving results from s3://{bucket_name}/{result_key}")
             
             result_obj = self.s3_client.get_object(Bucket=bucket_name, Key=result_key)
@@ -468,6 +475,9 @@ class TwelveLabsVideoProcessingService:
                 elif 'results' in result_data:
                     embeddings = result_data['results']
                     logger.info(f"Extracted {len(embeddings)} embeddings from 'results' key")
+                elif 'data' in result_data:
+                    embeddings = result_data['data']
+                    logger.info(f"Extracted {len(embeddings)} embeddings from 'data' key")
                 else:
                     # Single embedding result
                     embeddings = [result_data]
