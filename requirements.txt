@@ -29,3 +29,11 @@ requests>=2.31.0
 
 # Vector operations and numerical computing
 numpy>=1.24.0
+
+# Gradio web interface
+gradio>=4.0.0
+pillow>=10.0.0
+
+# Media processing for frontend
+opencv-python>=4.12.0.88
+ffmpeg-python>=0.2.0
