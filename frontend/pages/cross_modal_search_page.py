@@ -1,6 +1,14 @@
 """
 Cross Modal Search Page
 
+DEPRECATED: This interface uses the old cross-modal search API. 
+The functionality has been merged into the SimilaritySearchEngine.
+This demo may not work correctly with the current codebase.
+
+For working examples, see:
+- examples/cross_modal_search_demo.py (updated to use SimilaritySearchEngine)
+- src/services/similarity_search_engine.py (main implementation)
+
 Gradio interface for the Cross-Modal Search Demo that integrates
 directly with examples/cross_modal_search_demo.py functionality.
 """
@@ -18,7 +26,7 @@ import gradio as gr
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from .common_components import CommonComponents
-from src.services.cross_modal_search import CrossModalSearchEngine, SearchQuery
+from src.services.similarity_search_engine import SimilaritySearchEngine, SimilarityQuery, IndexType, QueryInputType
 from src.services.embedding_storage_integration import EmbeddingStorageIntegration, TextEmbeddingMetadata
 from src.services.video_embedding_storage import VideoEmbeddingStorageService
 from src.services.s3_vector_storage import S3VectorStorageManager
@@ -62,7 +70,7 @@ class CrossModalSearchPage:
     def _init_services(self):
         """Initialize required services."""
         try:
-            self.search_engine = CrossModalSearchEngine()
+            self.search_engine = SimilaritySearchEngine()
             self.text_storage = EmbeddingStorageIntegration()
             self.video_storage = VideoEmbeddingStorageService()
             self.s3_manager = S3VectorStorageManager()
@@ -951,11 +959,10 @@ class CrossModalSearchPage:
             result_text += f"**Fusion Method**: {fusion_method}\\n\\n"
             
             # Create search query
-            search_query = SearchQuery(
+            search_query = SimilarityQuery(
                 query_text=text_query.strip() if text_query.strip() else None,
                 query_video_key=video_reference if video_reference else None,
-                top_k=top_k,
-                include_cross_modal=True
+                top_k=top_k
             )
             
             # Perform unified search

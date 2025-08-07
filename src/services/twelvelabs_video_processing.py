@@ -81,6 +81,9 @@ class TwelveLabsVideoProcessingService:
                          f"Supported regions: {VideoProcessingConfig.SUPPORTED_REGIONS}")
 
         self.config = VideoProcessingConfig(region=self.region)
+        
+        # Expose model_id for convenience
+        self.model_id = self.config.model_id
 
         # Initialize AWS clients - create clients directly for specific region
         # if different from default config region
@@ -584,6 +587,195 @@ class TwelveLabsVideoProcessingService:
             List of active AsyncJobInfo objects
         """
         return list(self.active_jobs.values())
+
+    def generate_text_embedding(self, text: str) -> Dict[str, Any]:
+        """
+        Generate text embedding using TwelveLabs Marengo model.
+        
+        Args:
+            text: Text to generate embeddings for
+            
+        Returns:
+            Dictionary with embedding data
+            
+        Raises:
+            ValidationError: If text is empty or too long
+            VectorEmbeddingError: If embedding generation fails
+        """
+        if not text or not text.strip():
+            raise ValidationError("Text cannot be empty")
+        
+        # TwelveLabs Marengo has a limit of 77 tokens for text
+        if len(text.split()) > 77:
+            logger.warning(f"Text has {len(text.split())} tokens, will be truncated to 77 tokens")
+        
+        try:
+            # Generate unique job ID
+            job_id = f"text_embed_{uuid.uuid4().hex[:8]}"
+            
+            # Prepare input for text embedding
+            model_input = {
+                "inputType": "text",
+                "inputText": text.strip(),
+                "textTruncate": "end"  # Truncate at end if exceeds 77 tokens
+            }
+            
+            # Start async job with custom model input
+            # We need to temporarily modify the start_video_processing call for text embeddings
+            
+            # Generate default output location
+            vector_bucket_name = config_manager.aws_config.s3_vectors_bucket
+            regular_bucket_name = f"{vector_bucket_name}-videos"
+            timestamp = datetime.utcnow().strftime('%Y%m%dT%H%M%S')
+            output_s3_uri = f"s3://{regular_bucket_name}/text-embedding-results/{timestamp}/"
+            
+            # Prepare request data for text embedding
+            request_data = {
+                "modelId": self.config.model_id,
+                "modelInput": model_input,
+                "outputDataConfig": {
+                    "s3OutputDataConfig": {
+                        "s3Uri": output_s3_uri
+                    }
+                },
+                "clientRequestToken": str(uuid.uuid4())
+            }
+            
+            # Add bucket owner to output config
+            try:
+                import boto3
+                sts_client = boto3.client('sts', region_name=self.region)
+                account_id = sts_client.get_caller_identity()['Account']
+                request_data["outputDataConfig"]["s3OutputDataConfig"]["bucketOwner"] = account_id
+            except Exception as e:
+                logger.warning(f"Could not get account ID for output config: {e}")
+            
+            try:
+                logger.debug(f"Starting text embedding with request: {json.dumps(request_data, indent=2)}")
+                start_time = time.time()
+                response = self.runtime_client.start_async_invoke(**request_data)
+                processing_time = int((time.time() - start_time) * 1000)
+                
+                invocation_arn = response['invocationArn']
+                actual_job_id = invocation_arn.split('/')[-1]  # Extract job ID from ARN
+                
+                # Create job info
+                async_job = AsyncJobInfo(
+                    job_id=actual_job_id,
+                    invocation_arn=invocation_arn,
+                    model_id=self.config.model_id,
+                    input_config={
+                        "input_source": "text",
+                        "model_input": model_input,
+                        "processing_time_ms": processing_time
+                    },
+                    output_s3_uri=output_s3_uri,
+                    status="InProgress"
+                )
+                
+                # Track the job
+                self.active_jobs[actual_job_id] = async_job
+                logger.info(f"Started text embedding job {actual_job_id}")
+                job_id = actual_job_id  # Update job_id to the actual one
+                
+            except ClientError as e:
+                error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+                error_msg = e.response.get('Error', {}).get('Message', str(e))
+                logger.error(f"AWS error starting text embedding: {error_code} - {error_msg}")
+                raise VectorEmbeddingError(f"Failed to start text embedding: {error_code} - {error_msg}")
+            except Exception as e:
+                logger.error(f"Unexpected error starting text embedding: {e}")
+                raise VectorEmbeddingError(f"Failed to start text embedding: {str(e)}")
+            
+            # Wait for completion (text embedding should be fast)
+            completed_job = self.wait_for_completion(job_id, timeout_sec=120)
+            
+            if completed_job.status != "Completed":
+                raise VectorEmbeddingError(f"Text embedding failed: {completed_job.error_message}")
+            
+            # Retrieve results
+            embedding_result = self.retrieve_results(job_id)
+            
+            # Clean up job resources
+            try:
+                self.cleanup_job(job_id)
+            except Exception as e:
+                logger.warning(f"Failed to cleanup job {job_id}: {str(e)}")
+            
+            # Return the embedding data - for text there should be only one embedding
+            if embedding_result.embeddings:
+                embedding_data = embedding_result.embeddings[0]
+                return {
+                    'embedding': embedding_data.get('embedding', []),
+                    'model_id': embedding_result.model_id,
+                    'processing_time_ms': embedding_result.processing_time_ms
+                }
+            else:
+                raise VectorEmbeddingError("No embeddings returned for text")
+                
+        except Exception as e:
+            logger.error(f"Text embedding generation failed: {str(e)}")
+            if isinstance(e, (ValidationError, VectorEmbeddingError)):
+                raise
+            raise VectorEmbeddingError(f"Text embedding generation failed: {str(e)}")
+
+    def generate_media_embedding(self, s3_uri: str, input_type: str) -> Dict[str, Any]:
+        """
+        Generate media embedding using TwelveLabs Marengo model.
+        
+        Args:
+            s3_uri: S3 URI of the media file
+            input_type: Type of media ("video", "audio", "image")
+            
+        Returns:
+            Dictionary with embedding data
+            
+        Raises:
+            ValidationError: If parameters are invalid
+            VectorEmbeddingError: If embedding generation fails
+        """
+        if not s3_uri:
+            raise ValidationError("S3 URI cannot be empty")
+        
+        if input_type not in ["video", "audio", "image"]:
+            raise ValidationError(f"Invalid input type: {input_type}. Must be video, audio, or image")
+        
+        try:
+            # For single media embeddings, use the existing process_video_sync method
+            # but modify the input configuration
+            model_input = {
+                "inputType": input_type,
+                "mediaSource": {
+                    "s3Location": {
+                        "uri": s3_uri
+                    }
+                }
+            }
+            
+            # For non-video media, we still use the video processing pipeline
+            # but with different input type
+            embedding_result = self.process_video_sync(
+                s3_uri=s3_uri,
+                model_input=model_input,
+                timeout_sec=300
+            )
+            
+            # Return the first embedding (for single media files)
+            if embedding_result.embeddings:
+                embedding_data = embedding_result.embeddings[0]
+                return {
+                    'embedding': embedding_data.get('embedding', []),
+                    'model_id': embedding_result.model_id,
+                    'processing_time_ms': embedding_result.processing_time_ms
+                }
+            else:
+                raise VectorEmbeddingError(f"No embeddings returned for {input_type}")
+                
+        except Exception as e:
+            logger.error(f"Media embedding generation failed: {str(e)}")
+            if isinstance(e, (ValidationError, VectorEmbeddingError)):
+                raise
+            raise VectorEmbeddingError(f"Media embedding generation failed: {str(e)}")
 
     def estimate_cost(
         self,

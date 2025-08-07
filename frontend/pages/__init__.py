@@ -7,11 +7,11 @@ for interactive demonstration.
 """
 
 from .real_video_processing_page import RealVideoProcessingPage
-from .cross_modal_search_page import CrossModalSearchPage
+from .cross_modal_search_page import CrossModalSearchPage  # DEPRECATED: Use SimilaritySearchEngine instead
 from .common_components import CommonComponents
 
 __all__ = [
     'RealVideoProcessingPage',
-    'CrossModalSearchPage', 
+    'CrossModalSearchPage',  # DEPRECATED: Use SimilaritySearchEngine instead
     'CommonComponents'
 ]

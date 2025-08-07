@@ -37,7 +37,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.services.cross_modal_search import CrossModalSearchEngine, SearchQuery
+from src.services.similarity_search_engine import SimilaritySearchEngine, SimilarityQuery, IndexType, QueryInputType
 from src.services.embedding_storage_integration import EmbeddingStorageIntegration, TextEmbeddingMetadata
 from src.services.video_embedding_storage import VideoEmbeddingStorageService, VideoVectorMetadata
 from src.services.s3_vector_storage import S3VectorStorageManager
@@ -81,7 +81,7 @@ class CrossModalSearchDemo:
         # Initialize services
         if real_aws:
             logger.info("🚀 Initializing cross-modal search demo with REAL AWS services")
-            self.search_engine = CrossModalSearchEngine()
+            self.search_engine = SimilaritySearchEngine()
             self.text_storage = EmbeddingStorageIntegration()
             self.video_storage = VideoEmbeddingStorageService()
             self.s3_manager = S3VectorStorageManager()
@@ -185,7 +185,7 @@ class CrossModalSearchDemo:
             logger.info("✅ Mock AWS resources configured")
         
         # Display capabilities
-        capabilities = self.search_engine.get_search_capabilities()
+        capabilities = self.search_engine.get_engine_capabilities()
         logger.info(f"🔍 Search engine capabilities:")
         for key, value in capabilities.items():
             logger.info(f"   {key}: {value}")
@@ -274,9 +274,10 @@ class CrossModalSearchDemo:
             
             try:
                 if self.real_aws:
-                    result = self.search_engine.search_text_to_video(
+                    result = self.search_engine.search_by_text_query(
                         query_text=test_case["query"],
-                        video_index_arn=self.video_index_arn,
+                        index_arn=self.video_index_arn,
+                        index_type=IndexType.MARENGO_MULTIMODAL,
                         top_k=5
                     )
                     
@@ -285,8 +286,8 @@ class CrossModalSearchDemo:
                     
                     # Display top results
                     for j, video_result in enumerate(result.results[:3], 1):
-                        score = video_result.get('similarity_score', 0.0)
-                        title = video_result.get('metadata', {}).get('title', 'Unknown')
+                        score = video_result.similarity_score
+                        title = video_result.metadata.get('title', 'Unknown')
                         logger.info(f"      {j}. {title} (score: {score:.3f})")
                 else:
                     # Mock results for demonstration
@@ -356,21 +357,27 @@ class CrossModalSearchDemo:
             
             try:
                 if self.real_aws:
-                    result = self.search_engine.search_video_to_video(
+                    query = SimilarityQuery(
                         query_video_key=ref_video["key"],
-                        video_index_arn=self.video_index_arn,
-                        top_k=5,
-                        exclude_self=True
+                        top_k=6  # Get one extra to exclude self
                     )
+                    result = self.search_engine.find_similar_content(
+                        query=query,
+                        index_arn=self.video_index_arn,
+                        index_type=IndexType.MARENGO_MULTIMODAL
+                    )
+                    # Filter out self-reference
+                    filtered_results = [r for r in result.results if r.key != ref_video["key"]][:5]
+                    result.results = filtered_results
                     
                     logger.info(f"   ✅ Found {len(result.results)} similar videos")
                     logger.info(f"   ⏱️ Processing time: {result.processing_time_ms}ms")
                     
                     # Display similarity scores
                     for j, video_result in enumerate(result.results[:3], 1):
-                        score = video_result.get('similarity_score', 0.0)
-                        title = video_result.get('metadata', {}).get('title', 'Unknown')
-                        time_range = f"{video_result.get('metadata', {}).get('start_sec', 0):.1f}s-{video_result.get('metadata', {}).get('end_sec', 0):.1f}s"
+                        score = video_result.similarity_score
+                        title = video_result.metadata.get('title', 'Unknown')
+                        time_range = f"{video_result.metadata.get('start_sec', 0):.1f}s-{video_result.metadata.get('end_sec', 0):.1f}s"
                         logger.info(f"      {j}. {title} [{time_range}] (similarity: {score:.3f})")
                 else:
                     # Mock results
@@ -417,35 +424,86 @@ class CrossModalSearchDemo:
             logger.info(f"   Scenario: {query_case['scenario']}")
             
             # Create search query
-            search_query = SearchQuery(
+            search_query = SimilarityQuery(
                 query_text=query_case.get("text_query"),
                 query_video_key=query_case.get("video_key"),
                 top_k=5,
-                include_cross_modal=True,
-                filters={"quality_score": {"gte": 0.7}}  # Example quality filter
+                metadata_filters={"quality_score": {"$gte": 0.7}}  # Example quality filter
             )
             
             try:
                 if self.real_aws:
-                    results = self.search_engine.unified_search(
-                        search_query=search_query,
-                        text_index_arn=self.text_index_arn,
-                        video_index_arn=self.video_index_arn
-                    )
+                    # Implement unified search with multiple calls
+                    results = {}
+                    
+                    # Text search if text query provided
+                    if search_query.query_text:
+                        try:
+                            text_results = self.text_storage.search_similar_text(
+                                query_text=search_query.query_text,
+                                index_arn=self.text_index_arn,
+                                top_k=search_query.top_k,
+                                metadata_filters=search_query.metadata_filters
+                            )
+                            results['text'] = text_results
+                        except Exception as e:
+                            logger.warning(f"Text search failed: {str(e)}")
+                    
+                    # Text-to-video search
+                    if search_query.query_text and self.video_index_arn:
+                        text_to_video = self.search_engine.search_by_text_query(
+                            query_text=search_query.query_text,
+                            index_arn=self.video_index_arn,
+                            index_type=IndexType.MARENGO_MULTIMODAL,
+                            top_k=search_query.top_k,
+                            metadata_filters=search_query.metadata_filters
+                        )
+                        results['text_to_video'] = text_to_video
+                    
+                    # Video-to-video search
+                    if search_query.query_video_key and self.video_index_arn:
+                        try:
+                            video_query = SimilarityQuery(
+                                query_video_key=search_query.query_video_key,
+                                top_k=search_query.top_k + 1,
+                                metadata_filters=search_query.metadata_filters
+                            )
+                            video_to_video = self.search_engine.find_similar_content(
+                                query=video_query,
+                                index_arn=self.video_index_arn,
+                                index_type=IndexType.MARENGO_MULTIMODAL
+                            )
+                            # Filter out self-reference
+                            filtered_results = [r for r in video_to_video.results if r.key != search_query.query_video_key][:search_query.top_k]
+                            video_to_video.results = filtered_results
+                            results['video_to_video'] = video_to_video
+                        except Exception as e:
+                            logger.warning(f"Video-to-video search failed: {str(e)}")
                     
                     logger.info(f"   ✅ Unified search returned {len(results)} result sets")
                     
                     # Analyze results by modality
                     for modality, result_set in results.items():
-                        logger.info(f"   📋 {modality.upper()} Results: {len(result_set.results)} items")
-                        logger.info(f"      Processing time: {result_set.processing_time_ms}ms")
-                        
-                        # Show top result
-                        if result_set.results:
-                            top_result = result_set.results[0]
-                            title = top_result.get('metadata', {}).get('title', 'Unknown')
-                            score = top_result.get('similarity_score', 0.0)
-                            logger.info(f"      Top result: {title} (score: {score:.3f})")
+                        if modality == 'text':
+                            # Text search results have different structure
+                            text_results = result_set.get('results', [])
+                            logger.info(f"   📋 {modality.upper()} Results: {len(text_results)} items")
+                            if text_results:
+                                top_result = text_results[0]
+                                title = top_result.get('metadata', {}).get('title', 'Unknown')
+                                score = top_result.get('similarity_score', 0.0)
+                                logger.info(f"      Top result: {title} (score: {score:.3f})")
+                        else:
+                            # Video search results use SimilaritySearchResponse
+                            logger.info(f"   📋 {modality.upper()} Results: {len(result_set.results)} items")
+                            logger.info(f"      Processing time: {result_set.processing_time_ms}ms")
+                            
+                            # Show top result
+                            if result_set.results:
+                                top_result = result_set.results[0]
+                                title = top_result.metadata.get('title', 'Unknown')
+                                score = top_result.similarity_score
+                                logger.info(f"      Top result: {title} (score: {score:.3f})")
                 else:
                     # Mock unified results
                     mock_results = self._generate_mock_unified_results(search_query)
@@ -506,25 +564,26 @@ class CrossModalSearchDemo:
             try:
                 if self.real_aws:
                     # Perform filtered text-to-video search
-                    result = self.search_engine.search_text_to_video(
+                    result = self.search_engine.search_by_text_query(
                         query_text=scenario["query"],
-                        video_index_arn=self.video_index_arn,
+                        index_arn=self.video_index_arn,
+                        index_type=IndexType.MARENGO_MULTIMODAL,
                         top_k=5,
-                        content_filters=scenario["filters"]
+                        metadata_filters=scenario["filters"]
                     )
                     
                     logger.info(f"   ✅ Found {len(result.results)} matching segments")
                     
                     # Analyze result quality
                     if result.results:
-                        avg_score = sum(r.get('similarity_score', 0) for r in result.results) / len(result.results)
+                        avg_score = sum(r.similarity_score for r in result.results) / len(result.results)
                         logger.info(f"   📊 Average similarity score: {avg_score:.3f}")
                         
                         # Show best match
                         best_match = result.results[0]
-                        logger.info(f"   🏆 Best match: {best_match.get('metadata', {}).get('title', 'Unknown')}")
-                        logger.info(f"       Score: {best_match.get('similarity_score', 0):.3f}")
-                        logger.info(f"       Time: {best_match.get('metadata', {}).get('start_sec', 0):.1f}s - {best_match.get('metadata', {}).get('end_sec', 0):.1f}s")
+                        logger.info(f"   🏆 Best match: {best_match.metadata.get('title', 'Unknown')}")
+                        logger.info(f"       Score: {best_match.similarity_score:.3f}")
+                        logger.info(f"       Time: {best_match.metadata.get('start_sec', 0):.1f}s - {best_match.metadata.get('end_sec', 0):.1f}s")
                 else:
                     # Mock scenario results
                     mock_count = self._get_mock_scenario_results(scenario["name"])
@@ -692,17 +751,28 @@ class CrossModalSearchDemo:
             }
         ]
     
-    def _create_mock_search_engine(self) -> CrossModalSearchEngine:
+    def _create_mock_search_engine(self) -> SimilaritySearchEngine:
         """Create a mock search engine for demonstration purposes."""
         from unittest.mock import Mock
         
-        mock_engine = Mock(spec=CrossModalSearchEngine)
-        mock_engine.get_search_capabilities.return_value = {
-            'modalities_supported': ['text', 'video'],
-            'search_types': ['text_to_text', 'text_to_video', 'video_to_video', 'unified_search'],
-            'embedding_dimensions': {'text': 1024, 'video': 1024},
-            'semantic_bridge_trained': {'text_to_video': False, 'video_to_text': False},
-            'features': ['Cross-modal projection', 'Temporal filtering', 'Metadata filtering']
+        mock_engine = Mock(spec=SimilaritySearchEngine)
+        mock_engine.get_engine_capabilities.return_value = {
+            'supported_index_types': ['marengo_multimodal', 'titan_text'],
+            'supported_input_types': ['text', 'video_file', 'video_key', 'audio_file', 'image_file', 'embedding'],
+            'index_compatibility': {
+                'marengo_multimodal': ['text', 'video_file', 'video_key', 'audio_file', 'image_file', 'embedding'],
+                'titan_text': ['text', 'embedding']
+            },
+            'features': [
+                'Multimodal search within same embedding space',
+                'Natural language query processing', 
+                'Temporal video/audio search',
+                'Advanced metadata filtering'
+            ],
+            'models_supported': {
+                'marengo': 'twelvelabs.marengo-embed-2-7-v1:0',
+                'titan_text': 'amazon.titan-embed-text-v2:0'
+            }
         }
         return mock_engine
     
@@ -957,7 +1027,7 @@ class CrossModalSearchDemo:
         logger.info(f"✅ Stored {storage_result.total_vectors_stored} video embeddings")
         return storage_result
 
-    def _generate_mock_unified_results(self, search_query: SearchQuery) -> Dict[str, int]:
+    def _generate_mock_unified_results(self, search_query: SimilarityQuery) -> Dict[str, int]:
         """Generate mock unified search results."""
         results = {}
         if search_query.query_text:
