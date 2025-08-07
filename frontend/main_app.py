@@ -18,7 +18,7 @@ import gradio as gr
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from pages import RealVideoProcessingPage, CrossModalSearchPage, CommonComponents
+from pages import RealVideoProcessingPage, CrossModalSearchPage, UnifiedVideoSearchPage, CommonComponents
 from src.core import create_poc_instance
 from src.config import config_manager
 from src.utils.logging_config import get_logger
@@ -70,7 +70,8 @@ class S3VectorMainApp:
             # Initialize individual pages
             self.pages = {
                 'real_video': RealVideoProcessingPage(),
-                'cross_modal': CrossModalSearchPage()
+                'cross_modal': CrossModalSearchPage(),
+                'unified_search': UnifiedVideoSearchPage()
             }
             
             logger.info(f"Initialized {len(self.pages)} demo pages")
@@ -121,6 +122,9 @@ Pages: {len(self.pages)} loaded | Session costs: ${total_costs:.4f}"""
             
             if hasattr(self.pages['cross_modal'], 'costs'):
                 page_costs['Cross-Modal Search'] = self.pages['cross_modal'].costs
+            
+            if hasattr(self.pages['unified_search'], 'costs'):
+                page_costs['Unified Video Search'] = self.pages['unified_search'].costs
             
             # Calculate totals
             total_cost = 0
@@ -242,11 +246,18 @@ Pages: {len(self.pages)} loaded | Session costs: ${total_costs:.4f}"""
             **Enterprise-grade multi-modal search and content discovery platform**
             
             **🎯 Comprehensive demonstration of S3 Vector capabilities:**
+            
+            ## ⭐ **NEW: Unified Video Search** - The Complete Experience
+            • **End-to-End Pipeline**: Index creation → Video ingestion → Multi-modal search
+            • **Large Index Support**: Build searchable libraries with multiple videos
+            • **Real-time Results**: Search with video segment preview and similarity scores
+            • **Production Ready**: Demonstrates scalable video search for enterprise use
+            
+            ## 🔧 **Individual Component Demos:**
             • **Real Video Processing**: Complete TwelveLabs pipeline with actual AWS processing
             • **Cross-Modal Search**: Text-to-video and video-to-video search capabilities  
             • **Custom Content**: Support for your own videos and text descriptions
             • **Cost Analysis**: Real-time tracking and comparison with traditional solutions
-            • **Preview & Validation**: Video/text content preview before processing
             
             **💡 Perfect for streaming platforms, media companies, and content discovery applications**
             """)
@@ -271,6 +282,24 @@ Pages: {len(self.pages)} loaded | Session costs: ${total_costs:.4f}"""
             
             # Main content tabs
             with gr.Tabs() as main_tabs:
+                
+                # ===== UNIFIED VIDEO SEARCH TAB (NEW - FEATURED) =====
+                with gr.Tab("🎯 Unified Video Search", id="unified_search"):
+                    gr.Markdown("""
+                    ### Complete Video-to-Search Pipeline ⭐ **FEATURED DEMO**
+                    
+                    **The complete end-to-end experience:**
+                    - **🗂️ Index Setup**: Create your searchable video index
+                    - **📹 Video Ingestion**: Add multiple videos to build a large library
+                    - **🔍 Multi-Modal Search**: Text-to-video and video-to-video search
+                    - **📊 Analytics**: Real-time performance and cost tracking
+                    - **🎥 Results Preview**: View matching segments with similarity scores
+                    
+                    **Perfect for:** Content discovery platforms, media libraries, streaming services
+                    """)
+                    
+                    # Embed the Unified Video Search page
+                    unified_search_page = self.pages['unified_search'].create_page()
                 
                 # ===== REAL VIDEO PROCESSING TAB =====
                 with gr.Tab("🎬 Real Video Processing", id="video_processing"):

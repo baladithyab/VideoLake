@@ -26,7 +26,8 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python frontend/launch_main.py                    # Launch with default settings
+  python frontend/launch_main.py                    # Launch complete demo suite
+  python frontend/launch_main.py --unified-only    # Launch only Unified Video Search
   python frontend/launch_main.py --port 8080       # Launch on custom port
   python frontend/launch_main.py --share           # Enable public sharing
   python frontend/launch_main.py --debug           # Enable debug mode
@@ -87,6 +88,12 @@ Examples:
         help='Reduce logging output'
     )
     
+    parser.add_argument(
+        '--unified-only',
+        action='store_true',
+        help='Launch only the Unified Video Search demo'
+    )
+    
     return parser.parse_args()
 
 def main():
@@ -106,8 +113,10 @@ def main():
         print("🚀 Launching comprehensive multi-modal search demo...")
         print()
         print("📋 Features included:")
+        print("   ⭐ NEW: Unified Video Search (Complete Pipeline)")
         print("   • Real Video Processing (TwelveLabs + S3 Vector)")
         print("   • Cross-Modal Search (Text ↔ Video)")
+        print("   • Multi-Video Index Management")
         print("   • Custom Content Support")
         print("   • Cost Analysis & Tracking")
         print("   • Video/Text Preview")
@@ -124,7 +133,16 @@ def main():
         print()
         
         # Create application
-        app = S3VectorMainApp()
+        if args.unified_only:
+            # Launch only the unified video search demo
+            from frontend.pages.unified_video_search_page import UnifiedVideoSearchPage
+            print("🎯 Launching Unified Video Search Demo only...")
+            print()
+            demo_page = UnifiedVideoSearchPage()
+            app = demo_page.create_page()
+        else:
+            # Launch full demo suite
+            app = S3VectorMainApp()
         
         # Prepare launch parameters
         launch_params = {

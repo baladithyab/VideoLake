@@ -483,6 +483,190 @@ Ready for processing or preview!"""
         return queries_by_category.get(category, queries_by_category["general"])
     
     @staticmethod
+    def create_video_segment_player(video_s3_uri: str, start_sec: float, end_sec: float, 
+                                  video_title: str = "Video Segment") -> Tuple[str, str]:
+        """
+        Create a video segment player component.
+        
+        Args:
+            video_s3_uri: S3 URI of the video file
+            start_sec: Start time of the segment in seconds
+            end_sec: End time of the segment in seconds
+            video_title: Title for the video segment
+            
+        Returns:
+            Tuple of (html_player, video_info)
+        """
+        duration = end_sec - start_sec
+        
+        # Generate presigned URL for the video (this would be implemented with actual S3 client)
+        # For now, we'll create a placeholder
+        video_info = f"""**🎥 Video Segment Player**
+
+**Title**: {video_title}
+**Source**: {video_s3_uri}
+**Segment**: {start_sec:.1f}s - {end_sec:.1f}s ({duration:.1f}s duration)
+
+*Note: In a full implementation, this would show an embedded video player 
+with the video cued to the specific segment timestamps.*
+
+**Implementation would include:**
+- Presigned S3 URL generation for secure video access
+- HTML5 video player with start/end time controls
+- Automatic seek to start_sec on load
+- Play/pause controls limited to the segment duration
+- Thumbnail preview at the start timestamp"""
+
+        # HTML player component (placeholder for now)
+        player_html = f"""
+        <div style="border: 2px solid #1976d2; border-radius: 8px; padding: 1rem; margin: 1rem 0; background: #f5f5f5;">
+            <h4>🎬 {video_title}</h4>
+            <div style="background: #000; height: 200px; display: flex; align-items: center; justify-content: center; color: white; margin: 1rem 0; border-radius: 4px;">
+                <div style="text-align: center;">
+                    <div style="font-size: 3em; margin-bottom: 0.5rem;">▶️</div>
+                    <div>Video Player Placeholder</div>
+                    <div style="font-size: 0.9em; margin-top: 0.5rem;">{start_sec:.1f}s - {end_sec:.1f}s</div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+                <span><strong>Duration:</strong> {duration:.1f} seconds</span>
+                <span><strong>Source:</strong> S3 Video</span>
+            </div>
+        </div>
+        """
+        
+        return player_html, video_info
+    
+    @staticmethod
+    def generate_presigned_url(s3_uri: str, expiration: int = 3600) -> str:
+        """
+        Generate a presigned URL for S3 video access.
+        
+        Args:
+            s3_uri: S3 URI of the video file
+            expiration: URL expiration time in seconds
+            
+        Returns:
+            Presigned URL string
+        """
+        try:
+            from src.utils.aws_clients import aws_client_factory
+            import urllib.parse
+            
+            # Parse S3 URI
+            if not s3_uri.startswith('s3://'):
+                raise ValueError("Invalid S3 URI format")
+            
+            uri_parts = s3_uri[5:].split('/', 1)
+            bucket_name = uri_parts[0]
+            key = uri_parts[1] if len(uri_parts) > 1 else ""
+            
+            if not key:
+                raise ValueError("S3 key not found in URI")
+            
+            # Generate presigned URL
+            s3_client = aws_client_factory.get_s3_client()
+            presigned_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': bucket_name, 'Key': key},
+                ExpiresIn=expiration
+            )
+            
+            return presigned_url
+            
+        except Exception as e:
+            logger.error(f"Failed to generate presigned URL for {s3_uri}: {e}")
+            return ""
+    
+    @staticmethod  
+    def create_advanced_video_player(video_s3_uri: str, start_sec: float, end_sec: float,
+                                   video_title: str = "Video Segment", 
+                                   show_controls: bool = True) -> str:
+        """
+        Create an advanced HTML5 video player with segment controls.
+        
+        Args:
+            video_s3_uri: S3 URI of the video file
+            start_sec: Start time of the segment
+            end_sec: End time of the segment 
+            video_title: Title for display
+            show_controls: Whether to show video controls
+            
+        Returns:
+            HTML string for the video player
+        """
+        try:
+            # Generate presigned URL
+            presigned_url = CommonComponents.generate_presigned_url(video_s3_uri)
+            
+            if not presigned_url:
+                return CommonComponents.create_video_segment_player(video_s3_uri, start_sec, end_sec, video_title)[0]
+            
+            # Create unique player ID
+            import hashlib
+            player_id = f"player_{hashlib.md5(f'{video_s3_uri}_{start_sec}_{end_sec}'.encode()).hexdigest()[:8]}"
+            
+            duration = end_sec - start_sec
+            
+            player_html = f"""
+            <div style="border: 1px solid #ddd; border-radius: 8px; overflow: hidden; margin: 1rem 0;">
+                <div style="background: #1976d2; color: white; padding: 0.5rem 1rem;">
+                    <strong>🎬 {video_title}</strong>
+                    <span style="float: right;">{start_sec:.1f}s - {end_sec:.1f}s</span>
+                </div>
+                
+                <video id="{player_id}" 
+                       width="100%" 
+                       height="300" 
+                       {'controls' if show_controls else ''}
+                       preload="metadata"
+                       style="background: #000;">
+                    <source src="{presigned_url}#t={start_sec:.1f},{end_sec:.1f}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+                
+                <div style="padding: 0.5rem 1rem; background: #f5f5f5; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <button onclick="playSegment_{player_id}()" style="background: #1976d2; color: white; border: none; padding: 0.3rem 0.8rem; border-radius: 4px; margin-right: 0.5rem; cursor: pointer;">
+                            ▶️ Play Segment
+                        </button>
+                        <button onclick="document.getElementById('{player_id}').pause()" style="background: #666; color: white; border: none; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer;">
+                            ⏸️ Pause
+                        </button>
+                    </div>
+                    <span><strong>Duration:</strong> {duration:.1f}s</span>
+                </div>
+            </div>
+            
+            <script>
+            function playSegment_{player_id}() {{
+                const video = document.getElementById('{player_id}');
+                video.currentTime = {start_sec:.1f};
+                video.play();
+                
+                // Stop at end time
+                video.addEventListener('timeupdate', function checkTime() {{
+                    if (video.currentTime >= {end_sec:.1f}) {{
+                        video.pause();
+                        video.removeEventListener('timeupdate', checkTime);
+                    }}
+                }});
+            }}
+            
+            // Auto-seek to start time when video loads
+            document.getElementById('{player_id}').addEventListener('loadedmetadata', function() {{
+                this.currentTime = {start_sec:.1f};
+            }});
+            </script>
+            """
+            
+            return player_html
+            
+        except Exception as e:
+            logger.error(f"Failed to create advanced video player: {e}")
+            return CommonComponents.create_video_segment_player(video_s3_uri, start_sec, end_sec, video_title)[0]
+
+    @staticmethod
     def validate_video_file(file_path: str) -> Tuple[bool, str]:
         """
         Validate video file for processing.

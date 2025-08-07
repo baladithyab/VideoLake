@@ -190,10 +190,37 @@ class VideoEmbeddingStorageService:
                     processing_time_ms=video_result.processing_time_ms
                 )
                 
-                # Add base metadata if provided
+                # Add base metadata if provided, ensuring we stay within S3 Vector's 10-key limit
                 metadata_dict = segment_metadata.to_dict()
                 if base_metadata:
-                    metadata_dict.update(base_metadata)
+                    # Check how many keys we can still add
+                    current_keys = len(metadata_dict)
+                    max_additional_keys = 10 - current_keys
+                    
+                    if max_additional_keys > 0:
+                        # Add base metadata keys up to the limit
+                        added_keys = 0
+                        for key, value in base_metadata.items():
+                            if added_keys >= max_additional_keys:
+                                break
+                            metadata_dict[key] = value
+                            added_keys += 1
+                        
+                        if added_keys < len(base_metadata):
+                            logger.warning(f"Could not add all base metadata keys due to 10-key S3 Vector limit. "
+                                         f"Added {added_keys} of {len(base_metadata)} keys.")
+                    else:
+                        logger.warning(f"Cannot add base metadata - segment metadata already has {current_keys} keys "
+                                     f"(S3 Vector limit is 10 keys)")
+                
+                # Final validation: ensure we don't exceed 10 keys
+                if len(metadata_dict) > 10:
+                    logger.error(f"Metadata has {len(metadata_dict)} keys, exceeding S3 Vector limit of 10")
+                    # Trim to essential keys if over limit
+                    essential_keys = ["content_type", "start_sec", "end_sec", "embedding_option", "model_id"]
+                    trimmed_metadata = {k: v for k, v in metadata_dict.items() if k in essential_keys}
+                    logger.warning(f"Trimmed metadata from {len(metadata_dict)} to {len(trimmed_metadata)} keys")
+                    metadata_dict = trimmed_metadata
                 
                 # Prepare vector data for S3 Vectors
                 vector_data = {

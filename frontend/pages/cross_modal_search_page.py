@@ -718,16 +718,24 @@ class CrossModalSearchPage:
                             keywords=content["keywords"]
                         )
                         
+                        # Limit metadata to stay within S3 Vector's 10-key limit
+                        base_metadata = metadata.to_dict()
+                        
+                        # Only add essential extra fields if we have room
+                        if len(base_metadata) < 9:  # Leave room for at least text field
+                            base_metadata['text'] = content["text"][:200]  # Truncate long text
+                            
+                        if len(base_metadata) < 10:  # Check if we have room for matches_video
+                            matches_video = content.get("matches_video", "")
+                            if matches_video:
+                                base_metadata['matches_video'] = matches_video
+                        
                         self.s3_manager.put_vectors_batch(
                             index_arn=self.text_index_arn,
                             vectors_data=[{
                                 'key': vector_key,
                                 'data': {'float32': embedding_result.embedding},
-                                'metadata': {
-                                    **metadata.to_dict(),
-                                    'text': content["text"],
-                                    'matches_video': content.get("matches_video", "")
-                                }
+                                'metadata': base_metadata
                             }]
                         )
                         
@@ -1051,14 +1059,25 @@ class CrossModalSearchPage:
                 text_content.strip()
             )
             
-            # Prepare metadata
+            # Prepare metadata with 10-key limit in mind
             vector_key = f"custom-text-{len(self.stored_content['text_samples']):03d}"
-            full_metadata = {
-                **metadata,
-                "text": text_content.strip()[:200] + ("..." if len(text_content) > 200 else ""),
+            
+            # Start with essential metadata
+            limited_metadata = {
                 "content_type": "custom",
+                "text": text_content.strip()[:200] + ("..." if len(text_content) > 200 else ""),
                 "added_timestamp": time.time()
             }
+            
+            # Add user metadata fields up to the 10-key limit
+            if metadata:
+                keys_added = 3  # Already have content_type, text, added_timestamp
+                essential_user_fields = ["category", "title", "keywords", "description"]
+                
+                for field in essential_user_fields:
+                    if field in metadata and keys_added < 10:
+                        limited_metadata[field] = metadata[field]
+                        keys_added += 1
             
             # Store in index
             self.s3_manager.put_vectors_batch(
@@ -1066,7 +1085,7 @@ class CrossModalSearchPage:
                 vectors_data=[{
                     'key': vector_key,
                     'data': {'float32': embedding_result.embedding},
-                    'metadata': full_metadata
+                    'metadata': limited_metadata
                 }]
             )
             

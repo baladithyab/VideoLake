@@ -47,13 +47,37 @@ class TextEmbeddingMetadata:
     release_date: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary, filtering out None values."""
-        result = {}
-        for key, value in asdict(self).items():
-            if value is not None:
-                if isinstance(value, list) and len(value) == 0:
-                    continue  # Skip empty lists
-                result[key] = value
+        """Convert to dictionary for S3 Vector metadata, respecting 10-key limit."""
+        # Essential fields (always included)
+        result = {
+            "content_type": self.content_type,
+            "model_id": self.model_id,
+            "text_length": self.text_length,
+            "embedding_dimensions": self.embedding_dimensions
+        }
+        
+        # Add important optional fields up to 10-key limit
+        # Current count: 4 keys, can add 6 more
+        optional_fields = [
+            ("category", self.category),
+            ("language", self.language), 
+            ("content_id", self.content_id),
+            ("confidence_score", self.confidence_score),
+            ("processing_time_ms", self.processing_time_ms),
+            ("processing_timestamp", self.processing_timestamp)
+        ]
+        
+        added_keys = 4  # Already have 4 essential keys
+        for field_name, field_value in optional_fields:
+            if field_value is not None and added_keys < 10:
+                if isinstance(field_value, list):
+                    if len(field_value) > 0:  # Skip empty lists
+                        result[field_name] = field_value
+                        added_keys += 1
+                else:
+                    result[field_name] = field_value
+                    added_keys += 1
+        
         return result
 
 

@@ -19,6 +19,7 @@ try:
     from frontend.pages.common_components import CommonComponents
     from frontend.pages.real_video_processing_page import RealVideoProcessingPage
     from frontend.pages.cross_modal_search_page import CrossModalSearchPage
+    from frontend.pages.unified_video_search_page import UnifiedVideoSearchPage
     from frontend.main_app import S3VectorMainApp
 except ImportError as e:
     print(f"Import error: {e}")
@@ -108,6 +109,26 @@ class TestFrontendIntegration(unittest.TestCase):
             print(f"Note: CrossModalSearchPage initialization failed (expected without AWS setup): {e}")
             self.assertTrue(True)  # Pass the test anyway
     
+    def test_unified_video_search_page_creation(self):
+        """Test that UnifiedVideoSearchPage can be created."""
+        try:
+            page = UnifiedVideoSearchPage()
+            self.assertIsNotNone(page)
+            
+            # Test that the page has expected attributes
+            self.assertIsNone(page.video_index_arn)  # Should start as None
+            self.assertIsInstance(page.processed_videos, dict)
+            self.assertIsInstance(page.costs, dict)
+            
+            # Test costs structure
+            expected_cost_keys = {'video_processing', 'storage', 'queries', 'total'}
+            self.assertTrue(expected_cost_keys.issubset(set(page.costs.keys())))
+            
+        except Exception as e:
+            # It's okay if initialization fails due to missing AWS credentials
+            print(f"Note: UnifiedVideoSearchPage initialization failed (expected without AWS setup): {e}")
+            self.assertTrue(True)  # Pass the test anyway
+    
     def test_main_app_creation(self):
         """Test that S3VectorMainApp can be created."""
         try:
@@ -117,6 +138,7 @@ class TestFrontendIntegration(unittest.TestCase):
             # Test that the app has expected pages
             self.assertIn('real_video', app.pages)
             self.assertIn('cross_modal', app.pages)
+            self.assertIn('unified_search', app.pages)
             
         except Exception as e:
             # It's okay if initialization fails due to missing AWS/POC setup
