@@ -301,39 +301,45 @@ Pages: {len(self.pages)} loaded | Session costs: ${total_costs:.4f}"""
                     # Embed the Unified Video Search page
                     unified_search_page = self.pages['unified_search'].create_page()
                 
-                # ===== REAL VIDEO PROCESSING TAB =====
-                with gr.Tab("🎬 Real Video Processing", id="video_processing"):
+                # ===== REAL VIDEO PROCESSING TAB (DEPRECATED) =====
+                with gr.Tab("🚫 Real Video Processing [DEPRECATED]", id="video_processing"):
                     gr.Markdown("""
-                    ### Complete Video Processing Pipeline
+                    ### ⚠️ This tab has been deprecated
                     
-                    **Recreates `examples/real_video_processing_demo.py` functionality:**
-                    - Download Creative Commons sample videos or upload your own
-                    - Preview video content with thumbnails and metadata
-                    - Process videos with TwelveLabs Marengo model (real or simulated)
-                    - Store embeddings in S3 Vector storage with full metadata
-                    - Perform similarity search on processed content
-                    - Track costs and performance metrics in real-time
+                    **Please use the "🎯 Unified Video Search" tab instead.**
+                    
+                    The Unified Video Search provides all the same functionality plus:
+                    - Complete video-to-search pipeline in one place
+                    - Better video index management  
+                    - Enhanced search capabilities with visualization
+                    - Improved cost tracking
+                    - Multi-video batch processing
+                    - Query overlay and vector selection
+                    
+                    **Migration:** All features from this tab are available in the Unified Video Search tab.
                     """)
                     
-                    # Embed the Real Video Processing page
-                    real_video_page = self.pages['real_video'].create_page()
+                    switch_btn_1 = gr.Button("👆 Switch to Unified Video Search", variant="primary", size="lg")
                 
-                # ===== CROSS-MODAL SEARCH TAB =====
-                with gr.Tab("🔄 Cross-Modal Search", id="cross_modal"):
+                # ===== CROSS-MODAL SEARCH TAB (DEPRECATED) =====
+                with gr.Tab("🚫 Cross-Modal Search [DEPRECATED]", id="cross_modal"):
                     gr.Markdown("""
-                    ### Advanced Cross-Modal Search Engine
+                    ### ⚠️ This tab has been deprecated
                     
-                    **Recreates `examples/cross_modal_search_demo.py` functionality:**
-                    - Set up text and video indexes with sample or custom content
-                    - Text-to-video search using natural language queries
-                    - Video-to-video similarity search for content recommendation
-                    - Unified multi-modal search across text and video modalities
-                    - Support for custom text descriptions and video uploads
-                    - Advanced filtering and search parameter configuration
+                    **Please use the "🎯 Unified Video Search" tab instead.**
+                    
+                    The Unified Video Search provides all the same functionality plus:
+                    - Text-to-video and video-to-video search in one interface
+                    - Better embedding visualization with 2D/3D plots
+                    - Enhanced query overlay features (fixed TSNE issues)
+                    - Improved temporal search capabilities
+                    - Multi-modal index management
+                    - Vector selection and information display
+                    
+                    **Migration:** All search features from this tab are available in the Unified Video Search tab.
                     """)
                     
-                    # Embed the Cross-Modal Search page
-                    cross_modal_page = self.pages['cross_modal'].create_page()
+                    switch_btn_2 = gr.Button("👆 Switch to Unified Video Search", variant="primary", size="lg")
                 
                 # ===== GLOBAL DASHBOARD TAB =====
                 with gr.Tab("📊 Global Dashboard", id="dashboard"):

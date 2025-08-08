@@ -179,6 +179,7 @@ class UnifiedVideoSearchPage:
                                 label="Video Source",
                                 choices=[
                                     "sample_videos",
+                                    "sample_collections",
                                     "upload_single",
                                     "upload_multiple"
                                 ],
@@ -196,6 +197,23 @@ class UnifiedVideoSearchPage:
                                 
                                 download_sample_btn = gr.Button(
                                     "📥 Download & Preview Sample",
+                                    variant="secondary"
+                                )
+                            
+                            # Sample collections (hidden by default)
+                            with gr.Group(visible=False) as sample_collection_group:
+                                sample_collection_selector = gr.Dropdown(
+                                    label="Select Sample Collection",
+                                    choices=list(CommonComponents.VIDEO_COLLECTIONS.keys()),
+                                    info="Choose from curated video collections for multi-video demos"
+                                )
+                                
+                                collection_info_display = gr.Markdown(
+                                    value="*Select a collection to see details*"
+                                )
+                                
+                                download_collection_btn = gr.Button(
+                                    "📦 Download Collection",
                                     variant="secondary"
                                 )
                             
@@ -238,6 +256,7 @@ class UnifiedVideoSearchPage:
                             def update_video_source_ui(source_type):
                                 return (
                                     gr.update(visible=(source_type == "sample_videos")),
+                                    gr.update(visible=(source_type == "sample_collections")),
                                     gr.update(visible=(source_type == "upload_single")),
                                     gr.update(visible=(source_type == "upload_multiple"))
                                 )
@@ -245,7 +264,7 @@ class UnifiedVideoSearchPage:
                             video_source_type.change(
                                 fn=update_video_source_ui,
                                 inputs=[video_source_type],
-                                outputs=[sample_video_group, single_upload_group, multiple_upload_group]
+                                outputs=[sample_video_group, sample_collection_group, single_upload_group, multiple_upload_group]
                             )
                             
                             # Processing configuration
@@ -641,8 +660,11 @@ class UnifiedVideoSearchPage:
                             # Selected point details
                             gr.Markdown("#### Point Details")
                             selected_point_info = gr.JSON(
-                                label="Selected Embedding Details",
-                                value={}
+                                label="Vector Information",
+                                value={
+                                    "info": "Hover over points in the visualization to see detailed information",
+                                    "note": "Enhanced hover tooltips show video name, time range, processing type, and coordinates"
+                                }
                             )
                             
                             # Clustering insights
@@ -664,6 +686,20 @@ class UnifiedVideoSearchPage:
                 fn=self._download_sample_video,
                 inputs=[sample_video_selector],
                 outputs=[status_indicator, progress_info, video_thumbnail, video_info_display]
+            )
+            
+            # Collection selection change handler
+            sample_collection_selector.change(
+                fn=self._update_collection_info,
+                inputs=[sample_collection_selector],
+                outputs=[collection_info_display]
+            )
+            
+            # Collection download handler
+            download_collection_btn.click(
+                fn=self._download_sample_collection,
+                inputs=[sample_collection_selector],
+                outputs=[status_indicator, progress_info, collection_info_display]
             )
             
             single_video_upload.change(
@@ -753,6 +789,10 @@ class UnifiedVideoSearchPage:
                 inputs=[query_overlay_text, embedding_plot, reduction_method],
                 outputs=[embedding_plot, viz_status]
             )
+            
+            # Vector selection from plot - use click event instead of select
+            # Note: Gradio Plot doesn't support direct selection, so we'll handle this through hover/click data
+            # The plot will show hover information and users can click to get details
         
         return page
     
@@ -835,6 +875,62 @@ Ready to start ingesting videos!"""
         
         return status, message, thumbnail_path, video_info
     
+    def _update_collection_info(self, collection_key: str) -> str:
+        """Update collection information display when selection changes."""
+        if not collection_key or collection_key not in CommonComponents.VIDEO_COLLECTIONS:
+            return "*Select a collection to see details*"
+        
+        collection_info = CommonComponents.VIDEO_COLLECTIONS[collection_key]
+        videos_list = [CommonComponents.SAMPLE_VIDEOS[vid_key]['name'] for vid_key in collection_info['videos']]
+        
+        info_text = f"""**📦 {collection_info['name']}**
+
+**Description**: {collection_info['description']}
+
+**Theme**: {collection_info['theme']}
+
+**Videos Included ({len(collection_info['videos'])})**:
+{chr(10).join([f"• {video_name}" for video_name in videos_list])}
+
+**Keywords**: {', '.join(collection_info['keywords'])}
+
+**Estimated Total Duration**: ~{sum([CommonComponents.SAMPLE_VIDEOS[vid_key]['duration'] for vid_key in collection_info['videos']])} seconds
+
+This collection is perfect for demonstrating multi-video indexing and diverse content search capabilities."""
+        
+        return info_text
+    
+    def _download_sample_collection(self, collection_key: str) -> Tuple[str, str, str]:
+        """Download entire sample collection."""
+        if not collection_key:
+            return "❌ Error", "Please select a collection", "*Select a collection to see details*"
+        
+        def progress_update(message):
+            """Progress callback for collection download."""
+            logger.info(f"Collection download progress: {message}")
+        
+        # Download the collection
+        status, message, video_paths = CommonComponents.download_video_collection(
+            collection_key, 
+            progress_callback=progress_update
+        )
+        
+        # Update collection info with download results
+        updated_info = self._update_collection_info(collection_key)
+        
+        if video_paths:
+            # Store collection paths for batch processing
+            self._current_collection_paths = video_paths
+            self._current_collection_key = collection_key
+            
+            # Add download results to the info
+            updated_info += f"\n\n**✅ Download Complete!**\n"
+            updated_info += f"- **{len(video_paths)} videos** ready for processing\n"
+            updated_info += f"- Collection stored for batch upload to index\n"
+            updated_info += f"- Use 'Process & Add to Index' to add all videos"
+        
+        return status, message, updated_info
+    
     def _handle_single_upload(self, uploaded_file) -> Tuple[str, str, Optional[str], str]:
         """Handle single video upload."""
         if uploaded_file is None:
@@ -872,35 +968,63 @@ Ready to start ingesting videos!"""
         if not self.video_index_arn:
             return "❌ Error", "Please create an index first", "No videos in library", "No index", "No costs"
         
-        # Determine video path based on source
-        video_path = None
-        if source_type == "sample_videos" and hasattr(self, '_current_video_path'):
-            video_path = self._current_video_path
-        elif source_type == "upload_single" and uploaded_file:
-            video_path = uploaded_file.name
+        # Determine video paths based on source
+        video_paths = []
+        is_collection = False
         
-        if not video_path or not os.path.exists(video_path):
-            return "❌ Error", "No video selected for processing", "No videos in library", "No index", "No costs"
+        if source_type == "sample_videos" and hasattr(self, '_current_video_path'):
+            video_paths = [self._current_video_path]
+        elif source_type == "sample_collections" and hasattr(self, '_current_collection_paths'):
+            video_paths = self._current_collection_paths
+            is_collection = True
+        elif source_type == "upload_single" and uploaded_file:
+            video_paths = [uploaded_file.name]
+        
+        if not video_paths or not any(os.path.exists(path) for path in video_paths):
+            return "❌ Error", "No video(s) selected for processing", "No videos in library", "No index", "No costs"
         
         try:
-            result_text = f"🎬 **Processing Video for Search Index**\n\n"
+            if is_collection:
+                result_text = f"🎬 **Processing Video Collection for Search Index**\n\n"
+                result_text += f"**Collection**: {getattr(self, '_current_collection_key', 'Unknown')}\n"
+                result_text += f"**Videos to Process**: {len(video_paths)}\n"
+            else:
+                result_text = f"🎬 **Processing Video for Search Index**\n\n"
+                result_text += f"**Video**: {os.path.basename(video_paths[0])}\n"
             
-            video_name = os.path.basename(video_path)
-            result_text += f"**Video**: {video_name}\n"
             result_text += f"**Processing Mode**: {'Real AWS' if use_real_aws else 'Simulation'}\n\n"
             
-            if use_real_aws:
-                # Real processing using TwelveLabs
-                result = self._process_video_real(
-                    video_path, segment_duration, embedding_options, metadata
-                )
-                result_text += result
-            else:
-                # Simulated processing
-                result = self._process_video_simulation(
-                    video_path, segment_duration, embedding_options, metadata
-                )
-                result_text += result
+            total_processed = 0
+            for i, video_path in enumerate(video_paths):
+                video_name = os.path.basename(video_path)
+                
+                if is_collection:
+                    result_text += f"**Processing ({i+1}/{len(video_paths)}): {video_name}**\n"
+                
+                if use_real_aws:
+                    # Real processing using TwelveLabs
+                    result = self._process_video_real(
+                        video_path, segment_duration, embedding_options, metadata
+                    )
+                    result_text += result
+                    if "✅" in result:
+                        total_processed += 1
+                else:
+                    # Simulated processing
+                    result = self._process_video_simulation(
+                        video_path, segment_duration, embedding_options, metadata
+                    )
+                    result_text += result
+                    if "✅" in result:
+                        total_processed += 1
+                
+                if is_collection and i < len(video_paths) - 1:
+                    result_text += "\n" + "="*50 + "\n\n"
+            
+            if is_collection:
+                result_text += f"\n**📦 Collection Processing Complete!**\n"
+                result_text += f"- **Successfully processed**: {total_processed}/{len(video_paths)} videos\n"
+                result_text += f"- **Total segments added to index**: Available in Index Statistics\n"
             
             # Update video library display
             library_html = self._generate_video_library_html()
@@ -973,18 +1097,21 @@ Ready to start ingesting videos!"""
         
         # Limit base_metadata to stay within S3 Vector's 10-key limit
         # The VideoVectorMetadata.to_dict() already uses 6-8 keys, so we can only add 2-4 more
+        # Prioritize fields that help with video name resolution
+        video_filename = os.path.basename(video_path)
         limited_base_metadata = {
             "source_type": "real_processing",
+            "video_name": video_filename.rsplit('.', 1)[0],  # Filename without extension
         }
         
         # Add essential fields from metadata if provided, up to the limit
         if metadata:
             # Only add the most important fields from user metadata
-            essential_fields = ["title", "category", "description"]
-            keys_added = 1  # Already added source_type
+            essential_fields = ["title", "category"]
+            keys_added = 2  # Already added source_type, video_name
             
             for field in essential_fields:
-                if field in metadata and keys_added < 3:  # Leave room for other essential fields
+                if field in metadata and keys_added < 3:  # Leave room for system fields
                     limited_base_metadata[field] = str(metadata[field])[:100]  # Truncate long values
                     keys_added += 1
                     
@@ -998,15 +1125,21 @@ Ready to start ingesting videos!"""
         result_text += f"✅ Stored {storage_result.stored_segments} segments\n"
         result_text += f"Total vectors: {storage_result.total_vectors_stored}\n\n"
         
-        # Update tracking
-        video_id = f"real-{int(time.time())}"
+        # Update tracking with better identification
+        timestamp = int(time.time())
+        video_filename = os.path.basename(video_path)
+        video_id = f"unified-{timestamp}"  # Match the vector key pattern
+        
         self.processed_videos[video_id] = {
-            "name": os.path.basename(video_path),
+            "name": video_filename,
             "segments": processing_result.total_segments,
             "duration": processing_result.video_duration_sec,
             "s3_uri": s3_uri,
             "processing_type": "real",
-            "metadata": metadata
+            "metadata": metadata,
+            "timestamp": timestamp,
+            "original_filename": video_filename,
+            "video_key": video_key  # Store the S3 key for matching
         }
         
         # Update costs
@@ -2022,7 +2155,10 @@ Ready to start ingesting videos!"""
                     # Strategy 1: Match by video_id key  
                     if video_id in self.processed_videos:
                         video_name = self.processed_videos[video_id]["name"]
+                        logger.debug(f"Found video name via video_id: {video_name} for key {vector_key}")
                     else:
+                        logger.debug(f"Video ID {video_id} not found in processed_videos. Available keys: {list(self.processed_videos.keys())}")
+                        logger.debug(f"Metadata fields available: {list(metadata.keys())}")
                         # Strategy 2: Match by S3 URI
                         if video_s3_uri:
                             for vid_id, vid_info in self.processed_videos.items():
@@ -2059,6 +2195,24 @@ Ready to start ingesting videos!"""
                             # Try from metadata title field
                             elif metadata.get('title'):
                                 video_name = f"Video: {metadata['title']}"
+                            
+                            # Strategy 5: Look for any video filename in metadata
+                            elif not video_name or video_name == "Unknown Video":
+                                # Check other possible metadata fields (prioritize our video_name field)
+                                for field in ['video_name', 'filename', 'source_filename', 'original_filename', 'title']:
+                                    if metadata.get(field):
+                                        video_name = metadata[field] if field == 'video_name' else f"Video: {metadata[field]}"
+                                        logger.debug(f"Found video name via metadata field {field}: {video_name}")
+                                        break
+                                
+                                # Last resort: use a readable version of the vector key
+                                if video_name == "Unknown Video":
+                                    try:
+                                        # Extract meaningful parts from vector key
+                                        key_parts = vector_key.replace('segment', 'seg').replace('unified', 'vid')
+                                        video_name = f"Video-{key_parts[:20]}..."
+                                    except:
+                                        video_name = "Unknown Video"
                     
                     metadata_list.append({
                         'key': vector_key,
@@ -2120,28 +2274,39 @@ Ready to start ingesting videos!"""
                 color_values = [f"Cluster {i}" for i in cluster_labels]
                 df['cluster'] = color_values
             
-            # Create interactive plot
+            # Create interactive plot with enhanced hover information
+            hover_template = (
+                "<b>%{customdata[0]}</b><br>"
+                "Time: %{customdata[1]:.1f}s - %{customdata[2]:.1f}s<br>"
+                "Key: %{customdata[3]}<br>"
+                "Type: %{customdata[4]}<br>"
+                "Position: (%{x:.2f}, %{y:.2f}" + (", %{z:.2f}" if dimensions == "3D" else "") + ")<br>"
+                "<extra></extra>"
+            )
+            
             if dimensions == "3D":
                 fig = px.scatter_3d(
                     df, x='x', y='y', z='z',
                     color=color_values,
-                    hover_data=['video_name', 'start_sec', 'end_sec', 'key'],
-                    title=f"Video Embedding Space - {reduction_method} ({dimensions})",
+                    custom_data=['video_name', 'start_sec', 'end_sec', 'key', 'processing_type'],
+                    title=f"Video Embedding Space - {reduction_method} ({dimensions}) - Hover for details",
                     labels={'x': f'{reduction_method} Component 1', 
                            'y': f'{reduction_method} Component 2',
                            'z': f'{reduction_method} Component 3'},
                     color_discrete_sequence=px.colors.qualitative.Set3
                 )
+                fig.update_traces(hovertemplate=hover_template)
             else:
                 fig = px.scatter(
                     df, x='x', y='y',
                     color=color_values,
-                    hover_data=['video_name', 'start_sec', 'end_sec', 'key'],
-                    title=f"Video Embedding Space - {reduction_method} ({dimensions})",
+                    custom_data=['video_name', 'start_sec', 'end_sec', 'key', 'processing_type'],
+                    title=f"Video Embedding Space - {reduction_method} ({dimensions}) - Hover for details",
                     labels={'x': f'{reduction_method} Component 1', 
                            'y': f'{reduction_method} Component 2'},
                     color_discrete_sequence=px.colors.qualitative.Set3
                 )
+                fig.update_traces(hovertemplate=hover_template)
             
             # Enhance plot appearance
             fig.update_traces(marker=dict(size=8, opacity=0.7))
@@ -2189,16 +2354,20 @@ Ready to start ingesting videos!"""
                 # For PCA, we can transform new points using the fitted reducer
                 query_reduced = self.current_reducer.transform(query_embedding)
             else:  # t-SNE
-                # For t-SNE, we need to fit on combined data (limitation of t-SNE)
-                # Combine query with existing embeddings and re-fit
+                # For t-SNE, we need to refit the entire dataset with the query point included
+                # This is a limitation of t-SNE - it cannot transform individual points
                 combined_embeddings = np.vstack([self.current_embeddings_matrix, query_embedding])
                 n_components = 3 if self.current_dimensions == "3D" else 2
                 reducer = TSNE(n_components=n_components, random_state=42, 
                               perplexity=min(30, len(combined_embeddings)-1))
                 all_reduced = reducer.fit_transform(combined_embeddings)
                 
-                # Extract just the query point (last row)
-                query_reduced = all_reduced[-1:, :]
+                # Update the existing reduced embeddings and extract the query point
+                existing_reduced = all_reduced[:-1, :]  # All points except the last (query)
+                query_reduced = all_reduced[-1:, :]     # Just the query point (last row)
+                
+                # Update the stored reducer for consistency
+                self.current_reducer = reducer
             
             # Since Gradio's plot doesn't support add_trace, we need to recreate the plot
             # Get the existing data from current_plot and add query data
@@ -2283,7 +2452,12 @@ Ready to start ingesting videos!"""
             
             # Apply the same reduction to existing embeddings
             embeddings = np.array(embeddings)
-            reduced_embeddings = self.current_reducer.transform(embeddings)
+            if self.current_reduction_method == "PCA":
+                # For PCA, we can use transform
+                reduced_embeddings = self.current_reducer.transform(embeddings)
+            else:
+                # For t-SNE, we already have the updated reduced embeddings from above
+                reduced_embeddings = existing_reduced
             
             # Create DataFrame with existing points
             df = pd.DataFrame(metadata_list)
@@ -2344,18 +2518,21 @@ Ready to start ingesting videos!"""
                     color_discrete_sequence=px.colors.qualitative.Set3
                 )
             
-            # Customize the query point to be black
+            # Customize the query point to be black with appropriate size for 2D/3D
+            query_marker_size = 10 if self.current_dimensions == "3D" else 15
+            regular_marker_size = 6 if self.current_dimensions == "3D" else 8
+            
             for i, trace in enumerate(fig.data):
                 if 'TEXT_QUERY' in trace.name:
                     trace.marker.color = 'black'
-                    trace.marker.size = 15
+                    trace.marker.size = query_marker_size
                     trace.marker.symbol = 'x'
                     trace.marker.line.color = 'white'
-                    trace.marker.line.width = 3
+                    trace.marker.line.width = 2 if self.current_dimensions == "3D" else 3
                     trace.marker.opacity = 1.0
                     trace.name = f'Text Query: {query_text[:20]}...'
                 else:
-                    trace.marker.size = 8
+                    trace.marker.size = regular_marker_size
                     trace.marker.opacity = 0.7
             
             fig.update_layout(

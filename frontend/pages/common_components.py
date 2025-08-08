@@ -55,6 +55,86 @@ class CommonComponents:
             "duration": 15,
             "content_type": "adventure",
             "keywords": ["outdoor", "adventure", "nature", "scenic"]
+        },
+        "wildlife_documentary": {
+            "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+            "name": "ElephantsDream.mp4",
+            "description": "Blender Foundation open movie - surreal animated short",
+            "duration": 654,
+            "content_type": "animation",
+            "keywords": ["animation", "surreal", "blender", "artistic", "experimental"]
+        },
+        "tech_showcase": {
+            "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+            "name": "TearsOfSteel.mp4",
+            "description": "Blender Foundation sci-fi short film with live action and CGI",
+            "duration": 734,
+            "content_type": "sci-fi",
+            "keywords": ["sci-fi", "cgi", "live-action", "blender", "technology"]
+        },
+        "nature_timelapse": {
+            "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4",
+            "name": "SubaruOutbackOnStreetAndDirt.mp4",
+            "description": "Vehicle demonstration in various outdoor environments",
+            "duration": 18,
+            "content_type": "automotive",
+            "keywords": ["automotive", "outdoor", "terrain", "vehicle", "demonstration"]
+        },
+        "urban_lifestyle": {
+            "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4",
+            "name": "VolkswagenGTIReview.mp4",
+            "description": "Car review showcasing urban driving and vehicle features",
+            "duration": 25,
+            "content_type": "automotive",
+            "keywords": ["automotive", "urban", "review", "car", "features"]
+        },
+        "entertainment_sample": {
+            "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4",
+            "name": "WhatCarCanYouGetForAGrand.mp4",
+            "description": "Entertainment segment about automotive buying guide",
+            "duration": 58,
+            "content_type": "entertainment",
+            "keywords": ["entertainment", "automotive", "buying", "guide", "comparison"]
+        },
+        "creative_showcase": {
+            "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
+            "name": "WeAreGoingOnBullrun.mp4",
+            "description": "Creative automotive adventure and rally content",
+            "duration": 30,
+            "content_type": "adventure",
+            "keywords": ["automotive", "adventure", "rally", "creative", "excitement"]
+        }
+    }
+    
+    # Video collections for multi-video index demos
+    VIDEO_COLLECTIONS = {
+        "blender_classics": {
+            "name": "Blender Foundation Collection",
+            "description": "Collection of open-source movies from Blender Foundation",
+            "videos": ["animation", "wildlife_documentary", "tech_showcase"],
+            "theme": "Open-source creative content showcasing animation and CGI",
+            "keywords": ["blender", "animation", "open-source", "creative", "cgi"]
+        },
+        "automotive_showcase": {
+            "name": "Automotive Demo Collection", 
+            "description": "Various vehicle-focused content for automotive applications",
+            "videos": ["nature_timelapse", "urban_lifestyle", "entertainment_sample", "creative_showcase"],
+            "theme": "Vehicle demonstrations and automotive lifestyle content",
+            "keywords": ["automotive", "vehicles", "driving", "lifestyle", "demonstration"]
+        },
+        "action_adventure": {
+            "name": "Action & Adventure Collection",
+            "description": "High-energy content perfect for action and adventure themes",
+            "videos": ["short_action", "outdoor_adventure", "creative_showcase"],
+            "theme": "Fast-paced action and outdoor adventure content",
+            "keywords": ["action", "adventure", "speed", "outdoor", "excitement"]
+        },
+        "mixed_content": {
+            "name": "Diverse Content Collection",
+            "description": "Mixed collection showcasing cross-modal search capabilities",
+            "videos": ["animation", "short_action", "tech_showcase", "urban_lifestyle"],
+            "theme": "Diverse content types for comprehensive search testing",
+            "keywords": ["diverse", "mixed", "comprehensive", "multi-modal", "variety"]
         }
     }
     
@@ -164,6 +244,74 @@ class CommonComponents:
         except Exception as e:
             logger.error(f"Video preview failed: {e}")
             return None, f"Error reading video: {str(e)}"
+    
+    @staticmethod
+    def download_video_collection(collection_key: str, progress_callback=None) -> Tuple[str, str, List[str]]:
+        """
+        Download an entire video collection.
+        
+        Args:
+            collection_key: Key from VIDEO_COLLECTIONS
+            progress_callback: Optional callback for progress updates
+            
+        Returns:
+            Tuple of (status, message, list_of_video_paths)
+        """
+        if collection_key not in CommonComponents.VIDEO_COLLECTIONS:
+            return "❌ Error", "Invalid collection selection", []
+        
+        collection_info = CommonComponents.VIDEO_COLLECTIONS[collection_key]
+        video_keys = collection_info["videos"]
+        
+        try:
+            # Create temp directory for collection
+            temp_dir = tempfile.mkdtemp(prefix=f"s3vector_collection_{collection_key}_")
+            downloaded_paths = []
+            total_videos = len(video_keys)
+            
+            logger.info(f"Downloading collection '{collection_info['name']}' with {total_videos} videos")
+            
+            for i, video_key in enumerate(video_keys):
+                if progress_callback:
+                    progress_callback(f"Downloading video {i+1}/{total_videos}: {video_key}")
+                
+                # Download individual video
+                status, message, video_path = CommonComponents.download_sample_video(video_key, progress_callback)
+                
+                if status.startswith("✅"):
+                    downloaded_paths.append(video_path)
+                    logger.info(f"Downloaded {video_key}: {video_path}")
+                else:
+                    logger.warning(f"Failed to download {video_key}: {message}")
+                    # Continue with other videos even if one fails
+            
+            if not downloaded_paths:
+                return "❌ Collection Download Failed", "No videos could be downloaded from the collection", []
+            
+            # Calculate total size
+            total_size = sum(os.path.getsize(path) for path in downloaded_paths if os.path.exists(path))
+            
+            result_msg = f"""✅ **Collection Download Complete!**
+
+**Collection Details:**
+- **Name**: {collection_info['name']}
+- **Description**: {collection_info['description']}
+- **Theme**: {collection_info['theme']}
+- **Videos Downloaded**: {len(downloaded_paths)}/{total_videos}
+- **Keywords**: {', '.join(collection_info['keywords'])}
+- **Total Size**: {total_size:,} bytes ({total_size / (1024*1024):.1f} MB)
+- **Collection Directory**: {temp_dir}
+
+**Downloaded Videos:**
+{chr(10).join([f"• {os.path.basename(path)}" for path in downloaded_paths])}
+
+Ready for batch processing and multi-video index creation!"""
+            
+            return "✅ Collection Ready", result_msg, downloaded_paths
+            
+        except Exception as e:
+            logger.error(f"Collection download failed: {e}")
+            return "❌ Collection Download Failed", f"Error downloading collection: {str(e)}", []
     
     @staticmethod
     def download_sample_video(video_key: str, progress_callback=None) -> Tuple[str, str, str]:
