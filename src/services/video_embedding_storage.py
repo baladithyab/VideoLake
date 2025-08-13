@@ -61,22 +61,15 @@ class VideoVectorMetadata:
     confidence_score: Optional[float] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for S3 Vector metadata.
-        
-        Note: S3 Vector storage has a limit of 10 metadata keys per vector,
-        so we only include the most essential fields.
-        """
         metadata = {
             "content_type": self.content_type,
             "start_sec": self.start_sec,
             "end_sec": self.end_sec,
             "embedding_option": self.embedding_option,
             "model_id": self.model_id,
-            "video_duration_sec": self.video_duration_sec
+            "video_duration_sec": self.video_duration_sec,
+            "video_source_uri": self.video_source_uri,
         }
-        
-        # Add most important optional fields, staying within 10-key limit
-        # Current count: 6 keys, can add 4 more
         if self.content_id:
             metadata["content_id"] = self.content_id
         if self.title:
@@ -85,7 +78,6 @@ class VideoVectorMetadata:
             metadata["series_id"] = self.series_id
         if self.episode is not None:
             metadata["episode"] = self.episode
-            
         return metadata
 
 

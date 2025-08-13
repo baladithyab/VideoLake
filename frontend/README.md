@@ -1,261 +1,282 @@
-# S3 Vector Embedding POC Frontend
+# S3Vector Frontend Applications
 
-Comprehensive Gradio-based web interface for demonstrating complete S3 Vector embedding capabilities with integrated example demos.
+This directory contains multiple frontend applications for demonstrating S3Vector capabilities, including a complete translation of the Gradio Unified Video Search demo to Streamlit.
 
-## 🎯 Overview
+## 🎬 Applications Overview
 
-The frontend provides a unified interface that integrates all example scripts as interactive pages:
+### 1. Unified Streamlit App (NEW) ⭐
+**Complete video search pipeline with all features from the Gradio demo**
 
-- **Real Video Processing Demo** (`examples/real_video_processing_demo.py` integration)
-- **Cross-Modal Search Demo** (`examples/cross_modal_search_demo.py` integration)
-- **Custom Content Support** with preview functionality
-- **Comprehensive Cost Analysis** across all operations
-- **Resource Management** and cleanup capabilities
+- **File**: `unified_streamlit_app.py`
+- **Launcher**: `launch_unified_streamlit.py`
+- **Features**:
+  - 🗂️ Index Setup & Management
+  - 📹 Video Ingestion with TwelveLabs Marengo
+  - 🔍 Multi-Modal Search (Text-to-Video, Video-to-Video, Temporal)
+  - 🎯 Embedding Visualization (PCA/t-SNE with query overlay)
+  - 📊 Analytics & Cost Tracking
+  - 🎥 Video Segment Playback Support
+  - 🛡️ Safe-cost defaults (Real AWS toggle OFF by default)
+
+### 2. Main Streamlit App
+**Multi-purpose application with navigation**
+
+- **File**: `streamlit_app.py`
+- **Features**:
+  - Complete Pipeline (embeds the unified app)
+  - Advanced Tools (search, temporal search, ingestion)
 
 ## 🚀 Quick Start
 
-### Launch Application
+### Launch the Complete Pipeline Demo
 
 ```bash
-# Launch the complete demo suite
-python frontend/launch_main.py
+# Method 1: Standalone launcher (recommended)
+python frontend/launch_unified_streamlit.py
 
-# Custom configuration
-python frontend/launch_main.py --port 8080 --share --debug
+# Method 2: Direct Streamlit
+streamlit run frontend/unified_streamlit_app.py
+
+# Method 3: Through main app
+streamlit run frontend/streamlit_app.py
+# Then select "Complete Pipeline" in the sidebar
 ```
 
-### Production Deployment
+### Launch Options
 
 ```bash
-# Basic launch
-python frontend/launch_main.py
+# Custom host and port
+python frontend/launch_unified_streamlit.py --host 0.0.0.0 --port 8502
 
-# Production setup with authentication
-python frontend/launch_main.py \
-  --host 0.0.0.0 \
-  --port 80 \
-  --auth username password
+# Auto-open in browser
+python frontend/launch_unified_streamlit.py --browser
 
-# Enable sharing for external access
-python frontend/launch_main.py --share
-
-# Development mode
-python frontend/launch_main.py --debug --inbrowser
+# Dark theme
+python frontend/launch_unified_streamlit.py --theme dark
 ```
 
-## 📁 Architecture
+## 📋 Feature Comparison
 
-### Modular Structure
+| Feature | Unified Streamlit | Main Streamlit |
+|---------|------------------|----------------|
+| Index Management | ✅ Full | ❌ |
+| Video Ingestion | ✅ Real + Sim | ❌ |
+| Multi-Modal Search | ✅ All Types | ✅ Basic |
+| Embedding Viz | ✅ PCA/t-SNE | ❌ |
+| Video Playback | ✅ Planned | ❌ |
+| Cost Tracking | ✅ Detailed | ❌ |
+| Resource Mgmt | ✅ Full | ❌ |
 
-```
-frontend/
-├── main_app.py                     # Main application with all demos
-├── launch_main.py                  # Primary launch script
-├── pages/                          # Individual demo page modules
-│   ├── __init__.py
-│   ├── common_components.py        # Shared UI components & utilities
-│   ├── real_video_processing_page.py
-│   └── cross_modal_search_page.py
-└── test_integration.py             # Integration tests
-```
+## 🎯 Key Features Explained
 
-## 🎬 Features
+### Index Setup & Management
+- Create S3 Vector indexes for video embeddings
+- Manage vector buckets and regular S3 buckets
+- Real-time index status and statistics
+- Resource registry integration
 
-### Real Video Processing Demo
+### Video Ingestion Pipeline
+- **Sample Videos**: Download Creative Commons videos
+- **File Upload**: Process user-uploaded videos
+- **S3 URI**: Process videos already in S3
+- **TwelveLabs Integration**: Real Marengo model processing
+- **Metadata Support**: Rich video metadata and categorization
 
-**Complete TwelveLabs Integration Pipeline:**
-- 📤 **Video Upload**: Support for MP4, AVI, MOV formats
-- 👁️ **Video Preview**: Thumbnail generation and metadata display
-- ⚙️ **Processing Configuration**: Adjustable segment duration and parameters
-- 🎯 **Real/Simulated Modes**: Test with sample data or real AWS processing
-- 💾 **S3 Vector Storage**: Automatic embedding storage with full metadata
-- 🔍 **Search Testing**: Validate stored embeddings with similarity search
-- 🧹 **Resource Cleanup**: Automatic cleanup to prevent unexpected charges
+### Multi-Modal Search
+- **Text-to-Video**: Natural language queries to find video segments
+- **Video-to-Video**: Find similar video content using reference videos
+- **Temporal Search**: Search within specific time ranges
+- **Advanced Filters**: Category, duration, and metadata filtering
 
-### Cross-Modal Search Demo
+### Embedding Visualization
+- **PCA**: Principal Component Analysis for dimensionality reduction
+- **t-SNE**: t-Distributed Stochastic Neighbor Embedding
+- **2D/3D Views**: Interactive visualization with Plotly
+- **Query Overlay**: See where text queries land in embedding space
+- **Color Coding**: Multiple coloring options for insights
 
-**Multi-Modal Search Engine:**
-- 📝 **Text-to-Video Search**: Natural language video content discovery
-- 🎥 **Video-to-Video Search**: Find similar video content by upload
-- 🔄 **Unified Cross-Modal**: Search across both text descriptions and video content
-- 📊 **Advanced Parameters**: Configurable similarity thresholds and filters
-- 📈 **Performance Analysis**: Search time and relevance metrics
-- 🎯 **Custom Content**: Add your own videos and text descriptions
+### Video Segment Playback
+- **Segment Selection**: Click to select video segments from search results
+- **Playback Support**: Framework for playing S3-hosted video segments
+- **Timing Information**: Precise start/end times for segments
+- **Metadata Display**: Rich information about selected segments
 
-### Global System Features
+### Cost Tracking & Analytics
+- **Real-time Costs**: Track processing, storage, and query costs
+- **Cost Comparison**: Compare with traditional vector database costs
+- **Performance Metrics**: Search times, result counts, success rates
+- **Export Capabilities**: Download cost reports and analytics
 
-**Comprehensive Dashboard:**
-- 📊 **System Overview**: Real-time health monitoring of all AWS services
-- 💰 **Cost Tracking**: Real-time cost analysis across all operations
-- 🔧 **Configuration Status**: Validate AWS credentials and service availability
-- 📚 **Built-in Documentation**: Complete usage guides and troubleshooting
-- 🧪 **Integration Testing**: Verify system functionality
+## 🛡️ Safety Features
 
-## 🛠️ Configuration
+### Cost Protection
+- **Default OFF**: "Use Real AWS" toggle defaults to OFF
+- **Simulation Mode**: Full functionality without AWS costs
+- **Cost Warnings**: Clear indicators when real costs will apply
+- **Confirmation Dialogs**: Multiple confirmations for destructive operations
+
+### Error Handling
+- **Graceful Degradation**: Fallback to simulation on errors
+- **User-Friendly Messages**: No sensitive information exposed
+- **Correlation IDs**: Trackable error identifiers
+- **Structured Logging**: Comprehensive logging for debugging
+
+## 🔧 Configuration
 
 ### Environment Variables
-
 ```bash
-# AWS Configuration (Required)
-export AWS_PROFILE=your-profile
-# OR
-export AWS_ACCESS_KEY_ID=your-key
-export AWS_SECRET_ACCESS_KEY=your-secret
+# AWS Configuration
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_key
+AWS_SECRET_ACCESS_KEY=your_secret
 
-# AWS Region (Required)
-export AWS_REGION=us-east-1
+# S3 Vector Configuration
+S3_VECTORS_BUCKET=your-s3vectors-bucket
 
-# S3 Vectors Bucket (Required)
-export S3_VECTORS_BUCKET=your-s3-vectors-bucket
-
-# Optional: Enable real AWS operations (default: simulated)
-export REAL_AWS_DEMO=true
+# TwelveLabs Configuration (for real processing)
+TWELVELABS_API_KEY=your_api_key
 ```
 
-### AWS Permissions Required
+### Dependencies
+```bash
+# Core requirements
+streamlit>=1.28.0
+pandas>=1.5.0
+numpy>=1.24.0
+plotly>=5.15.0
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3vectors:*",
-        "bedrock:InvokeModel",
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:ListBucket"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
+# ML/Visualization
+scikit-learn>=1.3.0
+opencv-python>=4.8.0
+
+# AWS
+boto3>=1.28.0
+botocore>=1.31.0
+
+# Backend services (from src/)
+# All S3Vector backend services are imported
 ```
 
-## 🎯 Usage Examples
+## 📱 User Interface Guide
 
-### Text-to-Video Search
-- "Find cooking scenes in a kitchen"
-- "Show me romantic sunset scenes"
-- "Locate action sequences with car chases"
-- "Search for dialogue scenes in office settings"
+### Navigation
+- **Sidebar**: Main navigation between features
+- **Global Toggle**: "Use Real AWS" safety switch
+- **Quick Stats**: Real-time metrics in sidebar
+- **Status Indicators**: Visual feedback for system state
 
-### Video Processing Pipeline
-1. **Upload**: Select video file (MP4 recommended)
-2. **Preview**: Review video thumbnail and metadata
-3. **Configure**: Set segment duration (5-10 seconds optimal)
-4. **Process**: Choose real or simulated processing
-5. **Store**: Embeddings automatically saved to S3 Vector
-6. **Search**: Test with text or video queries
-7. **Cleanup**: Remove resources to avoid charges
+### Workflow
+1. **Start**: Check system status and toggle Real AWS if needed
+2. **Setup**: Create or select a video index
+3. **Ingest**: Add videos to your index (sample, upload, or S3)
+4. **Search**: Find video segments using various search methods
+5. **Visualize**: Explore the embedding space
+6. **Analyze**: Review costs and performance metrics
+7. **Manage**: Clean up resources and export data
 
-## 📊 Performance & Monitoring
+### Tips for Best Experience
+- **Start with Simulation**: Test the workflow without costs
+- **Use Sample Videos**: Quick way to populate your index
+- **Monitor Costs**: Keep an eye on the cost tracker
+- **Export Data**: Save your results and analytics
+- **Clean Up**: Use management tools to clean up resources
 
-### System Health
-- AWS service connectivity status
-- S3 Vector bucket configuration  
-- Required permissions validation
-- Service initialization status
-
-### Performance Metrics
-- Query response times
-- Processing throughput
-- Storage efficiency
-- Cost per operation
-
-## 🔒 Security
-
-### Best Practices
-- AWS IAM roles for service access
-- Environment variable configuration
-- HTTPS support for production
-- Basic authentication for demos
-- Resource cleanup after testing
-
-## 🆘 Troubleshooting
+## 🔍 Troubleshooting
 
 ### Common Issues
 
-**"System Not Ready"**
-- Check AWS credentials and permissions
-- Verify S3 Vector bucket configuration
-- Ensure services are available in your region
+**"Services failed to initialize"**
+- Check AWS credentials and region configuration
+- Verify S3 Vector service availability in your region
+- Ensure required permissions are granted
 
-**Video Processing Fails**
-- Verify video format (MP4 recommended)
-- Check file size limits (under 1GB for demos)
-- Validate S3 Vector bucket permissions
-- Review TwelveLabs API configuration
+**"No search results"**
+- Verify index has been created and populated
+- Check similarity threshold (try lowering it)
+- Ensure videos have been successfully processed
 
-**Search Returns No Results**
-- Ensure content has been processed and stored
-- Check index configuration and availability
-- Verify embedding dimensions match
-- Review search parameters and filters
+**"Video processing failed"**
+- Verify TwelveLabs API key for real processing
+- Check video format (MP4 recommended)
+- Try simulation mode first to test workflow
 
-**Cost Tracking Issues**
-- Confirm `REAL_AWS_DEMO=true` for actual cost tracking
-- Review AWS billing dashboard for detailed costs
-- Use simulated mode for cost-free testing
+**"Visualization not working"**
+- Ensure scikit-learn and plotly are installed
+- Check that search results are available
+- Try reducing sample size for large datasets
 
-### Getting Help
+### Performance Tips
+- **Batch Processing**: Process multiple videos together
+- **Appropriate Segments**: Use 5-10 second segments for best results
+- **Index Management**: Clean up unused indexes to reduce costs
+- **Simulation First**: Test workflows in simulation before real processing
 
-1. **System Status**: Check the dashboard for service health
-2. **Documentation**: Built-in guides in the web interface
-3. **Integration Tests**: Run `python frontend/test_integration.py`
-4. **Logs**: Check console output for detailed error information
+## 🚀 Development
 
-## 🧪 Testing
+### Adding New Features
+1. **Backend**: Add new services in `src/services/`
+2. **Frontend**: Add new pages or components
+3. **Integration**: Update the main app routing
+4. **Testing**: Test both real and simulation modes
 
-### Integration Tests
+### Extending Search Types
+1. **Add Search Logic**: Implement in `_search_real()` and `_search_simulation()`
+2. **Update UI**: Add new radio button options
+3. **Handle Parameters**: Add specific parameter inputs
+4. **Test Integration**: Verify with both modes
 
-```bash
-# Run all integration tests
-python frontend/test_integration.py
+### Custom Visualizations
+1. **Add Reducer**: Implement new dimensionality reduction methods
+2. **Update UI**: Add to algorithm selection
+3. **Handle Data**: Ensure proper data formatting
+4. **Test Performance**: Verify with different data sizes
 
-# Expected output: All tests should pass
-# ✅ All integration tests passed!
-# ✅ Frontend architecture validated
-```
+## 📚 Related Documentation
 
-### Manual Testing Checklist
+- **Backend Services**: `src/services/README.md`
+- **Configuration**: `src/config.py`
+- **Examples**: `examples/` directory
+- **API Documentation**: Generated from docstrings
 
-- [ ] Launch application successfully
-- [ ] System status shows all services healthy
-- [ ] Upload and preview video works
-- [ ] Video processing completes (simulated mode)
-- [ ] Text-to-video search returns results
-- [ ] Video-to-video search works
-- [ ] Cost tracking displays accurately
-- [ ] Resource cleanup functions properly
+## 🤝 Contributing
 
-## 🔄 Development
+When contributing to the frontend:
 
-### Adding New Demo Pages
+1. **Follow Patterns**: Use existing patterns for consistency
+2. **Safety First**: Always include cost protection measures
+3. **Error Handling**: Implement graceful error handling
+4. **Documentation**: Update this README for new features
+5. **Testing**: Test both real and simulation modes
 
-1. Create new page in `pages/` directory
-2. Implement page class following existing patterns
-3. Add page to `main_app.py` pages dictionary
-4. Update integration tests
-5. Add documentation to built-in help
+## 📄 Legacy Information
 
-### Extending Functionality
+### Previous Streamlit Implementation
 
-- **New Search Types**: Add to cross-modal search page
-- **Additional Processing**: Extend real video processing pipeline  
-- **Custom Analytics**: Add to global dashboard
-- **New Content Types**: Extend common components
+The main Streamlit implementation (`streamlit_app.py`) provides:
 
-## 📈 Performance Optimizations
+- **Complete Pipeline**: Full-featured video search experience using the unified app
+- **Advanced Tools**: Search, Temporal Search, and Ingestion tabs
+- **Backend Integration**: Uses services from `src/services/` with no direct AWS calls
+- **Safety Features**: "Use Real AWS" toggles default OFF across all sections
 
-- **Startup Time**: ~50% faster than previous versions
-- **Memory Usage**: ~30% reduction through optimized architecture
-- **Response Times**: Improved with async processing patterns
-- **Resource Management**: Automatic cleanup prevents resource leaks
+### Governance Principles
 
----
+- No direct AWS calls in UI; only call backend services
+- Default to safe-cost behavior (real runs gated by toggles that default OFF)
+- Documentation-first cues in UI text
+- Friendly error handling; no sensitive details in UI
+- Server-side validation per `.kiro/steering/mcp-documentation-first.md`
 
-**Ready to explore S3 Vector embedding capabilities!** 🚀
+### Migration from Gradio
 
-Launch with: `python frontend/launch_main.py`
+The Gradio-based frontend has been removed in favor of Streamlit-only implementations. The new Unified Streamlit App provides all the functionality from the original Gradio UnifiedVideoSearchPage with enhanced features and better integration.
+
+### Cleanup History
+
+- **Removed**: `unified_demo.py` (954 lines) - Redundant simplified demo
+- **Simplified**: `streamlit_app.py` navigation - Removed duplicate "Unified Demo" option
+- **Focused**: Clear separation between "Complete Pipeline" (comprehensive) and "Advanced Tools" (individual components)
+
+## 📄 License
+
+This frontend code follows the same license as the main S3Vector project.

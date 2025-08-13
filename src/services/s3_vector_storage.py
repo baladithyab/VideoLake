@@ -15,6 +15,7 @@ import logging
 from src.utils.aws_clients import aws_client_factory
 from src.exceptions import VectorStorageError, ValidationError
 from src.utils.logging_config import get_logger
+from src.utils.resource_registry import resource_registry
 
 logger = get_logger(__name__)
 
@@ -207,7 +208,19 @@ class S3VectorStorageManager:
             response = self._retry_with_backoff(_create_bucket)
             
             logger.info(f"Successfully created vector bucket: {bucket_name}")
-            
+            # Log to local resource registry (best-effort)
+            try:
+                from src.config import config_manager as _cfg
+                resource_registry.log_vector_bucket_created(
+                    bucket_name=bucket_name,
+                    region=_cfg.aws_config.region,
+                    encryption=encryption_type,
+                    kms_key_arn=kms_key_arn,
+                    source="service",
+                )
+            except Exception:
+                pass
+
             return {
                 "bucket_name": bucket_name,
                 "status": "created",
@@ -516,7 +529,25 @@ class S3VectorStorageManager:
             response = self._retry_with_backoff(_create_index)
             
             logger.info(f"Successfully created vector index: {index_name} in bucket: {bucket_name}")
-            
+            # Log to registry (best-effort)
+            try:
+                from src.config import config_manager as _cfg
+                import boto3 as _b3
+                region = _cfg.aws_config.region
+                sts = _b3.client('sts', region_name=region)
+                account_id = sts.get_caller_identity()['Account']
+                index_arn = f"arn:aws:s3vectors:{region}:{account_id}:bucket/{bucket_name}/index/{index_name}"
+                resource_registry.log_index_created(
+                    bucket_name=bucket_name,
+                    index_name=index_name,
+                    arn=index_arn,
+                    dimensions=dimensions,
+                    distance_metric=distance_metric,
+                    source="service",
+                )
+            except Exception:
+                pass
+
             return {
                 "bucket_name": bucket_name,
                 "index_name": index_name,
@@ -864,7 +895,12 @@ class S3VectorStorageManager:
                 logger.info(f"Successfully deleted vector index: {index_arn}")
             else:
                 logger.info(f"Successfully deleted vector index: {index_name} in bucket: {bucket_name}")
-            
+            # Log deletion in registry (best-effort)
+            try:
+                resource_registry.log_index_deleted(index_arn=index_arn, bucket_name=bucket_name, index_name=index_name, source="service")
+            except Exception:
+                pass
+
             return {
                 "bucket_name": bucket_name,
                 "index_name": index_name,
@@ -880,6 +916,11 @@ class S3VectorStorageManager:
             if error_code == 'NotFoundException':
                 # Index doesn't exist - this could be considered success
                 logger.warning(f"Vector index not found (may already be deleted)")
+                # Log deletion intent in registry (best-effort)
+                try:
+                    resource_registry.log_index_deleted(index_arn=index_arn, bucket_name=bucket_name, index_name=index_name, source="service")
+                except Exception:
+                    pass
                 return {
                     "bucket_name": bucket_name,
                     "index_name": index_name,
@@ -1627,3 +1668,130 @@ class S3VectorStorageManager:
             Dictionary containing the query results
         """
         return self.query_vectors(index_arn, query_vector, top_k, metadata_filters)
+    def delete_vector_bucket(self, bucket_name: str, cascade: bool = False) -> Dict[str, Any]:
+        """
+        Delete a vector bucket. If cascade is True, attempt to delete all indexes in the bucket first.
+
+        Behavior:
+        - Validates bucket name using existing validation.
+        - When cascade is True: lists all indexes and deletes them with retry/backoff.
+          Handles NotFound/Conflict during cascade as non-fatal and continues.
+        - Calls s3vectors_client.delete_vector_bucket(vectorBucketName=...).
+        - On success or NotFound, logs deletion to the resource registry (best-effort).
+        - Returns a structured dict consistent with other service methods.
+
+        Returns:
+            {
+              "bucket_name": str,
+              "status": "deleted" | "not_found",
+              "indexes_deleted": int,
+              "response": dict (when deleted) or omitted,
+              "message": str (optional)
+            }
+
+        Raises:
+            VectorStorageError for access denied or other AWS errors except NotFound.
+        """
+        logger.info(f"Deleting vector bucket: {bucket_name} (cascade={cascade})")
+        # Validate bucket name
+        self._validate_bucket_name(bucket_name)
+
+        indexes_deleted = 0
+
+        # Optional cascade: remove indexes first
+        if cascade:
+            try:
+                next_token: Optional[str] = None
+                while True:
+                    resp = self.list_vector_indexes(bucket_name=bucket_name, max_results=500, next_token=next_token)
+                    for idx in (resp.get("indexes") or []):
+                        idx_name = idx.get("indexName") or idx.get("name")
+                        if not idx_name:
+                            continue
+                        try:
+                            ok = self.delete_index_with_retries(bucket=bucket_name, index=idx_name, max_attempts=6, backoff_base=0.5)
+                            if ok:
+                                indexes_deleted += 1
+                        except VectorStorageError as e:
+                            code = getattr(e, "error_code", "") or ""
+                            # Treat common flapping states as non-fatal during cascade
+                            if code in ("INDEX_NOT_FOUND", "NotFoundException", "ConflictException"):
+                                logger.warning(f"Cascade delete non-fatal for index '{idx_name}': {code}")
+                            else:
+                                logger.warning(f"Error deleting index '{idx_name}' during cascade: {e}")
+                    next_token = resp.get("next_token")
+                    if not next_token:
+                        break
+            except VectorStorageError as e:
+                # If bucket isn't found during listing, proceed to bucket delete which will return not_found
+                if getattr(e, "error_code", "") != "BUCKET_NOT_FOUND":
+                    logger.warning(f"Error listing indexes for cascade delete in bucket {bucket_name}: {e}")
+
+        def _del_bucket():
+            return self.s3vectors_client.delete_vector_bucket(vectorBucketName=bucket_name)
+
+        try:
+            response = self._retry_with_backoff(_del_bucket)
+            logger.info(f"Successfully deleted vector bucket: {bucket_name}")
+            # Best-effort registry deletion log
+            try:
+                resource_registry.log_vector_bucket_deleted(bucket_name=bucket_name, source="service")
+            except Exception:
+                pass
+
+            return {
+                "bucket_name": bucket_name,
+                "status": "deleted",
+                "indexes_deleted": indexes_deleted,
+                "response": response
+            }
+
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            error_message = e.response["Error"]["Message"]
+
+            if error_code in ("NotFoundException", "NoSuchBucket"):
+                logger.warning(f"Vector bucket not found (may already be deleted): {bucket_name}")
+                # Best-effort registry deletion log
+                try:
+                    resource_registry.log_vector_bucket_deleted(bucket_name=bucket_name, source="service")
+                except Exception:
+                    pass
+                return {
+                    "bucket_name": bucket_name,
+                    "status": "not_found",
+                    "indexes_deleted": indexes_deleted,
+                    "message": "Bucket not found (may already be deleted)"
+                }
+            elif error_code == "AccessDeniedException":
+                raise VectorStorageError(
+                    f"Access denied when deleting vector bucket: {error_message}",
+                    error_code="ACCESS_DENIED",
+                    error_details={
+                        "bucket_name": bucket_name,
+                        "required_permission": "s3vectors:DeleteVectorBucket"
+                    }
+                )
+            elif error_code == "ConflictException":
+                raise VectorStorageError(
+                    f"Conflict when deleting vector bucket (ensure all indexes are deleted): {error_message}",
+                    error_code="CONFLICT",
+                    error_details={"bucket_name": bucket_name}
+                )
+            else:
+                raise VectorStorageError(
+                    f"Failed to delete vector bucket {bucket_name}: {error_message}",
+                    error_code=error_code,
+                    error_details={
+                        "bucket_name": bucket_name,
+                        "aws_error_code": error_code,
+                        "aws_error_message": error_message
+                    }
+                )
+        except Exception as e:
+            logger.error(f"Unexpected error deleting vector bucket {bucket_name}: {e}")
+            raise VectorStorageError(
+                f"Unexpected error deleting vector bucket {bucket_name}: {str(e)}",
+                error_code="UNEXPECTED_ERROR",
+                error_details={"bucket_name": bucket_name, "error": str(e)}
+            )
