@@ -3,7 +3,7 @@ CRUSH.md — Commands and Style Guide (S3Vector)
 - Env: Python 3.10+; install: pip install -r requirements.txt; env: cp .env.example .env
 - Build: library + scripts; no packaging step required
 - Tests (pytest): all: pytest tests -v; single: pytest tests/<file>::<test> -q; keyword: pytest -k "expr" -q; markers: -m "unit|integration|slow|real_aws"
-- Real AWS: set credentials/region; run cautiously: pytest -m real_aws -v --maxfail=1
+- Real AWS: set credentials/region; run cautiously: pytest -m real_aws -v --maxfail=1; quick test: python scripts/run_real_aws_tests.py --quick --yes
 - Lint/Format: black --check . && isort --profile black --check-only . && flake8 src tests examples scripts; fix: black . && isort --profile black .
 - Types: mypy src tests --ignore-missing-imports (use built-in generics: list[str], dict[str, Any])
 - Imports: absolute, grouped stdlib/third-party/local; no wildcard; remove unused (isort/flake8)

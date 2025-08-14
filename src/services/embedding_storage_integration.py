@@ -62,6 +62,10 @@ class TextEmbeddingMetadata:
             ("category", self.category),
             ("language", self.language), 
             ("content_id", self.content_id),
+            ("series_id", self.series_id),
+            ("season", self.season),
+            ("episode", self.episode),
+            ("source_text", self.source_text),
             ("confidence_score", self.confidence_score),
             ("processing_time_ms", self.processing_time_ms),
             ("processing_timestamp", self.processing_timestamp)

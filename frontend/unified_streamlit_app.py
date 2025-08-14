@@ -49,25 +49,61 @@ from src.exceptions import VectorStorageError
 # Initialize logger
 logger = get_structured_logger("unified_streamlit")
 
-# Sample videos for demo
+# Sample videos for demo (Creative Commons licensed)
 SAMPLE_VIDEOS = {
     "Big Buck Bunny (Creative Commons)": {
         "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
         "description": "Animated short film featuring a large rabbit and forest creatures",
         "duration": 596,
-        "category": "animation"
+        "category": "animation",
+        "file_size_mb": 158,
+        "resolution": "1920x1080",
+        "tags": ["animation", "comedy", "forest", "animals"]
     },
     "Elephant Dream (Creative Commons)": {
         "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4", 
         "description": "Surreal animated short film with abstract visuals",
         "duration": 654,
-        "category": "animation"
+        "category": "animation",
+        "file_size_mb": 139,
+        "resolution": "1920x1080",
+        "tags": ["animation", "surreal", "abstract", "experimental"]
     },
     "Sintel (Creative Commons)": {
         "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
         "description": "Fantasy adventure animation with dragons and magic",
         "duration": 888,
-        "category": "animation"
+        "category": "animation",
+        "file_size_mb": 174,
+        "resolution": "1920x1080",
+        "tags": ["animation", "fantasy", "adventure", "dragons"]
+    },
+    "Tears of Steel (Creative Commons)": {
+        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+        "description": "Sci-fi short film with robots and futuristic scenes",
+        "duration": 734,
+        "category": "action",
+        "file_size_mb": 179,
+        "resolution": "1920x1080",
+        "tags": ["sci-fi", "action", "robots", "futuristic"]
+    },
+    "For Bigger Blazes (Creative Commons)": {
+        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+        "description": "Action-packed scenes with fire and explosions",
+        "duration": 15,
+        "category": "action",
+        "file_size_mb": 21,
+        "resolution": "1920x1080",
+        "tags": ["action", "fire", "explosions", "short"]
+    },
+    "For Bigger Escape (Creative Commons)": {
+        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+        "description": "Adventure scenes with outdoor landscapes",
+        "duration": 15,
+        "category": "adventure",
+        "file_size_mb": 24,
+        "resolution": "1920x1080",
+        "tags": ["adventure", "outdoor", "landscape", "short"]
     }
 }
 
@@ -316,39 +352,129 @@ class UnifiedStreamlitApp:
             
             video_source = st.radio(
                 "Choose video source:",
-                ["Sample Videos", "Upload Video", "S3 URI"],
-                horizontal=True
+                ["Sample Videos", "Upload Single Video", "Upload Multiple Videos", "S3 URI"],
+                horizontal=False
             )
             
-            video_path = None
+            video_paths = []
             video_s3_uri = None
+            selected_videos_info = []
             
             if video_source == "Sample Videos":
-                selected_video = st.selectbox(
-                    "Select sample video:",
-                    list(SAMPLE_VIDEOS.keys())
+                st.markdown("**Available Creative Commons Videos:**")
+                
+                # Allow multiple sample video selection
+                selected_videos = st.multiselect(
+                    "Select sample videos to process:",
+                    list(SAMPLE_VIDEOS.keys()),
+                    help="You can select multiple videos to process in batch"
                 )
                 
-                if selected_video:
-                    video_info = SAMPLE_VIDEOS[selected_video]
-                    st.info(f"**{selected_video}**\n\n{video_info['description']}")
+                if selected_videos:
+                    # Show preview of selected videos
+                    for video_name in selected_videos:
+                        video_info = SAMPLE_VIDEOS[video_name]
+                        with st.expander(f"📹 {video_name}", expanded=False):
+                            col_info, col_stats = st.columns([2, 1])
+                            with col_info:
+                                st.markdown(f"**Description:** {video_info['description']}")
+                                st.markdown(f"**Tags:** {', '.join(video_info['tags'])}")
+                            with col_stats:
+                                st.metric("Duration", f"{video_info['duration']//60}m {video_info['duration']%60}s")
+                                st.metric("Size", f"{video_info['file_size_mb']} MB")
+                                st.metric("Resolution", video_info['resolution'])
+                        
+                        selected_videos_info.append({
+                            'name': video_name,
+                            'info': video_info
+                        })
                     
-                    if st.button("📥 Download Sample Video"):
-                        video_path = self._download_sample_video(selected_video, video_info)
+                    # Batch download option
+                    if st.button("📥 Download Selected Videos", type="primary"):
+                        with st.spinner(f"Downloading {len(selected_videos)} videos..."):
+                            downloaded_paths = []
+                            for video_data in selected_videos_info:
+                                path = self._download_sample_video(video_data['name'], video_data['info'])
+                                if path:
+                                    downloaded_paths.append(path)
+                            
+                            if downloaded_paths:
+                                video_paths = downloaded_paths
+                                st.success(f"✅ Downloaded {len(downloaded_paths)} videos successfully!")
+                                st.session_state.downloaded_videos = video_paths
+                            else:
+                                st.error("❌ Failed to download videos")
             
-            elif video_source == "Upload Video":
+            elif video_source == "Upload Single Video":
                 uploaded_file = st.file_uploader(
                     "Upload video file:",
-                    type=['mp4', 'mov', 'avi'],
-                    help="Upload a video file to process"
+                    type=['mp4', 'mov', 'avi', 'mkv', 'webm'],
+                    help="Upload a single video file to process"
                 )
                 
                 if uploaded_file:
-                    # Save uploaded file temporarily
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
-                        tmp_file.write(uploaded_file.read())
-                        video_path = tmp_file.name
-                    st.success(f"✅ Video uploaded: {uploaded_file.name}")
+                    # Validate file size (limit to 500MB for demo)
+                    file_size_mb = len(uploaded_file.getvalue()) / (1024 * 1024)
+                    if file_size_mb > 500:
+                        st.error(f"❌ File too large: {file_size_mb:.1f}MB. Please use files under 500MB.")
+                    else:
+                        # Save uploaded file temporarily
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                            tmp_file.write(uploaded_file.read())
+                            video_paths = [tmp_file.name]
+                        
+                        st.success(f"✅ Video uploaded: {uploaded_file.name} ({file_size_mb:.1f}MB)")
+                        
+                        # Show video preview info
+                        try:
+                            import cv2
+                            cap = cv2.VideoCapture(video_paths[0])
+                            fps = cap.get(cv2.CAP_PROP_FPS)
+                            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                            duration = frame_count / fps if fps > 0 else 0
+                            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                            cap.release()
+                            
+                            col_dur, col_res, col_fps = st.columns(3)
+                            with col_dur:
+                                st.metric("Duration", f"{int(duration//60)}m {int(duration%60)}s")
+                            with col_res:
+                                st.metric("Resolution", f"{width}x{height}")
+                            with col_fps:
+                                st.metric("FPS", f"{fps:.1f}")
+                        except Exception as e:
+                            st.info("Could not extract video metadata")
+            
+            elif video_source == "Upload Multiple Videos":
+                uploaded_files = st.file_uploader(
+                    "Upload multiple video files:",
+                    type=['mp4', 'mov', 'avi', 'mkv', 'webm'],
+                    accept_multiple_files=True,
+                    help="Upload multiple video files to process in batch"
+                )
+                
+                if uploaded_files:
+                    total_size_mb = sum(len(f.getvalue()) for f in uploaded_files) / (1024 * 1024)
+                    
+                    if total_size_mb > 1000:  # 1GB limit for batch
+                        st.error(f"❌ Total files too large: {total_size_mb:.1f}MB. Please keep under 1GB total.")
+                    else:
+                        # Save all uploaded files
+                        temp_paths = []
+                        for uploaded_file in uploaded_files:
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                                tmp_file.write(uploaded_file.read())
+                                temp_paths.append(tmp_file.name)
+                        
+                        video_paths = temp_paths
+                        st.success(f"✅ {len(uploaded_files)} videos uploaded ({total_size_mb:.1f}MB total)")
+                        
+                        # Show batch summary
+                        with st.expander("📊 Batch Summary", expanded=True):
+                            for i, uploaded_file in enumerate(uploaded_files):
+                                file_size_mb = len(uploaded_file.getvalue()) / (1024 * 1024)
+                                st.markdown(f"**{i+1}.** {uploaded_file.name} - {file_size_mb:.1f}MB")
             
             elif video_source == "S3 URI":
                 video_s3_uri = st.text_input(
@@ -356,6 +482,20 @@ class UnifiedStreamlitApp:
                     placeholder="s3://your-bucket/path/to/video.mp4",
                     help="S3 URI of video to process"
                 )
+                
+                # Option for multiple S3 URIs
+                batch_s3_uris = st.text_area(
+                    "Or multiple S3 URIs (one per line):",
+                    placeholder="s3://bucket/video1.mp4\ns3://bucket/video2.mp4\ns3://bucket/video3.mp4",
+                    help="Enter multiple S3 URIs for batch processing"
+                )
+                
+                if batch_s3_uris.strip():
+                    s3_uris = [uri.strip() for uri in batch_s3_uris.strip().split('\n') if uri.strip()]
+                    if len(s3_uris) > 1:
+                        st.info(f"📊 Found {len(s3_uris)} S3 URIs for batch processing")
+                        for i, uri in enumerate(s3_uris, 1):
+                            st.markdown(f"**{i}.** `{uri}`")
             
             # Processing configuration
             st.subheader("Processing Configuration")
@@ -384,11 +524,54 @@ class UnifiedStreamlitApp:
                     "keywords": st.text_input("Keywords (comma-separated)")
                 }
             
+            # Batch processing options
+            if video_paths or selected_videos_info:
+                st.subheader("Batch Processing Options")
+                
+                process_mode = st.radio(
+                    "Processing Mode:",
+                    ["Process All Together", "Process One by One"],
+                    help="All together is faster, one by one allows individual monitoring"
+                )
+                
+                if len(video_paths) > 1 or len(selected_videos_info) > 1:
+                    st.info(f"📊 Ready to process {len(video_paths) or len(selected_videos_info)} videos")
+            
             # Process button
-            if st.button("🎬 Process & Add to Index", type="primary"):
-                if video_path or video_s3_uri:
+            has_videos = bool(video_paths or video_s3_uri or selected_videos_info)
+            button_text = "🎬 Process & Add to Index"
+            
+            if video_paths and len(video_paths) > 1:
+                button_text = f"🎬 Process {len(video_paths)} Videos"
+            elif selected_videos_info and len(selected_videos_info) > 1:
+                button_text = f"🎬 Process {len(selected_videos_info)} Videos"
+            
+            if st.button(button_text, type="primary", disabled=not has_videos):
+                if video_paths or selected_videos_info:
+                    # Handle multiple videos
+                    videos_to_process = video_paths if video_paths else []
+                    
+                    # Add downloaded sample videos if any
+                    if selected_videos_info and not video_paths:
+                        if 'downloaded_videos' in st.session_state:
+                            videos_to_process = st.session_state.downloaded_videos
+                    
+                    if videos_to_process:
+                        self._process_multiple_videos(
+                            video_paths=videos_to_process,
+                            segment_duration=segment_duration,
+                            embedding_options=embedding_options,
+                            metadata=metadata,
+                            use_real_aws=use_real_aws,
+                            process_mode=process_mode if len(videos_to_process) > 1 else "Process All Together"
+                        )
+                    else:
+                        st.error("No videos ready for processing. Please download or upload videos first.")
+                        
+                elif video_s3_uri:
+                    # Handle single S3 URI
                     self._process_video(
-                        video_path=video_path,
+                        video_path=None,
                         video_s3_uri=video_s3_uri,
                         segment_duration=segment_duration,
                         embedding_options=embedding_options,
@@ -396,20 +579,118 @@ class UnifiedStreamlitApp:
                         use_real_aws=use_real_aws
                     )
                 else:
-                    st.error("Please select or upload a video first")
+                    st.error("Please select, upload, or specify videos first")
         
         with col2:
             st.subheader("Processing Results")
             
-            # Show processing status and results here
+            # Show processing status and results
             if 'last_processing_result' in st.session_state:
                 result = st.session_state.last_processing_result
-                if result.get('success'):
-                    st.success("✅ Processing completed successfully!")
-                    st.json(result)
+                
+                # Handle batch processing results
+                if 'total_videos' in result:
+                    # Batch processing result
+                    if result.get('success'):
+                        st.success(f"✅ Batch processing completed!")
+                        
+                        # Summary metrics
+                        col_success, col_fail = st.columns(2)
+                        with col_success:
+                            st.metric("Successful", result.get('successful_videos', 0))
+                        with col_fail:
+                            st.metric("Failed", result.get('failed_videos', 0))
+                        
+                        col_seg, col_vec = st.columns(2)
+                        with col_seg:
+                            st.metric("Total Segments", result.get('total_segments', 0))
+                        with col_vec:
+                            st.metric("Total Vectors", result.get('total_vectors', 0))
+                        
+                        if result.get('total_cost', 0) > 0:
+                            st.metric("Estimated Cost", f"${result.get('total_cost', 0):.4f}")
+                        
+                        # Processing mode info
+                        st.info(f"📊 Mode: {result.get('processing_mode', 'Unknown')}")
+                    else:
+                        st.error("❌ Batch processing failed")
+                        if 'failed_videos' in result:
+                            st.error(f"Failed videos: {result.get('failed_videos', 0)}")
+                
                 else:
-                    st.error("❌ Processing failed")
-                    st.error(result.get('error', 'Unknown error'))
+                    # Single video processing result
+                    if result.get('success'):
+                        st.success("✅ Video processing completed!")
+                        
+                        # Single video metrics
+                        if 'segments' in result:
+                            col_seg, col_vec = st.columns(2)
+                            with col_seg:
+                                st.metric("Segments", result.get('segments', 0))
+                            with col_vec:
+                                st.metric("Vectors", result.get('vectors', 0))
+                        
+                        if 'duration' in result:
+                            duration = result.get('duration', 0)
+                            st.metric("Duration", f"{int(duration//60)}m {int(duration%60)}s")
+                        
+                        if result.get('cost', 0) > 0:
+                            st.metric("Cost", f"${result.get('cost', 0):.4f}")
+                        
+                        if result.get('simulated'):
+                            st.info("🔵 This was a simulation - enable 'Use Real AWS' for actual processing")
+                    else:
+                        st.error("❌ Video processing failed")
+                        st.error(result.get('error', 'Unknown error'))
+            
+            else:
+                st.info("Process videos to see results here")
+                
+                # Show helpful tips
+                with st.expander("💡 Processing Tips", expanded=False):
+                    st.markdown("""
+                    **Sample Videos:**
+                    - Creative Commons licensed content
+                    - Various durations and categories
+                    - Good for testing and demos
+                    
+                    **File Upload:**
+                    - Supports MP4, MOV, AVI, MKV, WebM
+                    - Single file limit: 500MB
+                    - Batch limit: 1GB total
+                    
+                    **Processing Options:**
+                    - **Segment Duration**: Shorter = more segments, longer = fewer segments
+                    - **Embedding Options**: visual-text (recommended), visual-image, audio
+                    - **Batch Mode**: Process all together (faster) vs one by one (detailed progress)
+                    
+                    **Cost Considerations:**
+                    - Real AWS: ~$0.05 per minute of video
+                    - Simulation: Free but no actual embeddings
+                    - Storage: ~$0.001 per vector stored
+                    """)
+            
+            # Video preview section
+            if 'downloaded_videos' in st.session_state or 'last_processing_result' in st.session_state:
+                st.subheader("📹 Video Preview")
+                
+                # Show thumbnails or info about processed videos
+                processed_count = len(st.session_state.processed_videos)
+                if processed_count > 0:
+                    st.success(f"✅ {processed_count} videos in your library")
+                    
+                    # Show recent videos
+                    recent_videos = list(st.session_state.processed_videos.items())[-3:]  # Last 3
+                    for video_id, video in recent_videos:
+                        with st.container():
+                            st.markdown(f"""
+                            **{video.name}**
+                            - Duration: {video.duration:.1f}s
+                            - Segments: {video.segments}
+                            - Type: {video.processing_type.title()}
+                            """)
+                else:
+                    st.info("No videos processed yet")
     
     def render_search_discovery(self, use_real_aws: bool):
         """Render the search and discovery page."""
@@ -445,16 +726,56 @@ class UnifiedStreamlitApp:
                 
                 # Query suggestions
                 with st.expander("💡 Query Suggestions"):
-                    suggestions = [
-                        "Show me fast car chase scenes",
-                        "Find animated character interactions", 
-                        "Locate outdoor adventure sequences",
-                        "Search for dramatic action scenes",
-                        "Find peaceful nature footage"
+                    # Categorize suggestions based on available sample videos
+                    st.markdown("**Animation & Fantasy:**")
+                    animation_suggestions = [
+                        "Find animated character interactions",
+                        "Show me fantasy scenes with dragons",
+                        "Locate magical or mystical moments",
+                        "Search for colorful animated sequences"
                     ]
                     
-                    for suggestion in suggestions:
-                        if st.button(f"💡 {suggestion}", key=f"suggest_{suggestion}"):
+                    for suggestion in animation_suggestions:
+                        if st.button(f"🎨 {suggestion}", key=f"anim_{hash(suggestion)}"):
+                            st.session_state.search_query = suggestion
+                            st.rerun()
+                    
+                    st.markdown("**Action & Adventure:**")
+                    action_suggestions = [
+                        "Show me action scenes with explosions",
+                        "Find fast-paced chase sequences", 
+                        "Locate dramatic fight scenes",
+                        "Search for outdoor adventure moments"
+                    ]
+                    
+                    for suggestion in action_suggestions:
+                        if st.button(f"⚡ {suggestion}", key=f"action_{hash(suggestion)}"):
+                            st.session_state.search_query = suggestion
+                            st.rerun()
+                    
+                    st.markdown("**Sci-Fi & Technology:**")
+                    scifi_suggestions = [
+                        "Find futuristic technology scenes",
+                        "Show me robots or mechanical objects",
+                        "Locate sci-fi environments",
+                        "Search for metallic or industrial visuals"
+                    ]
+                    
+                    for suggestion in scifi_suggestions:
+                        if st.button(f"🤖 {suggestion}", key=f"scifi_{hash(suggestion)}"):
+                            st.session_state.search_query = suggestion
+                            st.rerun()
+                    
+                    st.markdown("**General Scenes:**")
+                    general_suggestions = [
+                        "Find peaceful nature footage",
+                        "Show me emotional character moments",
+                        "Locate bright colorful scenes",
+                        "Search for dark atmospheric moments"
+                    ]
+                    
+                    for suggestion in general_suggestions:
+                        if st.button(f"🎬 {suggestion}", key=f"general_{hash(suggestion)}"):
                             st.session_state.search_query = suggestion
                             st.rerun()
             
@@ -927,6 +1248,203 @@ class UnifiedStreamlitApp:
         except Exception as e:
             logger.log_error("process_video_simulation", error=e)
             return {"success": False, "error": str(e)}
+    
+    def _process_multiple_videos(self, video_paths: List[str], segment_duration: int,
+                                embedding_options: List[str], metadata: Dict, 
+                                use_real_aws: bool, process_mode: str):
+        """Process multiple videos either together or one by one."""
+        try:
+            total_videos = len(video_paths)
+            st.info(f"🎬 Starting batch processing of {total_videos} videos...")
+            
+            # Create progress tracking
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            results_container = st.container()
+            
+            successful_videos = []
+            failed_videos = []
+            total_segments = 0
+            total_vectors = 0
+            total_cost = 0.0
+            
+            if process_mode == "Process One by One":
+                # Process videos individually with detailed progress
+                for i, video_path in enumerate(video_paths):
+                    video_name = os.path.basename(video_path)
+                    status_text.text(f"Processing video {i+1}/{total_videos}: {video_name}")
+                    
+                    try:
+                        if use_real_aws:
+                            result = self._process_video_real(
+                                video_path, None, segment_duration, 
+                                embedding_options, metadata
+                            )
+                        else:
+                            result = self._process_video_simulation(
+                                video_path, None, segment_duration,
+                                embedding_options, metadata
+                            )
+                        
+                        if result.get('success'):
+                            successful_videos.append(video_name)
+                            total_segments += result.get('segments', 0)
+                            total_vectors += result.get('vectors', 0)
+                            total_cost += result.get('cost', 0.0)
+                            
+                            with results_container:
+                                st.success(f"✅ {video_name}: {result.get('segments', 0)} segments, {result.get('vectors', 0)} vectors")
+                        else:
+                            failed_videos.append((video_name, result.get('error', 'Unknown error')))
+                            with results_container:
+                                st.error(f"❌ {video_name}: {result.get('error', 'Processing failed')}")
+                    
+                    except Exception as e:
+                        failed_videos.append((video_name, str(e)))
+                        with results_container:
+                            st.error(f"❌ {video_name}: {str(e)}")
+                    
+                    # Update progress
+                    progress_bar.progress((i + 1) / total_videos)
+            
+            else:  # Process All Together
+                # Batch process with overall progress
+                status_text.text(f"Batch processing {total_videos} videos...")
+                
+                for i, video_path in enumerate(video_paths):
+                    video_name = os.path.basename(video_path)
+                    
+                    try:
+                        if use_real_aws:
+                            result = self._process_video_real(
+                                video_path, None, segment_duration, 
+                                embedding_options, metadata
+                            )
+                        else:
+                            result = self._process_video_simulation(
+                                video_path, None, segment_duration,
+                                embedding_options, metadata
+                            )
+                        
+                        if result.get('success'):
+                            successful_videos.append(video_name)
+                            total_segments += result.get('segments', 0)
+                            total_vectors += result.get('vectors', 0)
+                            total_cost += result.get('cost', 0.0)
+                        else:
+                            failed_videos.append((video_name, result.get('error', 'Unknown error')))
+                    
+                    except Exception as e:
+                        failed_videos.append((video_name, str(e)))
+                    
+                    # Update progress
+                    progress_bar.progress((i + 1) / total_videos)
+            
+            # Final results summary
+            progress_bar.progress(1.0)
+            status_text.text("✅ Batch processing completed!")
+            
+            # Display comprehensive results
+            st.markdown("---")
+            st.subheader("📊 Batch Processing Results")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Successful", len(successful_videos))
+            with col2:
+                st.metric("Failed", len(failed_videos))
+            with col3:
+                st.metric("Total Segments", total_segments)
+            with col4:
+                st.metric("Total Vectors", total_vectors)
+            
+            if use_real_aws and total_cost > 0:
+                st.metric("Estimated Cost", f"${total_cost:.4f}")
+            
+            # Show successful videos
+            if successful_videos:
+                with st.expander(f"✅ Successfully Processed ({len(successful_videos)} videos)", expanded=True):
+                    for video_name in successful_videos:
+                        st.markdown(f"- **{video_name}**")
+            
+            # Show failed videos
+            if failed_videos:
+                with st.expander(f"❌ Failed Videos ({len(failed_videos)} videos)", expanded=True):
+                    for video_name, error in failed_videos:
+                        st.markdown(f"- **{video_name}**: {error}")
+            
+            # Update session state
+            batch_result = {
+                'success': len(successful_videos) > 0,
+                'total_videos': total_videos,
+                'successful_videos': len(successful_videos),
+                'failed_videos': len(failed_videos),
+                'total_segments': total_segments,
+                'total_vectors': total_vectors,
+                'total_cost': total_cost,
+                'processing_mode': process_mode
+            }
+            
+            st.session_state.last_processing_result = batch_result
+            
+            if len(successful_videos) == total_videos:
+                st.balloons()
+                st.success(f"🎉 All {total_videos} videos processed successfully!")
+            elif len(successful_videos) > 0:
+                st.warning(f"⚠️ Partial success: {len(successful_videos)}/{total_videos} videos processed")
+            else:
+                st.error("❌ All videos failed to process")
+                
+        except Exception as e:
+            logger.log_error("process_multiple_videos", error=e)
+            st.error(f"Batch processing failed: {str(e)}")
+    
+    def _download_sample_video(self, video_name: str, video_info: Dict) -> Optional[str]:
+        """Download a sample video for processing with enhanced progress tracking."""
+        try:
+            import requests
+            
+            # Show download progress
+            progress_placeholder = st.empty()
+            
+            with progress_placeholder:
+                st.info(f"📥 Downloading {video_name}...")
+                
+                response = requests.get(video_info['url'], stream=True)
+                response.raise_for_status()
+                
+                # Get file size for progress tracking
+                total_size = int(response.headers.get('content-length', 0))
+                
+                # Save to temporary file with progress
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                    downloaded = 0
+                    
+                    if total_size > 0:
+                        # Show progress bar for large files
+                        progress_bar = st.progress(0)
+                        
+                        for chunk in response.iter_content(chunk_size=8192):
+                            tmp_file.write(chunk)
+                            downloaded += len(chunk)
+                            progress = downloaded / total_size
+                            progress_bar.progress(progress)
+                    else:
+                        # No progress bar for unknown size
+                        for chunk in response.iter_content(chunk_size=8192):
+                            tmp_file.write(chunk)
+                    
+                    video_path = tmp_file.name
+                
+                # Clear progress and show success
+                progress_placeholder.success(f"✅ Downloaded: {video_name} ({video_info['file_size_mb']}MB)")
+                
+                return video_path
+                
+        except Exception as e:
+            logger.log_error("download_sample_video", error=e)
+            st.error(f"Failed to download {video_name}: {str(e)}")
+            return None
     
     def _perform_search(self, search_type: str, query: str, time_start: Optional[float],
                        time_end: Optional[float], top_k: int, similarity_threshold: float,

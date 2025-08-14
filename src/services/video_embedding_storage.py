@@ -60,24 +60,50 @@ class VideoVectorMetadata:
     quality_score: Optional[float] = None
     confidence_score: Optional[float] = None
     
+    def __post_init__(self):
+        """Auto-generate processed_at timestamp if not provided."""
+        if self.processed_at is None:
+            from datetime import datetime, timezone
+            self.processed_at = datetime.now(timezone.utc).isoformat()
+    
     def to_dict(self) -> Dict[str, Any]:
         metadata = {
             "content_type": self.content_type,
             "start_sec": self.start_sec,
             "end_sec": self.end_sec,
+            "segment_duration_sec": self.segment_duration_sec,
             "embedding_option": self.embedding_option,
             "model_id": self.model_id,
+            "embedding_dimension": self.embedding_dimension,
             "video_duration_sec": self.video_duration_sec,
             "video_source_uri": self.video_source_uri,
         }
+        
+        # Add optional fields if they have values
+        if self.processed_at:
+            metadata["processed_at"] = self.processed_at
+        if self.processing_time_ms is not None:
+            metadata["processing_time_ms"] = self.processing_time_ms
         if self.content_id:
             metadata["content_id"] = self.content_id
         if self.title:
             metadata["title"] = self.title
+        if self.description:
+            metadata["description"] = self.description
         if self.series_id:
             metadata["series_id"] = self.series_id
+        if self.season is not None:
+            metadata["season"] = self.season
         if self.episode is not None:
             metadata["episode"] = self.episode
+        if self.genre and len(self.genre) > 0:
+            metadata["genre"] = self.genre
+        if self.tags and len(self.tags) > 0:
+            metadata["tags"] = self.tags
+        if self.quality_score is not None:
+            metadata["quality_score"] = self.quality_score
+        if self.confidence_score is not None:
+            metadata["confidence_score"] = self.confidence_score
         return metadata
 
 

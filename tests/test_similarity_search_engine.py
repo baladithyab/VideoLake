@@ -232,7 +232,7 @@ class TestEmbeddingGeneration:
         query = SimilarityQuery(query_text="test query")
         
         embedding, cost = similarity_engine._generate_query_embedding(
-            query, IndexType.TITAN_TEXT
+            query, IndexType.TITAN_TEXT, "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
         )
         
         assert len(embedding) == 1023
@@ -249,7 +249,7 @@ class TestEmbeddingGeneration:
         query = SimilarityQuery(query_text="test query")
         
         embedding, cost = similarity_engine._generate_query_embedding(
-            query, IndexType.MARENGO_MULTIMODAL
+            query, IndexType.MARENGO_MULTIMODAL, "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
         )
         
         assert len(embedding) == 1023
@@ -266,7 +266,7 @@ class TestEmbeddingGeneration:
         query = SimilarityQuery(query_video_s3_uri="s3://bucket/video.mp4")
         
         embedding, cost = similarity_engine._generate_query_embedding(
-            query, IndexType.MARENGO_MULTIMODAL
+            query, IndexType.MARENGO_MULTIMODAL, "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
         )
         
         assert len(embedding) == 1023
@@ -282,7 +282,7 @@ class TestEmbeddingGeneration:
         query = SimilarityQuery(query_embedding=embedding_vector)
         
         embedding, cost = similarity_engine._generate_query_embedding(
-            query, IndexType.MARENGO_MULTIMODAL
+            query, IndexType.MARENGO_MULTIMODAL, "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index"
         )
         
         assert embedding == embedding_vector
@@ -298,6 +298,10 @@ class TestSearchExecution:
         mock_services['bedrock_service'].generate_text_embedding.return_value = Mock(
             embedding=[0.1, 0.2, 0.3] * 341
         )
+        # Setup TwelveLabs mock for Marengo multimodal index
+        mock_services['twelvelabs_service'].generate_text_embedding.return_value = {
+            'embedding': [0.1, 0.2, 0.3] * 341 + [0.1]  # 1024 dimensions
+        }
         mock_services['s3_vector_manager'].query_vectors.return_value = sample_s3_search_results
         
         query = SimilarityQuery(
@@ -316,7 +320,7 @@ class TestSearchExecution:
         assert response.input_type == QueryInputType.TEXT
         assert response.index_type == IndexType.MARENGO_MULTIMODAL
         assert response.total_results == 2
-        assert response.processing_time_ms > 0
+        assert response.processing_time_ms >= 0  # Can be 0 for mocked operations
         
         # Verify results
         video_result = next((r for r in response.results if r.content_type == 'video'), None)
