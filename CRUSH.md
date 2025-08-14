@@ -13,6 +13,7 @@ CRUSH.md — Commands and Style Guide (S3Vector)
 - Logging: use src/utils/logging_config.setup_logging + get_structured_logger; JSON via log_operation/log_error/log_performance/log_cost; never log secrets
 - AWS SDK cfg (.kiro): boto3 clients with botocore.config.Config(retries={'max_attempts':3,'mode':'adaptive'}, read_timeout=60, connect_timeout=10, max_pool_connections=50); prefer Session(region)
 - S3 Vectors stds (.kiro): use client 's3vectors'; validate dims (typically 1024); batch put; include meaningful metadata; least-privilege IAM
+- OpenSearch Integration (.kiro): supports both export (S3→OpenSearch Serverless) and engine (S3 as OpenSearch storage) patterns; use OpenSearchIntegrationManager; hybrid search combines vector+keyword; monitor costs with pattern comparison
 - Bedrock models (.kiro): 'bedrock-runtime' with access validation; common IDs: amazon.titan-embed-text-v2:0, amazon.titan-embed-image-v1, cohere.embed-{english,multilingual}-v3
 - TwelveLabs (.kiro): StartAsyncInvoke; support S3/base64; segment videos 2–10s; poll with timeout; parse temporal metadata (startSec/endSec)
 - Batch sizes (.kiro): text=100; video=10; vectors per put=1000 (tune per workload)
@@ -21,4 +22,4 @@ CRUSH.md — Commands and Style Guide (S3Vector)
 - Cost-aware: log/track perf + cost; optimize with batching, caching; avoid unnecessary live calls in CI
 - Cursor/Copilot: no rules detected; if added (.cursor/rules or .github/copilot-instructions.md), agents must follow them
 
-Quick refs: specific test node: pytest tests/test_s3_vector_storage.py::test_put_and_get_vector -q; durations: pytest -v --durations=10
+Quick refs: specific test node: pytest tests/test_s3_vector_storage.py::test_put_and_get_vector -q; durations: pytest -v --durations=10; opensearch demo: export REAL_AWS_DEMO=1 && python examples/opensearch_integration_demo.py --help

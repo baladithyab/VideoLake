@@ -51,3 +51,14 @@ class OpenSearchIntegrationError(VectorEmbeddingError):
 class CostOptimizationError(VectorEmbeddingError):
     """Raised when cost optimization strategies fail."""
     pass
+
+
+class CostMonitoringError(VectorEmbeddingError):
+    """Raised when cost monitoring operations fail."""
+    pass
+
+
+# Aliases for compatibility
+S3VectorError = VectorEmbeddingError
+VideoProcessingError = AsyncProcessingError
+EmbeddingError = ModelAccessError
