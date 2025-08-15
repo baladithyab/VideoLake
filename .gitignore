@@ -104,6 +104,10 @@ claude-flow.bat
 claude-flow.ps1
 hive-mind-prompt-*.txt
 
-# Crush local data
-.crush/
-coordination/
+# Validation results and temporary output files
+*_results.json
+*_validation.json  
+validation_*.json
+test_results_*.json
+results.json
+output.json
