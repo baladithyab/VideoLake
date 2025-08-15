@@ -22,4 +22,4 @@ CRUSH.md — Commands and Style Guide (S3Vector)
 - Cost-aware: log/track perf + cost; optimize with batching, caching; avoid unnecessary live calls in CI
 - Cursor/Copilot: no rules detected; if added (.cursor/rules or .github/copilot-instructions.md), agents must follow them
 
-Quick refs: specific test node: pytest tests/test_s3_vector_storage.py::test_put_and_get_vector -q; durations: pytest -v --durations=10; opensearch demo: export REAL_AWS_DEMO=1 && python examples/opensearch_integration_demo.py --help
+Quick refs: specific test node: pytest tests/test_s3_vector_storage.py::test_put_and_get_vector -q; durations: pytest -v --durations=10; real aws validation: export REAL_AWS_DEMO=1 && python examples/real_s3vector_validation.py; opensearch demo: python examples/opensearch_integration_demo.py --help; three-way comparison: python examples/three_way_vector_comparison_demo.py

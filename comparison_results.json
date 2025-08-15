@@ -1,0 +1,130 @@
+{
+  "s3vector_direct": {
+    "approach_name": "S3Vector Direct",
+    "setup_time_ms": 0.0,
+    "indexing_time_ms": 0.0,
+    "query_time_ms": 464.57457542419434,
+    "query_results_count": 25,
+    "average_similarity_score": 0.2333659553527832,
+    "cost_estimate_monthly": 0.10000070190429688,
+    "features_supported": [
+      "Native vector similarity search",
+      "Metadata filtering",
+      "Sub-second query latency",
+      "Elastic scaling",
+      "Cost-effective storage",
+      "Simple API",
+      "AWS native integration"
+    ],
+    "limitations": [
+      "No keyword search",
+      "No aggregations",
+      "Limited analytics capabilities",
+      "No text highlighting",
+      "Basic filtering only"
+    ],
+    "performance_metrics": {
+      "avg_query_latency_ms": 464.57457542419434,
+      "queries_tested": 5,
+      "total_results_returned": 25,
+      "vectors_in_index": 8,
+      "approach_total_time_ms": 2322.9124546051025
+    }
+  },
+  "opensearch_export": {
+    "approach_name": "OpenSearch Export",
+    "setup_time_ms": 800.9376525878906,
+    "indexing_time_ms": 800.9376525878906,
+    "query_time_ms": 291.2208080291748,
+    "query_results_count": 25,
+    "average_similarity_score": 0.8319999999999999,
+    "cost_estimate_monthly": 0.20000375366210937,
+    "features_supported": [
+      "Vector similarity search",
+      "Keyword search",
+      "Hybrid search (vector + keyword)",
+      "Advanced aggregations",
+      "Text highlighting",
+      "Complex filtering",
+      "Real-time analytics",
+      "Sub-millisecond latency",
+      "High query throughput",
+      "OpenSearch Dashboards integration"
+    ],
+    "limitations": [
+      "Higher cost (dual storage)",
+      "Export complexity",
+      "Data synchronization challenges",
+      "Point-in-time export only",
+      "Requires OpenSearch expertise"
+    ],
+    "performance_metrics": {
+      "avg_query_latency_ms": 291.2208080291748,
+      "queries_tested": 5,
+      "total_results_returned": 25,
+      "vectors_in_index": 8,
+      "export_time_ms": 800.9376525878906,
+      "approach_total_time_ms": 2257.0669651031494
+    }
+  },
+  "opensearch_engine": {
+    "approach_name": "OpenSearch Engine",
+    "setup_time_ms": 1401.655912399292,
+    "indexing_time_ms": 400.5415439605713,
+    "query_time_ms": 332.676362991333,
+    "query_results_count": 25,
+    "average_similarity_score": 0.7556,
+    "cost_estimate_monthly": 0.08000070190429688,
+    "features_supported": [
+      "Vector similarity search",
+      "Keyword search",
+      "Hybrid search (vector + keyword)",
+      "OpenSearch features",
+      "Cost-effective storage",
+      "Aggregations and analytics",
+      "OpenSearch ecosystem",
+      "Familiar OpenSearch API"
+    ],
+    "limitations": [
+      "Higher query latency",
+      "Lower query throughput",
+      "S3 storage overhead",
+      "Complex setup",
+      "Domain management required",
+      "Not suitable for real-time apps"
+    ],
+    "performance_metrics": {
+      "avg_query_latency_ms": 332.676362991333,
+      "queries_tested": 5,
+      "total_results_returned": 25,
+      "vectors_in_index": 8,
+      "domain_setup_time_ms": 1001.1143684387207,
+      "indexing_time_ms": 400.5415439605713,
+      "approach_total_time_ms": 2815.0603771209717
+    }
+  },
+  "comparison_timestamp": "2025-08-14T19:56:50.720451",
+  "test_configuration": {
+    "documents_tested": 8,
+    "queries_tested": 5,
+    "vector_dimension": 1024,
+    "approaches_tested": [
+      "s3vector-direct",
+      "opensearch-export",
+      "opensearch-engine"
+    ],
+    "with_performance_test": false
+  },
+  "recommendations": {
+    "cost_winner": "OpenSearch Engine offers the best cost optimization for analytical workloads",
+    "performance_winner": "Opensearch Export provides the fastest query performance (291.2ms avg)",
+    "feature_winner": "Opensearch Export offers the most comprehensive feature set (10 features)",
+    "use_cases": {
+      "real_time_apps": "OpenSearch Export for sub-millisecond latency and high throughput",
+      "analytical_workloads": "OpenSearch Engine for cost-effective analytics with OpenSearch features",
+      "simple_similarity_search": "S3Vector Direct for straightforward vector search with minimal complexity",
+      "hybrid_search_needs": "OpenSearch Export or Engine for combining vector and keyword search",
+      "cost_sensitive_projects": "OpenSearch Engine or S3Vector Direct for optimal cost efficiency"
+    }
+  }
+}

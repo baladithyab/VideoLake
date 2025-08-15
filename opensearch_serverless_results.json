@@ -1,0 +1,21 @@
+{
+  "serverless_collection": {
+    "collection_name": "test-vectors-42135968",
+    "collection_id": "en759ppot6aj7yk43o8d",
+    "collection_arn": "arn:aws:aoss:us-east-1:386931836011:collection/en759ppot6aj7yk43o8d",
+    "status": "active",
+    "setup_time_seconds": 30.44678568840027,
+    "endpoint": "en759ppot6aj7yk43o8d.us-east-1.aoss.amazonaws.com",
+    "overall_status": "success"
+  },
+  "hybrid_search": {
+    "error": "Index creation failed: 403 {\"status\":403,\"request-id\":\"da5a2f25-3962-9201-8299-7689fe7c81f3\",\"error\":{\"reason\":\"403 Forbidden\",\"type\":\"Forbidden\"}}\n",
+    "overall_status": "failed"
+  },
+  "cleanup": {
+    "collection": false,
+    "domain": false,
+    "encryption_policy": true,
+    "network_policy": true
+  }
+}

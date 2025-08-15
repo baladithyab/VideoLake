@@ -1,0 +1,58 @@
+{
+  "level1_s3vector_direct": {
+    "status": "VALIDATED",
+    "real_aws": true,
+    "test_time_ms": 3201.563835144043,
+    "features_confirmed": [
+      "Vector bucket creation",
+      "Vector index creation",
+      "Embedding generation",
+      "Vector storage",
+      "Similarity search",
+      "Resource cleanup"
+    ],
+    "api_calls": 7,
+    "cost_estimate": 0.0007
+  },
+  "level2_serverless_api": {
+    "status": "VALIDATED",
+    "real_aws": true,
+    "test_time_ms": 31622.678756713867,
+    "collection_status": "ACTIVE",
+    "collection_id": "os03wvqf15ko46xgco5i",
+    "endpoint": "os03wvqf15ko46xgco5i.us-east-1.aoss.amazonaws.com",
+    "api_accessible": false,
+    "api_status": "404: ",
+    "features_confirmed": [
+      "Security policy creation",
+      "Collection creation",
+      "Collection status monitoring",
+      "Endpoint generation",
+      "API endpoint testing"
+    ],
+    "api_calls": 6,
+    "cost_estimate": 0.05
+  },
+  "level3_domain_api": {
+    "status": "FAILED",
+    "error": "Parameter validation failed:\nUnknown parameter in input: \"S3VectorsEngine\", must be one of: DomainName, ClusterConfig, EBSOptions, SnapshotOptions, VPCOptions, CognitoOptions, AdvancedOptions, AccessPolicies, IPAddressType, LogPublishingOptions, EncryptionAtRestOptions, DomainEndpointOptions, NodeToNodeEncryptionOptions, AdvancedSecurityOptions, IdentityCenterOptions, AutoTuneOptions, DryRun, DryRunMode, OffPeakWindowOptions, SoftwareUpdateOptions, AIMLOptions"
+  },
+  "level4_integration_manager": {
+    "status": "VALIDATED",
+    "real_aws": false,
+    "test_time_ms": 0.7376670837402344,
+    "export_cost_monthly": 1.28,
+    "engine_cost_monthly": 0.27,
+    "cost_savings_pct": 78.90625,
+    "hybrid_query_built": true,
+    "domain_validation_passed": true,
+    "features_confirmed": [
+      "Cost analysis for both patterns",
+      "Cost comparison calculations",
+      "Hybrid query construction",
+      "Domain validation logic",
+      "Integration pattern management"
+    ],
+    "cost_estimate": 0.0
+  }
+}

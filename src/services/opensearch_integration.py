@@ -836,11 +836,104 @@ class OpenSearchIntegrationManager:
         collection_arn: str,
         dlq_bucket: Optional[str]
     ) -> str:
-        """Create IAM role for OpenSearch Ingestion pipeline."""
-        # Implementation would create appropriate IAM role
-        # For now, return placeholder
-        role_name = f"s3vectors-ingestion-role-{int(time.time())}"
-        return f"arn:aws:iam::{self._get_account_id()}:role/{role_name}"
+        """Create real IAM role for OpenSearch Ingestion pipeline."""
+        try:
+            role_name = f"s3vectors-ingestion-role-{int(time.time())}"
+            
+            # Trust policy for OpenSearch Ingestion
+            trust_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": "osis-pipelines.amazonaws.com"
+                        },
+                        "Action": "sts:AssumeRole"
+                    }
+                ]
+            }
+            
+            # Create the role
+            iam_client = boto3.client('iam', region_name=self.region_name)
+            
+            role_response = iam_client.create_role(
+                RoleName=role_name,
+                AssumeRolePolicyDocument=json.dumps(trust_policy),
+                Description=f"Role for S3 Vectors to OpenSearch ingestion pipeline"
+            )
+            
+            role_arn = role_response['Role']['Arn']
+            
+            # Create and attach policy for S3 Vectors access
+            s3vectors_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "s3vectors:ListVectors",
+                            "s3vectors:GetVectorIndex",
+                            "s3vectors:QueryVectors"
+                        ],
+                        "Resource": vector_index_arn
+                    }
+                ]
+            }
+            
+            iam_client.put_role_policy(
+                RoleName=role_name,
+                PolicyName=f"{role_name}-s3vectors-policy",
+                PolicyDocument=json.dumps(s3vectors_policy)
+            )
+            
+            # Create and attach policy for OpenSearch Serverless access
+            opensearch_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "aoss:APIAccessAll",
+                            "aoss:BatchGetCollection"
+                        ],
+                        "Resource": collection_arn
+                    }
+                ]
+            }
+            
+            iam_client.put_role_policy(
+                RoleName=role_name,
+                PolicyName=f"{role_name}-opensearch-policy", 
+                PolicyDocument=json.dumps(opensearch_policy)
+            )
+            
+            # Add DLQ policy if bucket specified
+            if dlq_bucket:
+                dlq_policy = {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": ["s3:PutObject"],
+                            "Resource": f"arn:aws:s3:::{dlq_bucket}/*"
+                        }
+                    ]
+                }
+                
+                iam_client.put_role_policy(
+                    RoleName=role_name,
+                    PolicyName=f"{role_name}-dlq-policy",
+                    PolicyDocument=json.dumps(dlq_policy)
+                )
+            
+            self.logger.log_operation("Created real IAM role for ingestion", role_arn=role_arn)
+            return role_arn
+            
+        except Exception as e:
+            error_msg = f"Failed to create real IAM role: {str(e)}"
+            self.logger.log_operation("IAM role creation failed", level="ERROR", error=error_msg)
+            raise OpenSearchIntegrationError(error_msg) from e
 
     def _create_export_pipeline_config(self, **kwargs) -> str:
         """Create OpenSearch Ingestion pipeline configuration."""
