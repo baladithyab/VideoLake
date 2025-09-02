@@ -75,10 +75,20 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
+
+# Validation results and temporary output files
+*_results.json
+*_validation.json  
+validation_*.json
+test_results_*.json
+results.json
+output.json
+
 # Claude Flow generated files
 .claude/
 .claude-flow/
 .roo*
+.crush*
 memory/
 CLAUDE.md
 .mcp.json
@@ -111,3 +121,4 @@ validation_*.json
 test_results_*.json
 results.json
 output.json
+

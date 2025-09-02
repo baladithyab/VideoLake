@@ -36,10 +36,17 @@ class ResourceRegistry:
                 "index_arn": None,
                 "vector_bucket": None,
                 "s3_bucket": None,
+                "opensearch_collection": None,
+                "opensearch_domain": None,
             },
             "vector_buckets": [],
             "s3_buckets": [],
-            "indexes": []
+            "indexes": [],
+            "opensearch_collections": [],
+            "opensearch_domains": [],
+            "opensearch_pipelines": [],
+            "opensearch_indexes": [],
+            "iam_roles": []
         }
 
     def _ensure_file(self) -> None:
@@ -275,6 +282,297 @@ class ResourceRegistry:
     def list_s3_buckets(self) -> List[Dict[str, Any]]:
         with self._lock:
             return list(self._read().get("s3_buckets", []))
+
+    # OpenSearch resource logging methods
+    
+    def log_opensearch_collection_created(
+        self,
+        collection_name: str,
+        collection_arn: str,
+        region: str,
+        collection_type: str = "VECTORSEARCH",
+        source: str = "opensearch_integration"
+    ) -> None:
+        """Log creation of OpenSearch Serverless collection."""
+        rec = {
+            "name": collection_name,
+            "arn": collection_arn,
+            "region": region,
+            "type": collection_type,
+            "source": source,
+            "status": "created",
+            "created_at": _utc_now_iso(),
+        }
+        with self._lock:
+            data = self._read()
+            data.setdefault("opensearch_collections", [])
+            data["opensearch_collections"].append(rec)
+            self._write(data)
+
+    def log_opensearch_domain_created(
+        self,
+        domain_name: str,
+        domain_arn: str,
+        region: str,
+        engine_version: str,
+        s3_vectors_enabled: bool = False,
+        source: str = "opensearch_integration"
+    ) -> None:
+        """Log creation or configuration of OpenSearch domain."""
+        rec = {
+            "name": domain_name,
+            "arn": domain_arn,
+            "region": region,
+            "engine_version": engine_version,
+            "s3_vectors_enabled": s3_vectors_enabled,
+            "source": source,
+            "status": "created",
+            "created_at": _utc_now_iso(),
+        }
+        with self._lock:
+            data = self._read()
+            data.setdefault("opensearch_domains", [])
+            data["opensearch_domains"].append(rec)
+            self._write(data)
+
+    def log_opensearch_pipeline_created(
+        self,
+        pipeline_name: str,
+        pipeline_arn: str,
+        source_index_arn: str,
+        target_collection: str,
+        region: str,
+        source: str = "opensearch_integration"
+    ) -> None:
+        """Log creation of OpenSearch Ingestion pipeline."""
+        rec = {
+            "name": pipeline_name,
+            "arn": pipeline_arn,
+            "source_index_arn": source_index_arn,
+            "target_collection": target_collection,
+            "region": region,
+            "source": source,
+            "status": "created",
+            "created_at": _utc_now_iso(),
+        }
+        with self._lock:
+            data = self._read()
+            data.setdefault("opensearch_pipelines", [])
+            data["opensearch_pipelines"].append(rec)
+            self._write(data)
+
+    def log_opensearch_index_created(
+        self,
+        index_name: str,
+        opensearch_endpoint: str,
+        vector_field_name: str,
+        vector_dimension: int,
+        space_type: str = "cosine",
+        engine_type: str = "s3vector",
+        source: str = "opensearch_integration"
+    ) -> None:
+        """Log creation of OpenSearch index with S3 vector engine."""
+        rec = {
+            "name": index_name,
+            "endpoint": opensearch_endpoint,
+            "vector_field": vector_field_name,
+            "dimensions": vector_dimension,
+            "space_type": space_type,
+            "engine_type": engine_type,
+            "source": source,
+            "status": "created",
+            "created_at": _utc_now_iso(),
+        }
+        with self._lock:
+            data = self._read()
+            data.setdefault("opensearch_indexes", [])
+            data["opensearch_indexes"].append(rec)
+            self._write(data)
+
+    def log_iam_role_created(
+        self,
+        role_name: str,
+        role_arn: str,
+        purpose: str,
+        region: str,
+        source: str = "opensearch_integration"
+    ) -> None:
+        """Log creation of IAM role for OpenSearch integration."""
+        rec = {
+            "name": role_name,
+            "arn": role_arn,
+            "purpose": purpose,  # e.g., "opensearch_ingestion", "cross_service_access"
+            "region": region,
+            "source": source,
+            "status": "created",
+            "created_at": _utc_now_iso(),
+        }
+        with self._lock:
+            data = self._read()
+            data.setdefault("iam_roles", [])
+            data["iam_roles"].append(rec)
+            self._write(data)
+
+    # OpenSearch resource deletion methods
+    
+    def log_opensearch_collection_deleted(
+        self,
+        collection_name: str,
+        source: str = "opensearch_integration"
+    ) -> None:
+        """Mark OpenSearch Serverless collection as deleted."""
+        with self._lock:
+            data = self._read()
+            collections = data.setdefault("opensearch_collections", [])
+            found = False
+            for rec in reversed(collections):
+                if rec.get("name") == collection_name:
+                    rec["status"] = "deleted"
+                    rec["deleted_at"] = _utc_now_iso()
+                    found = True
+                    break
+            if not found:
+                collections.append({
+                    "name": collection_name,
+                    "status": "deleted",
+                    "source": source,
+                    "deleted_at": _utc_now_iso(),
+                })
+            # Clear active selection if matches
+            active = data.setdefault("active", {})
+            if active.get("opensearch_collection") == collection_name:
+                active["opensearch_collection"] = None
+            self._write(data)
+
+    def log_opensearch_domain_deleted(
+        self,
+        domain_name: str,
+        source: str = "opensearch_integration"
+    ) -> None:
+        """Mark OpenSearch domain as deleted."""
+        with self._lock:
+            data = self._read()
+            domains = data.setdefault("opensearch_domains", [])
+            found = False
+            for rec in reversed(domains):
+                if rec.get("name") == domain_name:
+                    rec["status"] = "deleted"
+                    rec["deleted_at"] = _utc_now_iso()
+                    found = True
+                    break
+            if not found:
+                domains.append({
+                    "name": domain_name,
+                    "status": "deleted",
+                    "source": source,
+                    "deleted_at": _utc_now_iso(),
+                })
+            # Clear active selection if matches
+            active = data.setdefault("active", {})
+            if active.get("opensearch_domain") == domain_name:
+                active["opensearch_domain"] = None
+            self._write(data)
+
+    def log_opensearch_pipeline_deleted(
+        self,
+        pipeline_name: str,
+        source: str = "opensearch_integration"
+    ) -> None:
+        """Mark OpenSearch Ingestion pipeline as deleted."""
+        with self._lock:
+            data = self._read()
+            pipelines = data.setdefault("opensearch_pipelines", [])
+            found = False
+            for rec in reversed(pipelines):
+                if rec.get("name") == pipeline_name:
+                    rec["status"] = "deleted"
+                    rec["deleted_at"] = _utc_now_iso()
+                    found = True
+                    break
+            if not found:
+                pipelines.append({
+                    "name": pipeline_name,
+                    "status": "deleted",
+                    "source": source,
+                    "deleted_at": _utc_now_iso(),
+                })
+            self._write(data)
+
+    # OpenSearch resource listing methods
+    
+    def list_opensearch_collections(self) -> List[Dict[str, Any]]:
+        """List all OpenSearch Serverless collections."""
+        with self._lock:
+            return list(self._read().get("opensearch_collections", []))
+
+    def list_opensearch_domains(self) -> List[Dict[str, Any]]:
+        """List all OpenSearch domains."""
+        with self._lock:
+            return list(self._read().get("opensearch_domains", []))
+
+    def list_opensearch_pipelines(self) -> List[Dict[str, Any]]:
+        """List all OpenSearch Ingestion pipelines."""
+        with self._lock:
+            return list(self._read().get("opensearch_pipelines", []))
+
+    def list_opensearch_indexes(self) -> List[Dict[str, Any]]:
+        """List all OpenSearch indexes with S3 vector engine."""
+        with self._lock:
+            return list(self._read().get("opensearch_indexes", []))
+
+    def list_iam_roles(self) -> List[Dict[str, Any]]:
+        """List all IAM roles created for OpenSearch integration."""
+        with self._lock:
+            return list(self._read().get("iam_roles", []))
+
+    # Active selection methods for OpenSearch resources
+    
+    def set_active_opensearch_collection(self, collection_name: Optional[str]) -> None:
+        """Set active OpenSearch Serverless collection."""
+        with self._lock:
+            data = self._read()
+            data.setdefault("active", {})
+            data["active"]["opensearch_collection"] = collection_name
+            self._write(data)
+
+    def get_active_opensearch_collection(self) -> Optional[str]:
+        """Get active OpenSearch Serverless collection."""
+        with self._lock:
+            data = self._read()
+            return (data.get("active") or {}).get("opensearch_collection")
+
+    def set_active_opensearch_domain(self, domain_name: Optional[str]) -> None:
+        """Set active OpenSearch domain."""
+        with self._lock:
+            data = self._read()
+            data.setdefault("active", {})
+            data["active"]["opensearch_domain"] = domain_name
+            self._write(data)
+
+    def get_active_opensearch_domain(self) -> Optional[str]:
+        """Get active OpenSearch domain."""
+        with self._lock:
+            data = self._read()
+            return (data.get("active") or {}).get("opensearch_domain")
+
+    # Resource summary methods
+    
+    def get_resource_summary(self) -> Dict[str, Any]:
+        """Get summary of all tracked resources."""
+        with self._lock:
+            data = self._read()
+            return {
+                "s3_buckets": len(data.get("s3_buckets", [])),
+                "vector_buckets": len(data.get("vector_buckets", [])),
+                "vector_indexes": len(data.get("indexes", [])),
+                "opensearch_collections": len(data.get("opensearch_collections", [])),
+                "opensearch_domains": len(data.get("opensearch_domains", [])),
+                "opensearch_pipelines": len(data.get("opensearch_pipelines", [])),
+                "opensearch_indexes": len(data.get("opensearch_indexes", [])),
+                "iam_roles": len(data.get("iam_roles", [])),
+                "last_updated": data.get("updated_at"),
+                "active_resources": data.get("active", {})
+            }
 
 
 # Global singleton for easy import

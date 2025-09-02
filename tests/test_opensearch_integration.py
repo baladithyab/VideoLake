@@ -136,7 +136,8 @@ class TestOpenSearchIntegrationManager:
             'DomainName': 'test-domain',
             'EngineVersion': 'OpenSearch_2.19',
             'ClusterConfig': {'InstanceType': 'm6g.large.search.optimized'},
-            'Processing': False
+            'Processing': False,
+            'ARN': 'arn:aws:es:us-east-1:123456789012:domain/test-domain'
         }
         
         with patch.object(integration_manager, 'opensearch_client') as mock_opensearch, \
