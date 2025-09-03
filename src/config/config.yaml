@@ -1,0 +1,121 @@
+# S3Vector Unified Demo Configuration
+# This file contains default configuration settings that can be overridden
+# by environment variables or environment-specific config files.
+
+# Application settings
+environment: development  # development, staging, production, testing
+debug: true
+log_level: INFO
+host: localhost
+port: 8501
+
+# AWS Configuration
+aws:
+  region: us-east-1
+  s3_bucket: s3vector-demo-bucket
+  s3_prefix: demo/
+  bedrock_model_id: amazon.titan-embed-text-v1
+  bedrock_max_tokens: 8192
+
+# Marengo 2.7 Configuration
+# Choose access method: "bedrock" (recommended) or "twelvelabs_api"
+marengo:
+  access_method: bedrock  # "bedrock" or "twelvelabs_api"
+
+  # Bedrock access configuration (recommended)
+  bedrock_model_id: twelvelabs.marengo-embed-2-7-v1:0
+  bedrock_region: us-east-1  # us-east-1, eu-west-1, ap-northeast-2
+
+  # TwelveLabs API access configuration (alternative)
+  twelvelabs_api_url: https://api.twelvelabs.io
+  twelvelabs_model_name: marengo2.7
+
+  # Common processing settings
+  max_video_duration: 3600  # seconds
+  segment_duration: 5.0     # seconds
+  supported_vector_types:
+    - visual-text
+    - visual-image
+    - audio
+
+# Legacy TwelveLabs Configuration (for backward compatibility)
+twelvelabs:
+  api_url: https://api.twelvelabs.io
+  model_name: marengo2.7
+  max_video_duration: 3600  # seconds
+  segment_duration: 5.0     # seconds
+
+# OpenSearch Configuration
+opensearch:
+  index_prefix: s3vector-demo
+  max_results: 100
+
+# Feature Flags
+features:
+  enable_real_aws: false
+  enable_opensearch_hybrid: true
+  enable_video_upload: true
+  enable_cost_estimation: true
+  enable_performance_monitoring: true
+  enable_error_dashboard: true
+  enable_advanced_visualization: true
+  enable_multi_vector_processing: true
+  enable_query_auto_detection: true
+  enable_segment_navigation: true
+
+# UI Configuration
+ui:
+  app_title: "S3Vector Unified Demo"
+  app_icon: "🎬"
+  page_layout: wide
+  sidebar_state: expanded
+  theme: light
+  
+  workflow_sections:
+    - "Upload & Processing"
+    - "Query & Search"
+    - "Results & Playback"
+    - "Embedding Visualization"
+    - "Analytics & Management"
+  
+  default_vector_types:
+    - visual-text
+    - visual-image
+    - audio
+  
+  default_storage_patterns:
+    - direct_s3vector
+    - opensearch_s3vector_hybrid
+  
+  default_processing_mode: parallel
+  default_segment_duration: 5.0
+
+# Performance Configuration
+performance:
+  max_concurrent_jobs: 8
+  request_timeout: 30
+  max_retries: 3
+  cache_ttl: 3600  # seconds
+  max_memory_usage: 4096  # MB
+  enable_caching: true
+  enable_compression: true
+
+# Security Configuration
+security:
+  enable_https: false  # Set to true in production
+  session_timeout: 3600  # seconds
+  max_upload_size: 500   # MB
+  allowed_file_types:
+    - .mp4
+    - .avi
+    - .mov
+    - .mkv
+    - .webm
+  enable_cors: true      # Set to false in production
+  enable_xsrf_protection: false  # Set to true in production
+
+# Environment-specific overrides can be placed in separate files:
+# - config.development.yaml
+# - config.staging.yaml  
+# - config.production.yaml
+# - config.testing.yaml

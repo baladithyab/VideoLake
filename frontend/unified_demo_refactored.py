@@ -36,11 +36,27 @@ from src.services import (
 )
 from src.utils.logging_config import get_logger
 
-# Import demo components
-from frontend.components.demo_config import DemoConfig, DemoUtils
+# Import demo components (using enhanced configuration)
+try:
+    from frontend.components.config_adapter import get_enhanced_config, get_enhanced_utils
+    DemoConfig = get_enhanced_config()
+    DemoUtils = get_enhanced_utils()
+    ENHANCED_CONFIG = True
+except ImportError:
+    from frontend.components.demo_config import DemoConfig, DemoUtils
+    DemoConfig = DemoConfig()
+    DemoUtils = DemoUtils()
+    ENHANCED_CONFIG = False
 from frontend.components.search_components import SearchComponents
 from frontend.components.results_components import ResultsComponents
 from frontend.components.processing_components import ProcessingComponents
+from frontend.components.error_handling import (
+    ErrorBoundary,
+    FallbackComponents,
+    get_error_handler,
+    display_error_dashboard,
+    ErrorSeverity
+)
 
 logger = get_logger(__name__)
 
@@ -50,8 +66,8 @@ class UnifiedS3VectorDemo:
     
     def __init__(self):
         """Initialize the unified demo application."""
-        self.config = DemoConfig()
-        self.utils = DemoUtils()
+        self.config = DemoConfig
+        self.utils = DemoUtils
         
         # Initialize service manager and coordinator
         self.service_manager = None
@@ -253,8 +269,9 @@ class UnifiedS3VectorDemo:
     
     def render_upload_processing_section(self):
         """Render the upload and processing section."""
-        # Storage pattern selection
-        st.subheader("🏗️ Storage Pattern Selection")
+        with ErrorBoundary("Upload & Processing"):
+            # Storage pattern selection
+            st.subheader("🏗️ Storage Pattern Selection")
         
         col1, col2 = st.columns(2)
         
@@ -331,27 +348,29 @@ class UnifiedS3VectorDemo:
             st.warning("⚠️ **No processed videos available** - Please complete the Upload & Processing step first")
             return
 
-        # Use the new search interface from search components
-        search_results = self.search_components.render_search_interface(
-            use_real_aws=st.session_state.use_real_aws
-        )
+        # Use the new search interface from search components with error handling
+        with ErrorBoundary("Query & Search"):
+            search_results = self.search_components.render_search_interface(
+                use_real_aws=st.session_state.use_real_aws
+            )
     
     def render_results_playback_section(self):
         """Render the results and playback section."""
-        # Display search results
-        self.results_components.display_search_results(st.session_state.search_results)
-        
-        # Video player
-        self.results_components.render_video_player_placeholder()
-        
-        # Segment overlay
-        self.results_components.render_segment_overlay_placeholder()
-        
-        # Performance metrics
-        self.results_components.display_performance_metrics(st.session_state.search_results)
-        
-        # Export functionality
-        self.results_components.render_results_export(st.session_state.search_results)
+        with ErrorBoundary("Results & Playback"):
+            # Display search results
+            self.results_components.display_search_results(st.session_state.search_results)
+
+            # Video player
+            self.results_components.render_video_player_placeholder()
+
+            # Segment overlay
+            self.results_components.render_segment_overlay_placeholder()
+
+            # Performance metrics
+            self.results_components.display_performance_metrics(st.session_state.search_results)
+
+            # Export functionality
+            self.results_components.render_results_export(st.session_state.search_results)
     
     def render_visualization_section(self):
         """Render the embedding visualization section."""
@@ -366,16 +385,21 @@ class UnifiedS3VectorDemo:
     
     def render_analytics_section(self):
         """Render the analytics and management section."""
-        # Processing progress
-        self.processing_components.show_processing_progress()
-        
-        # Cost estimation
-        self.processing_components.show_cost_estimation()
-        
-        # System status
-        st.subheader("🔧 System Status")
-        if st.button("🔄 Refresh Status"):
-            self.test_service_manager_integration()
+        with ErrorBoundary("Analytics & Management"):
+            # Processing progress
+            self.processing_components.show_processing_progress()
+
+            # Cost estimation
+            self.processing_components.show_cost_estimation()
+
+            # Error dashboard
+            st.subheader("🐛 Error Dashboard")
+            display_error_dashboard()
+
+            # System status
+            st.subheader("🔧 System Status")
+            if st.button("🔄 Refresh Status"):
+                self.test_service_manager_integration()
     
     def render_section_navigation(self, current_section: str):
         """Render navigation controls for workflow sections."""

@@ -1,0 +1,45 @@
+# Production Configuration Overrides
+# These settings override the default configuration for production environment
+
+environment: production
+debug: false
+log_level: WARNING
+host: 0.0.0.0
+port: 8501
+
+# AWS Configuration for Production
+aws:
+  region: us-east-1
+  s3_bucket: s3vector-prod-bucket
+  s3_prefix: prod/
+
+# Feature Flags for Production
+features:
+  enable_real_aws: true
+  enable_opensearch_hybrid: true
+  enable_video_upload: true
+  enable_cost_estimation: true
+  enable_performance_monitoring: true
+  enable_error_dashboard: false  # Disable in production for security
+  enable_advanced_visualization: true
+  enable_multi_vector_processing: true
+  enable_query_auto_detection: true
+  enable_segment_navigation: true
+
+# Performance Configuration for Production
+performance:
+  max_concurrent_jobs: 16
+  request_timeout: 60
+  max_retries: 5
+  cache_ttl: 7200  # 2 hours
+  max_memory_usage: 8192  # 8GB
+  enable_caching: true
+  enable_compression: true
+
+# Security Configuration for Production
+security:
+  enable_https: true
+  session_timeout: 1800  # 30 minutes
+  max_upload_size: 1000   # 1GB
+  enable_cors: false
+  enable_xsrf_protection: true

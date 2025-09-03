@@ -306,6 +306,37 @@ class ResultsComponents:
             if st.button("📋 Copy to Clipboard"):
                 st.info("Clipboard functionality will be implemented")
 
+    def analyze_search_results(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Analyze search results and return statistics."""
+        if not results:
+            return {
+                'total_results': 0,
+                'avg_similarity': 0.0,
+                'vector_type_distribution': {},
+                'top_result': None
+            }
+
+        # Calculate statistics
+        total_results = len(results)
+        similarities = [r.get('similarity', 0.0) for r in results]
+        avg_similarity = sum(similarities) / len(similarities) if similarities else 0.0
+
+        # Vector type distribution
+        vector_types = [r.get('vector_type', 'unknown') for r in results]
+        vector_type_counts = {}
+        for vt in vector_types:
+            vector_type_counts[vt] = vector_type_counts.get(vt, 0) + 1
+
+        # Top result
+        top_result = max(results, key=lambda r: r.get('similarity', 0.0)) if results else None
+
+        return {
+            'total_results': total_results,
+            'avg_similarity': avg_similarity,
+            'vector_type_distribution': vector_type_counts,
+            'top_result': top_result
+        }
+
     def _display_results_list(self, search_results: Dict[str, Any]):
         """Display search results as a list."""
         st.subheader("📋 Search Results")

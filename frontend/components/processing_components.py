@@ -236,7 +236,36 @@ class ProcessingComponents:
                     "avg_similarity_score": random.uniform(0.75, 0.95)
                 }
         
+        # Add processing time and cost estimate
+        results["processing_time_ms"] = int(results["processing_time_sec"] * 1000)
+        results["cost_estimate"] = results["cost_usd"]
+
         return results
+
+    def simulate_video_upload(self, filename: str, vector_types: List[str]) -> Dict[str, Any]:
+        """Simulate video upload process."""
+        import time
+
+        # Simulate upload time
+        time.sleep(0.1)
+
+        # Generate mock S3 URI
+        s3_uri = f"s3://demo-bucket/uploads/{filename}"
+
+        # Simulate file size and duration
+        file_size_mb = random.uniform(50, 500)
+        duration_minutes = random.uniform(1, 10)
+
+        return {
+            'status': 'success',
+            'filename': filename,
+            's3_uri': s3_uri,
+            'file_size_mb': file_size_mb,
+            'duration_minutes': duration_minutes,
+            'vector_types': vector_types,
+            'upload_time_ms': 100,
+            'message': f'Successfully uploaded {filename} to {s3_uri}'
+        }
     
     def show_processing_progress(self):
         """Show processing progress for active jobs."""

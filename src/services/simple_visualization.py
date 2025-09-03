@@ -196,13 +196,27 @@ class SimpleVisualization:
     
     def _apply_tsne(self, embeddings: np.ndarray) -> np.ndarray:
         """Apply t-SNE dimensionality reduction."""
+        # Check minimum requirements for t-SNE
+        n_samples = embeddings.shape[0]
+        if n_samples < 4:
+            # Fall back to PCA for very small datasets
+            return self._apply_pca(embeddings)
+
         # Use PCA first if too many dimensions
         if embeddings.shape[1] > 50:
-            pca = PCA(n_components=50, random_state=42)
+            n_components = min(50, n_samples - 1)
+            pca = PCA(n_components=n_components, random_state=42)
             embeddings = pca.fit_transform(embeddings)
-        
-        tsne = TSNE(n_components=2, random_state=42, perplexity=min(30, len(embeddings)-1))
-        return tsne.fit_transform(embeddings)
+
+        # Adjust perplexity for small datasets
+        perplexity = min(30, max(1, (n_samples - 1) // 3))
+
+        try:
+            tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity)
+            return tsne.fit_transform(embeddings)
+        except Exception:
+            # Fall back to PCA if t-SNE fails
+            return self._apply_pca(embeddings)
     
     def _prepare_plot_data(
         self, 
