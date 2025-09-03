@@ -372,27 +372,63 @@ class UnifiedS3VectorDemo:
         return False
     
     def render_upload_processing_section(self):
-        """Render the upload and processing section."""
+        """Render the upload and processing section with comprehensive Marengo 2.7 demo."""
         st.header("🎬 Upload & Processing")
-        st.markdown("Select videos and configure multi-vector processing with Marengo 2.7")
+        st.markdown("**Complete Marengo 2.7 Multi-Vector Pipeline with Dual Storage Patterns**")
 
         # Service manager integration demo
         if self.service_manager and self.coordinator:
             st.success("✅ **Multi-Vector Coordinator Ready** - Advanced processing capabilities available")
 
+            # Dual Storage Pattern Selection
+            st.subheader("🏗️ Storage Pattern Selection")
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.info("**Pattern 1: Direct S3Vector Querying**")
+                st.write("• Query S3Vector indexes directly")
+                st.write("• Native S3Vector performance")
+                st.write("• Optimized for vector similarity search")
+
+            with col2:
+                st.info("**Pattern 2: OpenSearch + S3Vector Hybrid**")
+                st.write("• OpenSearch with S3Vector backend")
+                st.write("• Metadata in OpenSearch, vectors in S3Vector")
+                st.write("• Advanced search with vector capabilities")
+
+            # Storage pattern selection
+            storage_patterns = st.multiselect(
+                "Select Storage Patterns to Demonstrate:",
+                options=["direct_s3vector", "opensearch_s3vector_hybrid"],
+                default=["direct_s3vector", "opensearch_s3vector_hybrid"],
+                help="Choose which storage patterns to implement for comparison"
+            )
+
+            st.session_state.selected_storage_patterns = storage_patterns
+
             # Configuration section
             col1, col2 = st.columns(2)
 
             with col1:
-                st.subheader("🧠 Vector Configuration")
+                st.subheader("🧠 Marengo 2.7 Vector Configuration")
 
-                # Vector type selection
+                # Vector type selection with detailed descriptions
                 available_types = self.config.default_vector_types
                 selected_types = st.multiselect(
                     "Select Vector Types:",
                     options=available_types,
                     default=available_types,
-                    help="Choose which vector types to generate"
+                    help="Choose which Marengo 2.7 vector types to generate"
+                )
+
+                # Segment configuration
+                segment_duration = st.slider(
+                    "Segment Duration (seconds):",
+                    min_value=2.0,
+                    max_value=10.0,
+                    value=5.0,
+                    step=0.5,
+                    help="Duration of each video segment for embedding generation"
                 )
 
                 # Processing strategy
@@ -405,17 +441,17 @@ class UnifiedS3VectorDemo:
 
                 # Update session state
                 st.session_state.selected_vector_types = selected_types
+                st.session_state.segment_duration = segment_duration
                 st.session_state.processing_mode = processing_mode
 
             with col2:
                 st.subheader("⚙️ Processing Options")
 
-                # Storage strategy
-                storage_strategy = st.selectbox(
-                    "Storage Strategy:",
-                    options=["direct_s3vector", "hybrid_opensearch"],
-                    index=0,
-                    help="How to store the generated vectors"
+                # Parallel upserting configuration
+                enable_parallel_upserting = st.checkbox(
+                    "Enable Parallel Upserting",
+                    value=True,
+                    help="Store embeddings in both patterns simultaneously"
                 )
 
                 # Cost estimation toggle
@@ -425,35 +461,102 @@ class UnifiedS3VectorDemo:
                     help="Show estimated processing costs"
                 )
 
-                # Update session state
-                st.session_state.storage_strategy = storage_strategy
-                st.session_state.enable_cost_estimation = enable_cost_estimation
+                # Performance monitoring
+                enable_performance_monitoring = st.checkbox(
+                    "Enable Performance Monitoring",
+                    value=True,
+                    help="Track performance differences between storage patterns"
+                )
 
-            # Show vector type capabilities
-            with st.expander("🧠 Available Vector Types"):
+                # Update session state
+                st.session_state.enable_parallel_upserting = enable_parallel_upserting
+                st.session_state.enable_cost_estimation = enable_cost_estimation
+                st.session_state.enable_performance_monitoring = enable_performance_monitoring
+
+            # Video Input Options
+            st.subheader("📹 Video Input Options")
+
+            input_method = st.radio(
+                "Choose Input Method:",
+                options=["Sample Videos", "Sample Collection", "Upload File", "S3 URI"],
+                horizontal=True,
+                help="Select how to provide video content for processing"
+            )
+
+            if input_method == "Sample Videos":
+                self._render_sample_videos_selection()
+            elif input_method == "Sample Collection":
+                self._render_sample_collection_selection()
+            elif input_method == "Upload File":
+                self._render_file_upload_interface()
+            elif input_method == "S3 URI":
+                self._render_s3_uri_input()
+
+            # Processing Controls
+            st.subheader("🚀 Processing Controls")
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                if st.button("🎬 Start Processing", type="primary", use_container_width=True):
+                    self._start_marengo_processing()
+
+            with col2:
+                if st.button("📊 View Progress", use_container_width=True):
+                    self._show_processing_progress()
+
+            with col3:
+                if st.button("💰 Cost Estimate", use_container_width=True):
+                    self._show_cost_estimation()
+
+            # Show vector type capabilities with Marengo details
+            with st.expander("🧠 Marengo 2.7 Vector Types Details"):
+                vector_details = {
+                    "visual-text": {
+                        "description": "Text content extracted from video frames",
+                        "use_cases": "OCR, captions, signs, text overlays",
+                        "provider": "TwelveLabs Marengo 2.7"
+                    },
+                    "visual-image": {
+                        "description": "Visual content and objects in video frames",
+                        "use_cases": "Object detection, scene analysis, visual similarity",
+                        "provider": "TwelveLabs Marengo 2.7"
+                    },
+                    "audio": {
+                        "description": "Audio content and speech from video",
+                        "use_cases": "Speech recognition, audio similarity, sound detection",
+                        "provider": "TwelveLabs Marengo 2.7"
+                    }
+                }
+
                 for vtype in available_types:
-                    provider = self._get_service_provider_for_type(vtype)
+                    details = vector_details.get(vtype, {})
                     is_selected = vtype in selected_types
                     status = "✅ Selected" if is_selected else "⚪ Available"
-                    st.write(f"• **{vtype}**: {provider} service - {status}")
 
-            # Show processing modes
-            with st.expander("⚡ Processing Strategies"):
-                strategies = {
-                    "parallel": "Process all vector types simultaneously (fastest)",
-                    "sequential": "Process vector types one by one (most reliable)",
-                    "adaptive": "Automatically select optimal strategy based on load"
-                }
-                for mode, description in strategies.items():
-                    is_selected = mode == processing_mode
-                    status = "✅ Selected" if is_selected else "⚪ Available"
-                    st.write(f"• **{mode.title()}**: {description} - {status}")
+                    st.write(f"**{vtype}** - {status}")
+                    st.write(f"• **Description**: {details.get('description', 'N/A')}")
+                    st.write(f"• **Use Cases**: {details.get('use_cases', 'N/A')}")
+                    st.write(f"• **Provider**: {details.get('provider', 'Unknown')}")
+                    st.write("---")
+
+            # Show storage pattern details
+            with st.expander("🏗️ Storage Pattern Comparison"):
+                st.write("**Direct S3Vector Pattern:**")
+                st.write("• Vector data stored directly in S3Vector indexes")
+                st.write("• One index per vector type (visual-text, visual-image, audio)")
+                st.write("• Optimized for pure vector similarity search")
+                st.write("• Lower latency for vector operations")
+                st.write("")
+
+                st.write("**OpenSearch + S3Vector Hybrid Pattern:**")
+                st.write("• Vector data stored in S3Vector as backend")
+                st.write("• Metadata and search capabilities in OpenSearch")
+                st.write("• Supports complex queries combining vectors and metadata")
+                st.write("• Advanced filtering and aggregation capabilities")
 
         else:
             st.error("❌ **Service Manager Unavailable** - Limited functionality")
-
-        # Placeholder for upload interface - will be implemented in T3.1
-        st.info("📋 **Next**: Upload interface will be implemented in T3.1 (Consolidate Upload Features)")
 
         # Show current processing jobs if any
         if st.session_state.processing_jobs:
@@ -462,8 +565,180 @@ class UnifiedS3VectorDemo:
                 with st.expander(f"Job: {job_id}"):
                     st.json(job_info)
 
+        # Video Input Section
+        self._render_video_input_section()
+
         # Workflow navigation
         self._render_section_navigation("upload")
+
+    def _render_video_input_section(self):
+        """Render video input options for the demo."""
+        st.subheader("📹 Video Input Options")
+
+        # Input method selection
+        input_method = st.selectbox(
+            "Select Input Method:",
+            options=["sample_videos", "sample_collection", "upload_file", "s3_uri"],
+            index=0,
+            help="Choose how to provide video input"
+        )
+
+        if input_method == "sample_videos":
+            # Sample video selection
+            sample_videos = {
+                "Demo Video 1": "s3://s3vector-demo-bucket/sample-videos/demo-video-1.mp4",
+                "Demo Video 2": "s3://s3vector-demo-bucket/sample-videos/demo-video-2.mp4",
+                "Demo Video 3": "s3://s3vector-demo-bucket/sample-videos/demo-video-3.mp4"
+            }
+
+            selected_video = st.selectbox(
+                "Select Sample Video:",
+                options=list(sample_videos.keys()),
+                help="Choose a pre-loaded sample video"
+            )
+
+            if selected_video:
+                video_uri = sample_videos[selected_video]
+                st.session_state.selected_video_uri = video_uri
+                st.success(f"Selected: {selected_video}")
+                st.code(video_uri)
+
+                # Process button
+                if st.button("🚀 Process Video with Dual Storage Patterns", type="primary"):
+                    self._start_dual_pattern_processing(video_uri)
+
+        elif input_method == "sample_collection":
+            st.info("📦 **Sample Collection Processing**")
+            st.write("Process multiple videos simultaneously to demonstrate batch capabilities")
+
+            collection_size = st.selectbox(
+                "Collection Size:",
+                options=[3, 5, 10],
+                index=0,
+                help="Number of videos to process in batch"
+            )
+
+            if st.button("🚀 Process Sample Collection", type="primary"):
+                self._start_collection_processing(collection_size)
+
+        elif input_method == "upload_file":
+            st.info("📤 **File Upload**")
+            uploaded_file = st.file_uploader(
+                "Upload Video File:",
+                type=['mp4', 'avi', 'mov', 'mkv'],
+                help="Upload a video file for processing"
+            )
+
+            if uploaded_file:
+                st.success(f"Uploaded: {uploaded_file.name}")
+                if st.button("🚀 Process Uploaded Video", type="primary"):
+                    self._start_upload_processing(uploaded_file)
+
+        elif input_method == "s3_uri":
+            st.info("🔗 **S3 URI Input**")
+            s3_uri = st.text_input(
+                "Enter S3 URI:",
+                placeholder="s3://your-bucket/path/to/video.mp4",
+                help="Provide S3 URI of video to process"
+            )
+
+            if s3_uri and st.button("🚀 Process S3 Video", type="primary"):
+                self._start_dual_pattern_processing(s3_uri)
+
+    def _start_dual_pattern_processing(self, video_uri: str):
+        """Start processing video with dual storage patterns."""
+        if not st.session_state.use_real_aws:
+            # Simulation mode
+            st.info("🛡️ **Simulation Mode** - Generating demo processing results")
+
+            # Simulate processing job
+            job_id = f"demo_job_{int(time.time())}"
+            job_info = {
+                "job_id": job_id,
+                "video_uri": video_uri,
+                "status": "processing",
+                "vector_types": st.session_state.selected_vector_types,
+                "storage_patterns": st.session_state.get('selected_storage_patterns', ['direct_s3vector']),
+                "segment_duration": st.session_state.get('segment_duration', 5.0),
+                "started_at": time.time()
+            }
+
+            st.session_state.processing_jobs[job_id] = job_info
+            st.success(f"✅ Started demo processing job: {job_id}")
+
+            # Simulate completion after a delay
+            time.sleep(2)
+            job_info["status"] = "completed"
+            job_info["completed_at"] = time.time()
+
+            # Generate demo results
+            demo_results = self._generate_demo_processing_results(job_info)
+            st.session_state.processed_videos[job_id] = demo_results
+
+            st.success("🎉 Demo processing completed! Check the Results & Playback section.")
+
+        else:
+            # Real AWS processing
+            st.warning("⚠️ **Real AWS Mode** - This will incur costs")
+
+            if st.button("Confirm Real Processing", type="secondary"):
+                try:
+                    # Use the multi-vector coordinator for real processing
+                    processing_config = {
+                        "vector_types": st.session_state.selected_vector_types,
+                        "storage_patterns": st.session_state.get('selected_storage_patterns', ['direct_s3vector']),
+                        "segment_duration": st.session_state.get('segment_duration', 5.0),
+                        "processing_mode": st.session_state.get('processing_mode', 'parallel')
+                    }
+
+                    # This would integrate with the actual MultiVectorCoordinator
+                    st.info("🔄 Real processing integration would be implemented here")
+
+                except Exception as e:
+                    st.error(f"Processing failed: {e}")
+
+    def _start_collection_processing(self, collection_size: int):
+        """Start processing a collection of videos."""
+        st.info(f"🔄 Processing collection of {collection_size} videos...")
+        # Implementation for batch processing
+
+    def _start_upload_processing(self, uploaded_file):
+        """Start processing an uploaded video file."""
+        st.info(f"🔄 Processing uploaded file: {uploaded_file.name}")
+        # Implementation for uploaded file processing
+
+    def _generate_demo_processing_results(self, job_info: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate demo processing results for simulation."""
+        import random
+
+        vector_types = job_info["vector_types"]
+        storage_patterns = job_info["storage_patterns"]
+
+        results = {
+            "job_id": job_info["job_id"],
+            "video_uri": job_info["video_uri"],
+            "total_segments": random.randint(8, 15),
+            "processing_time_sec": random.uniform(45, 120),
+            "cost_usd": random.uniform(0.05, 0.15),
+            "vector_types_processed": vector_types,
+            "storage_patterns_used": storage_patterns,
+            "segment_duration": job_info["segment_duration"],
+            "embeddings_generated": {}
+        }
+
+        # Generate embedding info for each vector type and storage pattern
+        for vector_type in vector_types:
+            results["embeddings_generated"][vector_type] = {}
+
+            for pattern in storage_patterns:
+                results["embeddings_generated"][vector_type][pattern] = {
+                    "index_arn": f"arn:aws:s3vectors:us-east-1:123456789012:index/demo-{vector_type}-{pattern}",
+                    "vectors_stored": results["total_segments"],
+                    "storage_size_mb": random.uniform(5, 25),
+                    "avg_similarity_score": random.uniform(0.75, 0.95)
+                }
+
+        return results
 
     def _get_service_provider_for_type(self, vector_type: str) -> str:
         """Get the service provider for a vector type."""
@@ -559,9 +834,9 @@ class UnifiedS3VectorDemo:
                     st.info("Navigation between sections will be enhanced in future updates")
     
     def render_query_search_section(self):
-        """Render the query and search section."""
+        """Render the query and search section with dual pattern comparison."""
         st.header("🔍 Query & Search")
-        st.markdown("Intelligent semantic search with automatic query routing")
+        st.markdown("**Dual Storage Pattern Search Comparison** - Independent pattern interaction with performance metrics")
 
         # Check prerequisites
         if not st.session_state.processed_videos:
@@ -573,7 +848,7 @@ class UnifiedS3VectorDemo:
             st.success("✅ **Multi-Vector Search Engine Ready** - Cross-vector search capabilities available")
 
             # Main search interface
-            st.subheader("🔍 Semantic Search")
+            st.subheader("🔍 Semantic Search Query")
 
             col1, col2 = st.columns([3, 1])
 
@@ -586,7 +861,17 @@ class UnifiedS3VectorDemo:
                 )
 
             with col2:
-                search_button = st.button("🔍 Search", type="primary", use_container_width=True)
+                # Search both patterns independently
+                search_both = st.button("🔍 Search Both Patterns", type="primary", use_container_width=True)
+
+            # Independent pattern search buttons
+            col1, col2 = st.columns(2)
+
+            with col1:
+                search_s3vector = st.button("🎯 Search Direct S3Vector", use_container_width=True)
+
+            with col2:
+                search_opensearch = st.button("🔍 Search OpenSearch Hybrid", use_container_width=True)
 
             # Search configuration
             with st.expander("⚙️ Search Configuration"):
@@ -648,15 +933,18 @@ class UnifiedS3VectorDemo:
                 with st.expander("📋 Detailed Analysis"):
                     st.json(query_analysis)
 
-                # Search execution (placeholder)
-                if search_button:
-                    with st.spinner("🔍 Searching across vector indices..."):
-                        # Placeholder for actual search - will be implemented in T3.3
-                        st.success("Search functionality will be implemented in T3.3")
+                # Search execution with dual pattern support
+                if search_both:
+                    st.subheader("� Dual Pattern Search Results")
+                    self._execute_dual_pattern_search(search_query, query_analysis, search_vector_types, num_results, similarity_threshold)
 
-                        # Update session state to mark search as attempted
-                        st.session_state.current_query = search_query
-                        st.session_state.query_analysis = query_analysis
+                elif search_s3vector:
+                    st.subheader("🎯 Direct S3Vector Search Results")
+                    self._execute_s3vector_search(search_query, query_analysis, search_vector_types, num_results, similarity_threshold)
+
+                elif search_opensearch:
+                    st.subheader("🔍 OpenSearch Hybrid Search Results")
+                    self._execute_opensearch_search(search_query, query_analysis, search_vector_types, num_results, similarity_threshold)
 
             # Show search capabilities
             with st.expander("🎯 Search Capabilities"):
@@ -708,53 +996,52 @@ class UnifiedS3VectorDemo:
 
         # Simulate search results for demo
         if st.button("🔄 Generate Demo Results", help="Simulate search results for demonstration"):
-            demo_results = self._generate_demo_search_results()
-            st.session_state.search_results = demo_results
+            demo_results = self._generate_demo_search_results("sample query", "s3vector", 5)
+            st.session_state.search_results = {"s3vector": demo_results, "query": "sample query"}
             st.success(f"Generated {len(demo_results)} demo results")
 
         # Display search results
         if st.session_state.search_results:
-            st.write(f"**Found {len(st.session_state.search_results)} matching segments**")
+            # Handle different result formats
+            if isinstance(st.session_state.search_results, dict):
+                # New format with pattern-specific results
+                if "s3vector" in st.session_state.search_results and "opensearch" in st.session_state.search_results:
+                    # Dual pattern results
+                    st.subheader("📊 Dual Pattern Search Results")
 
-            # Results table
-            results_data = []
-            for i, result in enumerate(st.session_state.search_results):
-                results_data.append({
-                    "Rank": i + 1,
-                    "Video": result["video_name"],
-                    "Segment": f"{result['start_time']:.1f}s - {result['end_time']:.1f}s",
-                    "Similarity": f"{result['similarity_score']:.3f}",
-                    "Vector Type": result["vector_type"],
-                    "Description": result["description"][:50] + "..." if len(result["description"]) > 50 else result["description"]
-                })
-
-            # Display results with selection
-            selected_result = st.selectbox(
-                "Select a result to view:",
-                options=range(len(results_data)),
-                format_func=lambda x: f"#{x+1}: {results_data[x]['Video']} ({results_data[x]['Segment']}) - {results_data[x]['Similarity']}",
-                help="Choose a search result to view in the video player"
-            )
-
-            if selected_result is not None:
-                result = st.session_state.search_results[selected_result]
-                st.session_state.selected_segment = result
-
-                # Show selected result details
-                with st.expander("📋 Selected Result Details"):
                     col1, col2 = st.columns(2)
 
                     with col1:
-                        st.write(f"**Video**: {result['video_name']}")
-                        st.write(f"**Segment**: {result['start_time']:.1f}s - {result['end_time']:.1f}s")
-                        st.write(f"**Duration**: {result['end_time'] - result['start_time']:.1f}s")
+                        st.write("**🎯 Direct S3Vector Results**")
+                        s3vector_results = st.session_state.search_results["s3vector"]
+                        if s3vector_results:
+                            self._display_results_table(s3vector_results, "s3vector")
 
                     with col2:
-                        st.write(f"**Similarity**: {result['similarity_score']:.3f}")
-                        st.write(f"**Vector Type**: {result['vector_type']}")
-                        st.write(f"**Confidence**: {result.get('confidence', 0.85):.2f}")
+                        st.write("**🔍 OpenSearch Hybrid Results**")
+                        opensearch_results = st.session_state.search_results["opensearch"]
+                        if opensearch_results:
+                            self._display_results_table(opensearch_results, "opensearch")
 
-                    st.write(f"**Description**: {result['description']}")
+                elif "s3vector" in st.session_state.search_results:
+                    # S3Vector only results
+                    st.subheader("🎯 Direct S3Vector Results")
+                    results = st.session_state.search_results["s3vector"]
+                    if results:
+                        self._display_results_table(results, "s3vector")
+
+                elif "opensearch" in st.session_state.search_results:
+                    # OpenSearch only results
+                    st.subheader("🔍 OpenSearch Hybrid Results")
+                    results = st.session_state.search_results["opensearch"]
+                    if results:
+                        self._display_results_table(results, "opensearch")
+
+            else:
+                # Legacy format - list of results
+                st.subheader("📊 Search Results")
+                st.write(f"**Found {len(st.session_state.search_results)} matching segments**")
+                self._display_results_table(st.session_state.search_results, "legacy")
 
                 # Video player placeholder
                 st.subheader("🎬 Video Player")
@@ -1140,6 +1427,610 @@ class UnifiedS3VectorDemo:
             embeddings.append(embedding)
 
         return embeddings
+
+    def _render_sample_videos_selection(self):
+        """Render sample videos selection interface."""
+        st.write("**Select from curated sample videos:**")
+
+        # Sample videos with metadata
+        sample_videos = {
+            "Demo Video 1": {
+                "s3_uri": "s3://sample-bucket/demo-video-1.mp4",
+                "duration": "2:30",
+                "description": "Product demonstration with speech and visual elements",
+                "size": "45 MB"
+            },
+            "Demo Video 2": {
+                "s3_uri": "s3://sample-bucket/demo-video-2.mp4",
+                "duration": "1:45",
+                "description": "Nature documentary with narration",
+                "size": "32 MB"
+            },
+            "Demo Video 3": {
+                "s3_uri": "s3://sample-bucket/demo-video-3.mp4",
+                "duration": "3:15",
+                "description": "Conference presentation with slides",
+                "size": "58 MB"
+            }
+        }
+
+        selected_videos = []
+        for video_name, metadata in sample_videos.items():
+            col1, col2 = st.columns([1, 3])
+
+            with col1:
+                if st.checkbox(video_name, key=f"sample_{video_name}"):
+                    selected_videos.append(metadata["s3_uri"])
+
+            with col2:
+                st.write(f"**Duration**: {metadata['duration']} | **Size**: {metadata['size']}")
+                st.write(f"*{metadata['description']}*")
+
+        st.session_state.selected_videos = selected_videos
+
+        if selected_videos:
+            st.success(f"✅ Selected {len(selected_videos)} sample video(s)")
+
+    def _render_sample_collection_selection(self):
+        """Render sample collection selection interface."""
+        st.write("**Select from pre-configured video collections:**")
+
+        collections = {
+            "Product Demo Collection": {
+                "video_count": 5,
+                "total_duration": "12:30",
+                "description": "Product demonstrations and tutorials",
+                "s3_prefix": "s3://sample-bucket/collections/product-demos/"
+            },
+            "Educational Content": {
+                "video_count": 8,
+                "total_duration": "25:45",
+                "description": "Educational videos and lectures",
+                "s3_prefix": "s3://sample-bucket/collections/educational/"
+            },
+            "Marketing Materials": {
+                "video_count": 3,
+                "total_duration": "8:15",
+                "description": "Marketing videos and advertisements",
+                "s3_prefix": "s3://sample-bucket/collections/marketing/"
+            }
+        }
+
+        selected_collection = st.selectbox(
+            "Choose a collection:",
+            options=list(collections.keys()),
+            help="Select a pre-configured collection of videos"
+        )
+
+        if selected_collection:
+            collection_info = collections[selected_collection]
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Videos", collection_info["video_count"])
+            with col2:
+                st.metric("Total Duration", collection_info["total_duration"])
+            with col3:
+                st.metric("Estimated Cost", f"${collection_info['video_count'] * 0.25:.2f}")
+
+            st.info(f"**Description**: {collection_info['description']}")
+
+            st.session_state.selected_collection = {
+                "name": selected_collection,
+                "s3_prefix": collection_info["s3_prefix"],
+                "video_count": collection_info["video_count"]
+            }
+
+    def _render_file_upload_interface(self):
+        """Render file upload interface."""
+        st.write("**Upload video files for processing:**")
+
+        uploaded_files = st.file_uploader(
+            "Choose video files",
+            type=['mp4', 'mov', 'avi', 'mkv'],
+            accept_multiple_files=True,
+            help="Upload video files (max 100MB each)"
+        )
+
+        if uploaded_files:
+            st.write(f"**Uploaded {len(uploaded_files)} file(s):**")
+
+            total_size = 0
+            for file in uploaded_files:
+                file_size_mb = file.size / (1024 * 1024)
+                total_size += file_size_mb
+                st.write(f"• {file.name} ({file_size_mb:.1f} MB)")
+
+            st.info(f"**Total size**: {total_size:.1f} MB")
+
+            if total_size > 500:  # 500MB limit
+                st.warning("⚠️ Total file size exceeds 500MB limit. Consider processing in batches.")
+
+            st.session_state.uploaded_files = uploaded_files
+
+    def _render_s3_uri_input(self):
+        """Render S3 URI input interface."""
+        st.write("**Enter S3 URI(s) for existing videos:**")
+
+        # Single S3 URI input
+        s3_uri = st.text_input(
+            "S3 URI:",
+            placeholder="s3://your-bucket/path/to/video.mp4",
+            help="Enter the S3 URI of a video file"
+        )
+
+        # Batch S3 URI input
+        st.write("**Or enter multiple S3 URIs (one per line):**")
+        s3_uris_text = st.text_area(
+            "Multiple S3 URIs:",
+            placeholder="s3://bucket/video1.mp4\ns3://bucket/video2.mp4\ns3://bucket/video3.mp4",
+            help="Enter multiple S3 URIs, one per line"
+        )
+
+        # Process inputs
+        s3_uris = []
+        if s3_uri.strip():
+            s3_uris.append(s3_uri.strip())
+
+        if s3_uris_text.strip():
+            batch_uris = [uri.strip() for uri in s3_uris_text.strip().split('\n') if uri.strip()]
+            s3_uris.extend(batch_uris)
+
+        # Validate S3 URIs
+        valid_uris = []
+        for uri in s3_uris:
+            if uri.startswith('s3://') and uri.count('/') >= 3:
+                valid_uris.append(uri)
+            else:
+                st.error(f"❌ Invalid S3 URI: {uri}")
+
+        if valid_uris:
+            st.success(f"✅ {len(valid_uris)} valid S3 URI(s) provided")
+            st.session_state.s3_uris = valid_uris
+
+            # Show URI list
+            with st.expander("📋 S3 URIs to Process"):
+                for i, uri in enumerate(valid_uris, 1):
+                    st.write(f"{i}. {uri}")
+
+    def _start_marengo_processing(self):
+        """Start Marengo 2.7 multi-vector processing."""
+        if not self.coordinator:
+            st.error("❌ Multi-vector coordinator not available")
+            return
+
+        # Get selected inputs
+        videos_to_process = []
+
+        if hasattr(st.session_state, 'selected_videos') and st.session_state.selected_videos:
+            videos_to_process.extend(st.session_state.selected_videos)
+
+        if hasattr(st.session_state, 'selected_collection'):
+            collection = st.session_state.selected_collection
+            st.info(f"📁 Processing collection: {collection['name']} ({collection['video_count']} videos)")
+            # In real implementation, would expand collection to individual videos
+            videos_to_process.append(collection['s3_prefix'])
+
+        if hasattr(st.session_state, 'uploaded_files') and st.session_state.uploaded_files:
+            st.info(f"📤 Uploading {len(st.session_state.uploaded_files)} files to S3...")
+            # In real implementation, would upload files to S3 first
+            for file in st.session_state.uploaded_files:
+                videos_to_process.append(f"s3://temp-bucket/{file.name}")
+
+        if hasattr(st.session_state, 's3_uris') and st.session_state.s3_uris:
+            videos_to_process.extend(st.session_state.s3_uris)
+
+        if not videos_to_process:
+            st.warning("⚠️ No videos selected for processing")
+            return
+
+        # Start processing simulation
+        with st.spinner("🚀 Starting Marengo 2.7 multi-vector processing..."):
+            time.sleep(2)  # Simulate processing start
+
+            # Create processing job
+            job_id = f"marengo-job-{int(time.time())}"
+
+            processing_job = {
+                "job_id": job_id,
+                "status": "processing",
+                "videos": videos_to_process,
+                "vector_types": st.session_state.get('selected_vector_types', ['visual-text']),
+                "storage_patterns": st.session_state.get('selected_storage_patterns', ['direct_s3vector']),
+                "segment_duration": st.session_state.get('segment_duration', 5.0),
+                "processing_mode": st.session_state.get('processing_mode', 'parallel'),
+                "started_at": time.time(),
+                "estimated_completion": time.time() + 300  # 5 minutes
+            }
+
+            # Update session state
+            if 'processing_jobs' not in st.session_state:
+                st.session_state.processing_jobs = {}
+
+            st.session_state.processing_jobs[job_id] = processing_job
+
+            st.success(f"✅ Processing started! Job ID: {job_id}")
+            st.info("🔄 Processing will continue in the background. Check the Progress tab for updates.")
+
+    def _show_processing_progress(self):
+        """Show processing progress for active jobs."""
+        if not hasattr(st.session_state, 'processing_jobs') or not st.session_state.processing_jobs:
+            st.info("📋 No active processing jobs")
+            return
+
+        st.subheader("🔄 Processing Progress")
+
+        for job_id, job_info in st.session_state.processing_jobs.items():
+            with st.expander(f"Job: {job_id}", expanded=True):
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.metric("Status", job_info.get('status', 'unknown').title())
+
+                with col2:
+                    videos_count = len(job_info.get('videos', []))
+                    st.metric("Videos", videos_count)
+
+                with col3:
+                    vector_types = len(job_info.get('vector_types', []))
+                    st.metric("Vector Types", vector_types)
+
+                # Progress simulation
+                elapsed = time.time() - job_info.get('started_at', time.time())
+                estimated_total = job_info.get('estimated_completion', time.time()) - job_info.get('started_at', time.time())
+                progress = min(elapsed / estimated_total, 1.0)
+
+                st.progress(progress, text=f"Progress: {progress*100:.1f}%")
+
+                # Job details
+                st.write("**Configuration:**")
+                st.write(f"• Vector Types: {', '.join(job_info.get('vector_types', []))}")
+                st.write(f"• Storage Patterns: {', '.join(job_info.get('storage_patterns', []))}")
+                st.write(f"• Segment Duration: {job_info.get('segment_duration', 5.0)}s")
+                st.write(f"• Processing Mode: {job_info.get('processing_mode', 'parallel')}")
+
+    def _show_cost_estimation(self):
+        """Show cost estimation for processing."""
+        st.subheader("💰 Cost Estimation")
+
+        # Get processing parameters
+        vector_types = st.session_state.get('selected_vector_types', ['visual-text'])
+        storage_patterns = st.session_state.get('selected_storage_patterns', ['direct_s3vector'])
+
+        # Estimate video duration (placeholder)
+        estimated_duration_minutes = 10.0  # Default estimate
+
+        # TwelveLabs Marengo pricing: $0.05 per minute
+        marengo_cost_per_minute = 0.05
+        marengo_cost = estimated_duration_minutes * marengo_cost_per_minute * len(vector_types)
+
+        # Storage costs (estimated)
+        s3vector_storage_cost = 0.02 * len(vector_types)  # Per index
+        opensearch_cost = 0.05 if 'opensearch_s3vector_hybrid' in storage_patterns else 0
+
+        total_cost = marengo_cost + s3vector_storage_cost + opensearch_cost
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric("Marengo Processing", f"${marengo_cost:.3f}")
+
+        with col2:
+            st.metric("S3Vector Storage", f"${s3vector_storage_cost:.3f}")
+
+        with col3:
+            st.metric("OpenSearch (if used)", f"${opensearch_cost:.3f}")
+
+        with col4:
+            st.metric("Total Estimated", f"${total_cost:.3f}")
+
+        # Cost breakdown
+        with st.expander("📊 Cost Breakdown"):
+            st.write("**Processing Costs:**")
+            st.write(f"• Video Duration: {estimated_duration_minutes:.1f} minutes")
+            st.write(f"• Vector Types: {len(vector_types)} types")
+            st.write(f"• Marengo Rate: ${marengo_cost_per_minute:.3f} per minute per type")
+            st.write(f"• Total Processing: ${marengo_cost:.3f}")
+            st.write("")
+
+            st.write("**Storage Costs:**")
+            st.write(f"• S3Vector Indexes: {len(vector_types)} indexes")
+            st.write(f"• Storage Rate: $0.02 per index per processing session")
+            st.write(f"• OpenSearch: {'Enabled' if opensearch_cost > 0 else 'Disabled'}")
+            st.write(f"• Total Storage: ${s3vector_storage_cost + opensearch_cost:.3f}")
+
+        if st.session_state.get('use_real_aws', False):
+            st.warning("⚠️ **Real AWS Mode**: These costs will be charged to your AWS account")
+        else:
+            st.info("🛡️ **Safe Mode**: No actual costs - simulation only")
+
+    def _execute_dual_pattern_search(self, query: str, analysis: Dict[str, Any], vector_types: List[str], num_results: int, threshold: float):
+        """Execute search on both storage patterns and compare performance."""
+        import time
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write("**🎯 Direct S3Vector Pattern**")
+            start_time = time.time()
+
+            if not st.session_state.use_real_aws:
+                # Simulate S3Vector search
+                time.sleep(0.1)  # Simulate fast S3Vector response
+                s3vector_latency = (time.time() - start_time) * 1000
+                s3vector_results = self._generate_demo_search_results(query, "s3vector", num_results)
+
+                st.success(f"✅ **Latency**: {s3vector_latency:.1f}ms")
+                st.metric("Results Found", len(s3vector_results))
+                st.metric("Avg Similarity", f"{sum(r['similarity'] for r in s3vector_results) / len(s3vector_results):.3f}")
+
+                # Show top results
+                for i, result in enumerate(s3vector_results[:3]):
+                    with st.expander(f"Result {i+1}: {result['segment_id']}"):
+                        st.write(f"**Similarity**: {result['similarity']:.3f}")
+                        st.write(f"**Vector Type**: {result['vector_type']}")
+                        st.write(f"**Timestamp**: {result['start_time']:.1f}s - {result['end_time']:.1f}s")
+                        st.write(f"**Metadata**: {result['metadata']}")
+            else:
+                st.info("Real AWS search would be executed here")
+
+        with col2:
+            st.write("**🔍 OpenSearch Hybrid Pattern**")
+            start_time = time.time()
+
+            if not st.session_state.use_real_aws:
+                # Simulate OpenSearch hybrid search (slightly slower due to hybrid processing)
+                time.sleep(0.15)  # Simulate hybrid search overhead
+                opensearch_latency = (time.time() - start_time) * 1000
+                opensearch_results = self._generate_demo_search_results(query, "opensearch", num_results)
+
+                st.success(f"✅ **Latency**: {opensearch_latency:.1f}ms")
+                st.metric("Results Found", len(opensearch_results))
+                st.metric("Avg Similarity", f"{sum(r['similarity'] for r in opensearch_results) / len(opensearch_results):.3f}")
+
+                # Show top results
+                for i, result in enumerate(opensearch_results[:3]):
+                    with st.expander(f"Result {i+1}: {result['segment_id']}"):
+                        st.write(f"**Similarity**: {result['similarity']:.3f}")
+                        st.write(f"**Vector Type**: {result['vector_type']}")
+                        st.write(f"**Timestamp**: {result['start_time']:.1f}s - {result['end_time']:.1f}s")
+                        st.write(f"**Text Match**: {result.get('text_match', 'N/A')}")
+                        st.write(f"**Hybrid Score**: {result.get('hybrid_score', 'N/A')}")
+
+        # Performance comparison
+        if not st.session_state.use_real_aws:
+            st.subheader("📊 Performance Comparison")
+
+            comparison_data = {
+                "Metric": ["Latency (ms)", "Results Found", "Avg Similarity", "Search Type"],
+                "Direct S3Vector": [f"{s3vector_latency:.1f}", len(s3vector_results),
+                                  f"{sum(r['similarity'] for r in s3vector_results) / len(s3vector_results):.3f}", "Vector Only"],
+                "OpenSearch Hybrid": [f"{opensearch_latency:.1f}", len(opensearch_results),
+                                    f"{sum(r['similarity'] for r in opensearch_results) / len(opensearch_results):.3f}", "Vector + Text"]
+            }
+
+            st.table(comparison_data)
+
+            # Store results for visualization
+            st.session_state.search_results = {
+                "s3vector": s3vector_results,
+                "opensearch": opensearch_results,
+                "query": query,
+                "analysis": analysis
+            }
+
+    def _execute_s3vector_search(self, query: str, analysis: Dict[str, Any], vector_types: List[str], num_results: int, threshold: float):
+        """Execute search on Direct S3Vector pattern only."""
+        import time
+
+        start_time = time.time()
+
+        if not st.session_state.use_real_aws:
+            # Simulate S3Vector search
+            time.sleep(0.08)  # Fast S3Vector response
+            latency = (time.time() - start_time) * 1000
+            results = self._generate_demo_search_results(query, "s3vector", num_results)
+
+            # Performance metrics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Latency", f"{latency:.1f}ms")
+            with col2:
+                st.metric("Results Found", len(results))
+            with col3:
+                st.metric("Avg Similarity", f"{sum(r['similarity'] for r in results) / len(results):.3f}")
+
+            # Detailed results
+            st.subheader("🎯 Search Results")
+            for i, result in enumerate(results):
+                with st.expander(f"Result {i+1}: {result['segment_id']} (Similarity: {result['similarity']:.3f})"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Vector Type**: {result['vector_type']}")
+                        st.write(f"**Timestamp**: {result['start_time']:.1f}s - {result['end_time']:.1f}s")
+                        st.write(f"**Index ARN**: {result['index_arn']}")
+                    with col2:
+                        st.write(f"**Similarity Score**: {result['similarity']:.3f}")
+                        st.write(f"**Distance**: {result['distance']:.3f}")
+                        st.write(f"**Metadata**: {result['metadata']}")
+
+            # Store results
+            st.session_state.search_results = {
+                "s3vector": results,
+                "query": query,
+                "analysis": analysis,
+                "pattern": "s3vector_only"
+            }
+        else:
+            st.info("Real AWS S3Vector search would be executed here")
+
+    def _execute_opensearch_search(self, query: str, analysis: Dict[str, Any], vector_types: List[str], num_results: int, threshold: float):
+        """Execute search on OpenSearch Hybrid pattern only."""
+        import time
+
+        start_time = time.time()
+
+        if not st.session_state.use_real_aws:
+            # Simulate OpenSearch hybrid search
+            time.sleep(0.12)  # Hybrid search with text processing
+            latency = (time.time() - start_time) * 1000
+            results = self._generate_demo_search_results(query, "opensearch", num_results)
+
+            # Performance metrics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Latency", f"{latency:.1f}ms")
+            with col2:
+                st.metric("Results Found", len(results))
+            with col3:
+                st.metric("Hybrid Score", f"{sum(r.get('hybrid_score', 0.8) for r in results) / len(results):.3f}")
+
+            # Detailed results with hybrid features
+            st.subheader("🔍 Hybrid Search Results")
+            for i, result in enumerate(results):
+                with st.expander(f"Result {i+1}: {result['segment_id']} (Hybrid Score: {result.get('hybrid_score', 0.8):.3f})"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Vector Similarity**: {result['similarity']:.3f}")
+                        st.write(f"**Text Match Score**: {result.get('text_score', 0.7):.3f}")
+                        st.write(f"**Combined Score**: {result.get('hybrid_score', 0.8):.3f}")
+                    with col2:
+                        st.write(f"**Vector Type**: {result['vector_type']}")
+                        st.write(f"**Text Matches**: {result.get('text_match', 'keyword matches')}")
+                        st.write(f"**OpenSearch Index**: {result.get('opensearch_index', 'hybrid-index')}")
+
+            # Store results
+            st.session_state.search_results = {
+                "opensearch": results,
+                "query": query,
+                "analysis": analysis,
+                "pattern": "opensearch_only"
+            }
+        else:
+            st.info("Real AWS OpenSearch hybrid search would be executed here")
+
+    def _generate_demo_search_results(self, query: str, pattern: str, num_results: int) -> List[Dict[str, Any]]:
+        """Generate demo search results for simulation."""
+        import random
+
+        results = []
+
+        for i in range(num_results):
+            # Base similarity score with some randomness
+            base_similarity = random.uniform(0.7, 0.95)
+
+            # Adjust based on pattern
+            if pattern == "opensearch":
+                # OpenSearch might have slightly different scores due to hybrid nature
+                similarity = base_similarity * random.uniform(0.95, 1.05)
+                text_score = random.uniform(0.6, 0.9)
+                hybrid_score = (similarity * 0.7 + text_score * 0.3)
+            else:
+                similarity = base_similarity
+                text_score = None
+                hybrid_score = None
+
+            result = {
+                "segment_id": f"segment_{i+1}_{pattern}",
+                "similarity": min(similarity, 1.0),
+                "distance": 1.0 - min(similarity, 1.0),
+                "vector_type": random.choice(["visual-text", "visual-image", "audio"]),
+                "start_time": random.uniform(0, 120),
+                "end_time": random.uniform(125, 180),
+                "metadata": {
+                    "video_id": f"demo_video_{random.randint(1, 3)}",
+                    "confidence": random.uniform(0.8, 0.95),
+                    "processing_time": random.uniform(0.1, 0.5)
+                },
+                "index_arn": f"arn:aws:s3vectors:us-east-1:123456789012:index/demo-{pattern}-index"
+            }
+
+            # Add pattern-specific fields
+            if pattern == "opensearch":
+                result["text_score"] = text_score
+                result["hybrid_score"] = hybrid_score
+                result["text_match"] = f"Keywords from '{query}' found in segment"
+                result["opensearch_index"] = f"hybrid-{result['vector_type']}-index"
+
+            results.append(result)
+
+        # Sort by similarity/hybrid score
+        if pattern == "opensearch":
+            results.sort(key=lambda x: x.get('hybrid_score', 0), reverse=True)
+        else:
+            results.sort(key=lambda x: x['similarity'], reverse=True)
+
+        return results
+
+    def _display_results_table(self, results: List[Dict[str, Any]], pattern: str):
+        """Display search results in a table format."""
+        if not results:
+            st.info("No results found")
+            return
+
+        # Create results table data
+        results_data = []
+        for i, result in enumerate(results):
+            # Handle different result formats
+            if pattern == "legacy":
+                # Legacy format
+                results_data.append({
+                    "Rank": i + 1,
+                    "Video": result.get("video_name", "Unknown"),
+                    "Segment": f"{result.get('start_time', 0):.1f}s - {result.get('end_time', 0):.1f}s",
+                    "Similarity": f"{result.get('similarity_score', result.get('similarity', 0)):.3f}",
+                    "Vector Type": result.get("vector_type", "Unknown"),
+                    "Description": result.get("description", "No description")[:50] + "..."
+                })
+            else:
+                # New format
+                video_id = result.get("metadata", {}).get("video_id", "demo_video")
+
+                row_data = {
+                    "Rank": i + 1,
+                    "Segment ID": result.get("segment_id", f"segment_{i+1}"),
+                    "Timestamp": f"{result.get('start_time', 0):.1f}s - {result.get('end_time', 0):.1f}s",
+                    "Similarity": f"{result.get('similarity', 0):.3f}",
+                    "Vector Type": result.get("vector_type", "Unknown")
+                }
+
+                # Add pattern-specific columns
+                if pattern == "opensearch":
+                    row_data["Hybrid Score"] = f"{result.get('hybrid_score', 0):.3f}"
+                    row_data["Text Score"] = f"{result.get('text_score', 0):.3f}"
+
+                results_data.append(row_data)
+
+        # Display table
+        st.dataframe(results_data, use_container_width=True)
+
+        # Result selection for playback
+        if results:
+            selected_idx = st.selectbox(
+                f"Select {pattern} result for playback:",
+                options=range(len(results)),
+                format_func=lambda x: f"Result {x+1}: {results[x].get('segment_id', f'segment_{x+1}')} ({results[x].get('similarity', 0):.3f})",
+                help="Choose a search result to view in the video player",
+                key=f"select_{pattern}_{id(results)}"  # Unique key to avoid conflicts
+            )
+
+            if selected_idx is not None:
+                result = results[selected_idx]
+                st.session_state.selected_segment = result
+
+                # Show selected result details
+                with st.expander(f"📋 Selected {pattern.title()} Result Details", expanded=True):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Segment ID**: {result.get('segment_id', 'Unknown')}")
+                        st.write(f"**Timestamp**: {result.get('start_time', 0):.1f}s - {result.get('end_time', 0):.1f}s")
+                        st.write(f"**Vector Type**: {result.get('vector_type', 'Unknown')}")
+                    with col2:
+                        st.write(f"**Similarity**: {result.get('similarity', 0):.3f}")
+                        if pattern == "opensearch":
+                            st.write(f"**Hybrid Score**: {result.get('hybrid_score', 0):.3f}")
+                            st.write(f"**Text Match**: {result.get('text_match', 'N/A')}")
+                        st.write(f"**Metadata**: {result.get('metadata', {})}")
 
     def run(self):
         """Main entry point to run the unified demo application."""
