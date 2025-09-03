@@ -14,6 +14,9 @@ from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass, field
 from botocore.exceptions import ClientError, BotoCoreError
 from datetime import datetime, timedelta
+import asyncio
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 from src.config import config_manager
 from src.utils.aws_clients import aws_client_factory
@@ -59,6 +62,12 @@ class VideoProcessingConfig:
     max_video_duration_sec: int = 7200  # 2 hours max
     poll_interval_sec: int = 30
     max_poll_attempts: int = 120  # 1 hour max wait time
+    
+    # Multi-vector processing configuration
+    max_concurrent_jobs: int = 10
+    batch_size: int = 5
+    enable_multi_vector: bool = True
+    vector_types: List[str] = field(default_factory=lambda: ["visual-text", "visual-image", "audio"])
 
     # Supported regions for TwelveLabs models
     SUPPORTED_REGIONS = ["us-east-1", "eu-west-1", "ap-northeast-2"]
@@ -106,10 +115,19 @@ class TwelveLabsVideoProcessingService:
             self.runtime_client = aws_client_factory.get_bedrock_runtime_client()
             self.s3_client = aws_client_factory.get_s3_client()
         
-        # Active jobs tracking
+        # Active jobs tracking with thread safety
         self.active_jobs: Dict[str, AsyncJobInfo] = {}
+        self._jobs_lock = Lock()
         
-        logger.info(f"Initialized TwelveLabs Video Processing Service in region {self.region}")
+        # Multi-vector processing setup
+        self.executor = ThreadPoolExecutor(max_workers=self.config.max_concurrent_jobs)
+        self.vector_type_stats = {
+            "visual-text": {"processed": 0, "failed": 0},
+            "visual-image": {"processed": 0, "failed": 0},
+            "audio": {"processed": 0, "failed": 0}
+        }
+        
+        logger.info(f"Initialized TwelveLabs Video Processing Service in region {self.region} with multi-vector support")
 
     def validate_model_access(self, model_id: str = None) -> bool:
         """Validate access to TwelveLabs model.
@@ -307,8 +325,9 @@ class TwelveLabsVideoProcessingService:
                 status="InProgress"
             )
             
-            # Track the job
-            self.active_jobs[job_id] = job_info
+            # Track the job with thread safety
+            with self._jobs_lock:
+                self.active_jobs[job_id] = job_info
             
             logger.info(f"Started async job {job_id} (ARN: {invocation_arn})")
             return job_info
@@ -576,9 +595,10 @@ class TwelveLabsVideoProcessingService:
         Args:
             job_id: Job ID to clean up
         """
-        if job_id in self.active_jobs:
-            del self.active_jobs[job_id]
-            logger.debug(f"Cleaned up job {job_id}")
+        with self._jobs_lock:
+            if job_id in self.active_jobs:
+                del self.active_jobs[job_id]
+                logger.debug(f"Cleaned up job {job_id}")
 
     def list_active_jobs(self) -> List[AsyncJobInfo]:
         """Get list of currently tracked jobs.
@@ -776,6 +796,145 @@ class TwelveLabsVideoProcessingService:
             if isinstance(e, (ValidationError, VectorEmbeddingError)):
                 raise
             raise VectorEmbeddingError(f"Media embedding generation failed: {str(e)}")
+
+    def process_multi_vector_batch(
+        self,
+        video_inputs: List[Dict[str, Any]],
+        vector_types: List[str] = None,
+        max_concurrent: int = None
+    ) -> Dict[str, Any]:
+        """
+        Process multiple videos with multiple vector types concurrently.
+        
+        Args:
+            video_inputs: List of video input configurations
+            vector_types: List of vector types to generate
+            max_concurrent: Maximum concurrent processing jobs
+            
+        Returns:
+            Dictionary with batch processing results
+        """
+        vector_types = vector_types or self.config.vector_types
+        max_concurrent = max_concurrent or self.config.max_concurrent_jobs
+        
+        logger.info(f"Starting multi-vector batch processing: {len(video_inputs)} videos, {len(vector_types)} vector types")
+        
+        # Prepare all processing tasks
+        tasks = []
+        for video_input in video_inputs:
+            for vector_type in vector_types:
+                task = {
+                    'video_input': video_input,
+                    'vector_type': vector_type,
+                    'task_id': f"{video_input.get('id', uuid.uuid4().hex[:8])}_{vector_type}"
+                }
+                tasks.append(task)
+        
+        # Process tasks concurrently
+        results = {}
+        failed_tasks = []
+        
+        with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+            # Submit all tasks
+            future_to_task = {
+                executor.submit(self._process_single_vector_task, task): task
+                for task in tasks
+            }
+            
+            # Collect results
+            for future in as_completed(future_to_task):
+                task = future_to_task[future]
+                try:
+                    result = future.result()
+                    video_id = task['video_input'].get('id', task['task_id'])
+                    if video_id not in results:
+                        results[video_id] = {}
+                    results[video_id][task['vector_type']] = result
+                    
+                    # Update stats
+                    with self._jobs_lock:
+                        self.vector_type_stats[task['vector_type']]['processed'] += 1
+                        
+                except Exception as e:
+                    logger.error(f"Task {task['task_id']} failed: {e}")
+                    failed_tasks.append({
+                        'task': task,
+                        'error': str(e)
+                    })
+                    
+                    # Update failure stats
+                    with self._jobs_lock:
+                        self.vector_type_stats[task['vector_type']]['failed'] += 1
+        
+        logger.info(f"Multi-vector batch processing completed: {len(results)} videos processed, {len(failed_tasks)} tasks failed")
+        
+        return {
+            'results': results,
+            'failed_tasks': failed_tasks,
+            'stats': dict(self.vector_type_stats),
+            'total_processed': len(results),
+            'total_failed': len(failed_tasks)
+        }
+
+    def _process_single_vector_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        """Process a single vector task."""
+        video_input = task['video_input']
+        vector_type = task['vector_type']
+        
+        # Extract video source
+        if 'video_s3_uri' in video_input:
+            video_source = video_input['video_s3_uri']
+            source_type = 'uri'
+        elif 'video_base64' in video_input:
+            video_source = video_input['video_base64']
+            source_type = 'base64'
+        else:
+            raise ValidationError(f"No valid video source in input: {video_input}")
+        
+        # Configure embedding options based on vector type
+        embedding_options = [vector_type]
+        
+        # Process the video
+        if source_type == 'uri':
+            result = self.process_video_sync(
+                video_s3_uri=video_source,
+                embedding_options=embedding_options,
+                **video_input.get('processing_params', {})
+            )
+        else:
+            result = self.process_video_sync(
+                video_base64=video_source,
+                embedding_options=embedding_options,
+                **video_input.get('processing_params', {})
+            )
+        
+        # Add vector type metadata
+        result.vector_type = vector_type
+        return {
+            'embedding_result': result,
+            'vector_type': vector_type,
+            'processing_time_ms': result.processing_time_ms,
+            'segments_count': result.total_segments
+        }
+
+    def get_vector_type_statistics(self) -> Dict[str, Any]:
+        """Get processing statistics by vector type."""
+        with self._jobs_lock:
+            stats = dict(self.vector_type_stats)
+        
+        # Calculate additional metrics
+        for vector_type, type_stats in stats.items():
+            total = type_stats['processed'] + type_stats['failed']
+            if total > 0:
+                type_stats['success_rate'] = type_stats['processed'] / total
+            else:
+                type_stats['success_rate'] = 0.0
+        
+        return {
+            'vector_type_stats': stats,
+            'total_jobs_active': len(self.active_jobs),
+            'concurrent_capacity': self.config.max_concurrent_jobs
+        }
 
     def estimate_cost(
         self,

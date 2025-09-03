@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Launch script for the Unified Streamlit App
+Launch Script for Unified S3Vector Demo
 
-This script provides a convenient way to launch the complete S3Vector
-video search pipeline demo translated from the Gradio version.
+This script provides a convenient way to launch the unified S3Vector demo interface
+that consolidates all frontend functionality into a single, professional application.
 """
 
 import os
@@ -12,16 +12,17 @@ import argparse
 import subprocess
 from pathlib import Path
 
+
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Launch S3Vector Unified Streamlit App",
+        description="Launch the Unified S3Vector Demo Interface",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python frontend/launch_unified_streamlit.py                    # Launch with defaults
-  python frontend/launch_unified_streamlit.py --port 8501       # Launch on custom port
-  python frontend/launch_unified_streamlit.py --host 0.0.0.0    # Bind to all interfaces
+  python frontend/launch_unified_demo.py
+  python frontend/launch_unified_demo.py --host 0.0.0.0 --port 8502
+  python frontend/launch_unified_demo.py --browser --theme dark
         """
     )
     
@@ -51,43 +52,60 @@ Examples:
         help='Automatically open in browser'
     )
     
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Enable debug mode'
+    )
+    
     return parser.parse_args()
+
+
+def check_dependencies():
+    """Check if required dependencies are available."""
+    try:
+        import streamlit
+        import numpy
+        import pandas
+        print("✅ Core dependencies available")
+        return True
+    except ImportError as e:
+        print(f"❌ Missing dependency: {e}")
+        print("Please install required packages:")
+        print("pip install streamlit numpy pandas plotly")
+        return False
+
 
 def main():
     """Main entry point."""
     args = parse_args()
     
+    # Check dependencies
+    if not check_dependencies():
+        sys.exit(1)
+    
     # Get the script directory
     script_dir = Path(__file__).parent
-    app_path = script_dir / "unified_streamlit_app.py"
+    app_path = script_dir / "unified_demo_app.py"
     
     if not app_path.exists():
         print(f"❌ Error: {app_path} not found")
         sys.exit(1)
     
+    # Print banner
     print("=" * 80)
-    print("🎬 S3Vector Enhanced Unified Demo - Streamlit Edition")
+    print("🎬 S3Vector Unified Multi-Vector Demo")
     print("=" * 80)
+    print("🚀 Starting unified demo interface...")
+    print(f"📍 Host: {args.host}:{args.port}")
+    print(f"🎨 Theme: {args.theme}")
     print()
-    print("🚀 Launching comprehensive video search pipeline...")
-    print()
-    print("📋 Enhanced Features:")
-    print("   • Sample Video Library (6 Creative Commons videos)")
-    print("   • Multiple Video Upload & Batch Processing")
-    print("   • Index Creation & Management")
-    print("   • Multi-Modal Search (Text-to-Video, Video-to-Video, Temporal)")
-    print("   • PCA/t-SNE Embedding Visualization")
-    print("   • Enhanced Query Suggestions")
-    print("   • Cost Tracking & Analytics")
-    print("   • Video Segment Playback")
-    print("   • Real AWS Integration with Safety Toggles")
-    print()
-    print(f"🌐 Server: http://{args.host}:{args.port}")
-    print()
-    print("💡 Tips:")
-    print("   - Start with 'Index Setup' to create your video search index")
-    print("   - Try sample videos for quick testing")
-    print("   - Use batch processing for multiple videos")
+    print("📋 Features:")
+    print("   - Unified 5-section workflow interface")
+    print("   - Proper StreamlitServiceManager integration")
+    print("   - Multi-vector processing with Marengo 2.7")
+    print("   - Interactive video player (coming soon)")
+    print("   - Real-time cost tracking and analytics")
     print("🛡️ Safe Mode: 'Use Real AWS' defaults to OFF to prevent costs")
     print("=" * 80)
     print()
@@ -105,26 +123,27 @@ def main():
     if args.browser:
         cmd.extend(["--server.runOnSave", "true"])
     
+    if args.debug:
+        cmd.extend(["--logger.level", "debug"])
+    
     try:
         # Launch Streamlit
+        print(f"🚀 Launching: {' '.join(cmd)}")
+        print()
         subprocess.run(cmd, check=True)
         
     except KeyboardInterrupt:
-        print("\n\n🛑 Application stopped by user")
+        print("\n\n🛑 Demo stopped by user")
         print("👋 Thank you for using S3Vector Unified Demo!")
         
     except subprocess.CalledProcessError as e:
-        print(f"\n❌ Error launching Streamlit: {e}")
-        print("\n🔧 Troubleshooting tips:")
-        print("   1. Ensure Streamlit is installed: pip install streamlit")
-        print("   2. Check that all dependencies are available")
-        print("   3. Verify AWS credentials and configuration")
-        print("   4. Try a different port if the current one is in use")
+        print(f"\n❌ Failed to launch demo: {e}")
         sys.exit(1)
-    
+        
     except Exception as e:
         print(f"\n❌ Unexpected error: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

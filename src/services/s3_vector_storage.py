@@ -7,7 +7,9 @@ with proper IAM permissions, validation, and error handling.
 
 import time
 import random
-from typing import Dict, Any, Optional, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+from typing import Dict, Any, Optional, List, Set
 import numpy as np
 from botocore.exceptions import ClientError, BotoCoreError
 import logging
@@ -49,11 +51,24 @@ def _to_resource_id(bucket: str, index: str) -> str:
 
 
 class S3VectorStorageManager:
-    """Manages S3 vector bucket operations with proper error handling and validation."""
+    """Manages S3 vector bucket operations with multi-index support and proper error handling."""
     
     def __init__(self):
         self.s3vectors_client = aws_client_factory.get_s3vectors_client()
         self.s3_client = aws_client_factory.get_s3_client()
+        
+        # Multi-index coordination
+        self.index_registry: Dict[str, Dict[str, Any]] = {}
+        self._registry_lock = Lock()
+        self.executor = ThreadPoolExecutor(max_workers=10)
+        
+        # Vector type management
+        self.vector_type_configs = {
+            "visual-text": {"dimensions": 1024, "default_metric": "cosine"},
+            "visual-image": {"dimensions": 1024, "default_metric": "cosine"},
+            "audio": {"dimensions": 1024, "default_metric": "cosine"},
+            "text-titan": {"dimensions": 1536, "default_metric": "cosine"}
+        }
     
     def _retry_with_backoff(self, func, max_retries: int = 3, base_delay: float = 1.0):
         """Implement exponential backoff for AWS API calls."""
@@ -1668,6 +1683,463 @@ class S3VectorStorageManager:
             Dictionary containing the query results
         """
         return self.query_vectors(index_arn, query_vector, top_k, metadata_filters)
+
+    def create_multi_index_architecture(self,
+                                       bucket_name: str,
+                                       vector_types: List[str],
+                                       base_dimensions: int = 1024,
+                                       distance_metric: str = "cosine") -> Dict[str, Any]:
+        """
+        Create multiple vector indexes for different vector types in a coordinated architecture.
+        
+        Args:
+            bucket_name: Base bucket name
+            vector_types: List of vector types to create indexes for
+            base_dimensions: Default dimensions (can be overridden by vector type config)
+            distance_metric: Distance metric for all indexes
+            
+        Returns:
+            Dictionary with creation results for all indexes
+        """
+        logger.info(f"Creating multi-index architecture: bucket={bucket_name}, types={vector_types}")
+        
+        # Create the main bucket first
+        bucket_result = self.create_vector_bucket(bucket_name)
+        
+        # Create indexes concurrently
+        index_tasks = []
+        with ThreadPoolExecutor(max_workers=len(vector_types)) as executor:
+            for vector_type in vector_types:
+                # Get dimensions from config or use default
+                dimensions = self.vector_type_configs.get(vector_type, {}).get("dimensions", base_dimensions)
+                index_name = f"{vector_type}-index"
+                
+                future = executor.submit(
+                    self._create_single_index_safe,
+                    bucket_name, index_name, dimensions, distance_metric, vector_type
+                )
+                index_tasks.append((vector_type, future))
+        
+        # Collect results
+        index_results = {}
+        failed_indexes = []
+        
+        for vector_type, future in index_tasks:
+            try:
+                result = future.result()
+                index_results[vector_type] = result
+                
+                # Register the index
+                index_arn = result.get('response', {}).get('indexArn')
+                if index_arn:
+                    self.register_vector_index(index_arn, vector_type, dimensions, distance_metric)
+                    
+            except Exception as e:
+                logger.error(f"Failed to create index for {vector_type}: {e}")
+                failed_indexes.append({'vector_type': vector_type, 'error': str(e)})
+        
+        logger.info(f"Multi-index architecture creation completed: {len(index_results)} successful, {len(failed_indexes)} failed")
+        
+        return {
+            'bucket_result': bucket_result,
+            'index_results': index_results,
+            'failed_indexes': failed_indexes,
+            'architecture_type': 'multi-vector',
+            'total_indexes': len(vector_types),
+            'successful_indexes': len(index_results),
+            'failed_indexes': len(failed_indexes)
+        }
+
+    def _create_single_index_safe(self, bucket_name: str, index_name: str, 
+                                dimensions: int, distance_metric: str, vector_type: str) -> Dict[str, Any]:
+        """Create a single index with error handling."""
+        try:
+            return self.create_vector_index(
+                bucket_name=bucket_name,
+                index_name=index_name,
+                dimensions=dimensions,
+                distance_metric=distance_metric
+            )
+        except Exception as e:
+            logger.error(f"Error creating index {index_name} for vector type {vector_type}: {e}")
+            raise
+
+    def register_vector_index(self, index_arn: str, vector_type: str, 
+                            dimensions: int, distance_metric: str, 
+                            metadata: Dict[str, Any] = None) -> None:
+        """Register a vector index in the coordination registry."""
+        with self._registry_lock:
+            self.index_registry[index_arn] = {
+                'vector_type': vector_type,
+                'dimensions': dimensions,
+                'distance_metric': distance_metric,
+                'metadata': metadata or {},
+                'created_at': time.time(),
+                'bucket_name': self._extract_bucket_from_arn(index_arn),
+                'index_name': self._extract_index_from_arn(index_arn)
+            }
+        logger.debug(f"Registered vector index: {index_arn} for type {vector_type}")
+
+    def _extract_bucket_from_arn(self, index_arn: str) -> Optional[str]:
+        """Extract bucket name from index ARN."""
+        try:
+            if index_arn.startswith('arn:aws:s3vectors:'):
+                parts = index_arn.split(':')
+                if len(parts) >= 6:
+                    resource_part = parts[5]  # bucket/name/index/name
+                    if resource_part.startswith('bucket/'):
+                        return resource_part.split('/')[1]
+            return None
+        except Exception:
+            return None
+
+    def _extract_index_from_arn(self, index_arn: str) -> Optional[str]:
+        """Extract index name from index ARN."""
+        try:
+            if index_arn.startswith('arn:aws:s3vectors:'):
+                parts = index_arn.split(':')
+                if len(parts) >= 6:
+                    resource_part = parts[5]  # bucket/name/index/name
+                    resource_parts = resource_part.split('/')
+                    if len(resource_parts) >= 4 and resource_parts[2] == 'index':
+                        return resource_parts[3]
+            return None
+        except Exception:
+            return None
+
+    def put_vectors_multi_index(self,
+                              vectors_by_type: Dict[str, List[Dict[str, Any]]],
+                              bucket_name: str = None,
+                              index_arns: Dict[str, str] = None) -> Dict[str, Any]:
+        """
+        Store vectors across multiple indexes by vector type concurrently.
+        
+        Args:
+            vectors_by_type: Dictionary mapping vector types to vector data lists
+            bucket_name: Bucket name (if using type-based index lookup)
+            index_arns: Dictionary mapping vector types to index ARNs
+            
+        Returns:
+            Dictionary with storage results by vector type
+        """
+        logger.info(f"Storing vectors across {len(vectors_by_type)} vector types")
+        
+        # Resolve index ARNs
+        resolved_arns = self._resolve_index_arns(vectors_by_type.keys(), bucket_name, index_arns)
+        
+        # Store vectors concurrently
+        storage_tasks = []
+        with ThreadPoolExecutor(max_workers=len(vectors_by_type)) as executor:
+            for vector_type, vectors in vectors_by_type.items():
+                if vector_type not in resolved_arns:
+                    logger.error(f"No index ARN resolved for vector type: {vector_type}")
+                    continue
+                
+                index_arn = resolved_arns[vector_type]
+                future = executor.submit(self._put_vectors_safe, index_arn, vectors, vector_type)
+                storage_tasks.append((vector_type, future))
+        
+        # Collect results
+        results = {}
+        failed_types = []
+        total_vectors = 0
+        
+        for vector_type, future in storage_tasks:
+            try:
+                result = future.result()
+                results[vector_type] = result
+                total_vectors += result.get('vectors_stored', 0)
+            except Exception as e:
+                logger.error(f"Failed to store vectors for type {vector_type}: {e}")
+                failed_types.append({'vector_type': vector_type, 'error': str(e)})
+        
+        logger.info(f"Multi-index vector storage completed: {total_vectors} total vectors stored")
+        
+        return {
+            'results_by_type': results,
+            'failed_types': failed_types,
+            'total_vector_types': len(vectors_by_type),
+            'successful_types': len(results),
+            'failed_types_count': len(failed_types),
+            'total_vectors_stored': total_vectors
+        }
+
+    def _resolve_index_arns(self, vector_types: Set[str], bucket_name: str = None, 
+                          index_arns: Dict[str, str] = None) -> Dict[str, str]:
+        """Resolve index ARNs for vector types."""
+        resolved = {}
+        
+        if index_arns:
+            # Use provided ARNs
+            resolved.update(index_arns)
+        
+        # Fill in missing ARNs from registry or construct from bucket
+        for vector_type in vector_types:
+            if vector_type not in resolved:
+                # Try to find in registry
+                with self._registry_lock:
+                    for arn, config in self.index_registry.items():
+                        if config.get('vector_type') == vector_type:
+                            resolved[vector_type] = arn
+                            break
+                
+                # If still not found and bucket provided, construct ARN
+                if vector_type not in resolved and bucket_name:
+                    index_name = f"{vector_type}-index"
+                    try:
+                        # Get account info for ARN construction
+                        import boto3
+                        sts = boto3.client('sts')
+                        account_id = sts.get_caller_identity()['Account']
+                        region = self.s3vectors_client._client_config.region_name
+                        
+                        arn = f"arn:aws:s3vectors:{region}:{account_id}:bucket/{bucket_name}/index/{index_name}"
+                        resolved[vector_type] = arn
+                    except Exception as e:
+                        logger.warning(f"Could not construct ARN for {vector_type}: {e}")
+        
+        return resolved
+
+    def _put_vectors_safe(self, index_arn: str, vectors: List[Dict[str, Any]], 
+                        vector_type: str) -> Dict[str, Any]:
+        """Store vectors in a single index with error handling."""
+        try:
+            result = self.put_vectors(index_arn, vectors)
+            result['vector_type'] = vector_type
+            return result
+        except Exception as e:
+            logger.error(f"Error storing vectors for type {vector_type}: {e}")
+            raise
+
+    def query_vectors_multi_index(self,
+                                query_vectors: Dict[str, List[float]],
+                                bucket_name: str = None,
+                                index_arns: Dict[str, str] = None,
+                                top_k: int = 10,
+                                fusion_method: str = "weighted_average") -> Dict[str, Any]:
+        """
+        Query multiple indexes with different vector types and fuse results.
+        
+        Args:
+            query_vectors: Dictionary mapping vector types to query vectors
+            bucket_name: Bucket name for ARN resolution
+            index_arns: Specific index ARNs by vector type
+            top_k: Number of results per index
+            fusion_method: Method for combining results
+            
+        Returns:
+            Dictionary with fused query results
+        """
+        logger.info(f"Querying {len(query_vectors)} vector types across multiple indexes")
+        
+        # Resolve index ARNs
+        resolved_arns = self._resolve_index_arns(query_vectors.keys(), bucket_name, index_arns)
+        
+        # Query indexes concurrently
+        query_tasks = []
+        with ThreadPoolExecutor(max_workers=len(query_vectors)) as executor:
+            for vector_type, query_vector in query_vectors.items():
+                if vector_type not in resolved_arns:
+                    continue
+                
+                index_arn = resolved_arns[vector_type]
+                future = executor.submit(
+                    self._query_vectors_safe, 
+                    index_arn, query_vector, top_k * 2, vector_type  # Get more for fusion
+                )
+                query_tasks.append((vector_type, future))
+        
+        # Collect results
+        results_by_type = {}
+        failed_types = []
+        
+        for vector_type, future in query_tasks:
+            try:
+                result = future.result()
+                results_by_type[vector_type] = result
+            except Exception as e:
+                logger.error(f"Failed to query vectors for type {vector_type}: {e}")
+                failed_types.append({'vector_type': vector_type, 'error': str(e)})
+        
+        # Fuse results using the specified method
+        fused_results = self._fuse_query_results(results_by_type, top_k, fusion_method)
+        
+        return {
+            'fused_results': fused_results,
+            'results_by_type': results_by_type,
+            'failed_types': failed_types,
+            'fusion_method': fusion_method,
+            'total_results': len(fused_results.get('vectors', []))
+        }
+
+    def _query_vectors_safe(self, index_arn: str, query_vector: List[float], 
+                          top_k: int, vector_type: str) -> Dict[str, Any]:
+        """Query vectors from a single index with error handling."""
+        try:
+            result = self.query_vectors(index_arn, query_vector, top_k)
+            result['vector_type'] = vector_type
+            return result
+        except Exception as e:
+            logger.error(f"Error querying vectors for type {vector_type}: {e}")
+            raise
+
+    def _fuse_query_results(self, results_by_type: Dict[str, Dict[str, Any]], 
+                          top_k: int, fusion_method: str) -> Dict[str, Any]:
+        """Fuse query results from multiple indexes."""
+        if not results_by_type:
+            return {'vectors': [], 'method': fusion_method}
+        
+        if fusion_method == "weighted_average":
+            return self._fuse_weighted_average_storage(results_by_type, top_k)
+        elif fusion_method == "rank_fusion":
+            return self._fuse_rank_based_storage(results_by_type, top_k)
+        else:
+            # Default to concatenation with score normalization
+            return self._fuse_concatenate(results_by_type, top_k)
+
+    def _fuse_weighted_average_storage(self, results_by_type: Dict[str, Dict[str, Any]], 
+                                     top_k: int) -> Dict[str, Any]:
+        """Fuse results using weighted average of scores."""
+        combined_vectors = {}
+        
+        for vector_type, result in results_by_type.items():
+            weight = 1.0 / len(results_by_type)  # Equal weights
+            for vector in result.get('vectors', []):
+                key = vector.get('key', '')
+                distance = vector.get('distance', 1.0)
+                similarity = 1.0 - distance
+                
+                if key not in combined_vectors:
+                    combined_vectors[key] = {
+                        'vector': vector,
+                        'weighted_score': 0.0,
+                        'weight_sum': 0.0
+                    }
+                
+                combined_vectors[key]['weighted_score'] += similarity * weight
+                combined_vectors[key]['weight_sum'] += weight
+        
+        # Calculate final scores and sort
+        final_vectors = []
+        for key, data in combined_vectors.items():
+            if data['weight_sum'] > 0:
+                final_score = data['weighted_score'] / data['weight_sum']
+                vector = data['vector'].copy()
+                vector['distance'] = 1.0 - final_score
+                vector['similarity'] = final_score
+                final_vectors.append(vector)
+        
+        # Sort by similarity (higher is better)
+        final_vectors.sort(key=lambda x: x.get('similarity', 0), reverse=True)
+        
+        return {
+            'vectors': final_vectors[:top_k],
+            'method': 'weighted_average',
+            'total_combined': len(combined_vectors)
+        }
+
+    def _fuse_rank_based_storage(self, results_by_type: Dict[str, Dict[str, Any]], 
+                               top_k: int) -> Dict[str, Any]:
+        """Fuse results using reciprocal rank fusion."""
+        rrf_scores = {}
+        
+        for vector_type, result in results_by_type.items():
+            for rank, vector in enumerate(result.get('vectors', [])):
+                key = vector.get('key', '')
+                rrf_score = 1.0 / (60 + rank + 1)  # Standard RRF with k=60
+                
+                if key not in rrf_scores:
+                    rrf_scores[key] = {'vector': vector, 'score': 0.0}
+                
+                rrf_scores[key]['score'] += rrf_score
+        
+        # Create final result list
+        final_vectors = []
+        for key, data in rrf_scores.items():
+            vector = data['vector'].copy()
+            vector['rrf_score'] = data['score']
+            vector['distance'] = 1.0 - data['score']  # Convert for consistency
+            final_vectors.append(vector)
+        
+        # Sort by RRF score
+        final_vectors.sort(key=lambda x: x.get('rrf_score', 0), reverse=True)
+        
+        return {
+            'vectors': final_vectors[:top_k],
+            'method': 'rank_fusion',
+            'total_combined': len(rrf_scores)
+        }
+
+    def _fuse_concatenate(self, results_by_type: Dict[str, Dict[str, Any]], 
+                        top_k: int) -> Dict[str, Any]:
+        """Simple concatenation with deduplication."""
+        seen_keys = set()
+        final_vectors = []
+        
+        # Collect all vectors, avoiding duplicates
+        for vector_type, result in results_by_type.items():
+            for vector in result.get('vectors', []):
+                key = vector.get('key', '')
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    vector_copy = vector.copy()
+                    vector_copy['source_type'] = vector_type
+                    final_vectors.append(vector_copy)
+        
+        # Sort by distance (lower is better)
+        final_vectors.sort(key=lambda x: x.get('distance', 1.0))
+        
+        return {
+            'vectors': final_vectors[:top_k],
+            'method': 'concatenate',
+            'total_combined': len(final_vectors)
+        }
+
+    def get_multi_index_stats(self) -> Dict[str, Any]:
+        """Get statistics about registered indexes and multi-index operations."""
+        with self._registry_lock:
+            registry_copy = dict(self.index_registry)
+        
+        # Aggregate statistics
+        stats = {
+            'total_indexes': len(registry_copy),
+            'vector_types': {},
+            'dimensions_distribution': {},
+            'metrics_distribution': {},
+            'oldest_index': None,
+            'newest_index': None
+        }
+        
+        oldest_time = float('inf')
+        newest_time = 0
+        
+        for arn, config in registry_copy.items():
+            vector_type = config.get('vector_type', 'unknown')
+            dimensions = config.get('dimensions', 0)
+            metric = config.get('distance_metric', 'unknown')
+            created_at = config.get('created_at', 0)
+            
+            # Vector types count
+            stats['vector_types'][vector_type] = stats['vector_types'].get(vector_type, 0) + 1
+            
+            # Dimensions distribution
+            dim_key = str(dimensions)
+            stats['dimensions_distribution'][dim_key] = stats['dimensions_distribution'].get(dim_key, 0) + 1
+            
+            # Metrics distribution
+            stats['metrics_distribution'][metric] = stats['metrics_distribution'].get(metric, 0) + 1
+            
+            # Track oldest and newest
+            if created_at < oldest_time:
+                oldest_time = created_at
+                stats['oldest_index'] = {'arn': arn, 'created_at': created_at}
+            
+            if created_at > newest_time:
+                newest_time = created_at
+                stats['newest_index'] = {'arn': arn, 'created_at': created_at}
+        
+        return stats
+
     def delete_vector_bucket(self, bucket_name: str, cascade: bool = False) -> Dict[str, Any]:
         """
         Delete a vector bucket. If cascade is True, attempt to delete all indexes in the bucket first.

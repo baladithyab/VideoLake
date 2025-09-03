@@ -23,9 +23,12 @@ Based on AWS Documentation:
 """
 
 import time
-from typing import List, Dict, Any, Optional, Union, Tuple
-from dataclasses import dataclass
+import asyncio
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Dict, Any, Optional, Union, Tuple, Set
+from dataclasses import dataclass, field
 from enum import Enum
+from threading import Lock
 
 from src.services.embedding_storage_integration import EmbeddingStorageIntegration
 from src.services.video_embedding_storage import VideoEmbeddingStorageService
@@ -89,6 +92,11 @@ class SimilarityQuery:
     query_audio_s3_uri: Optional[str] = None    # S3 URI of audio file  
     query_image_s3_uri: Optional[str] = None    # S3 URI of image file
     query_embedding: Optional[List[float]] = None
+    
+    # Multi-index query configuration
+    target_indexes: Optional[List[str]] = None   # Specific indexes to search
+    vector_types: Optional[List[str]] = None     # Vector types to include
+    cross_index_fusion: bool = True              # Enable cross-index result fusion
     
     # Query configuration
     top_k: int = 10
@@ -214,15 +222,22 @@ class SimilaritySearchEngine:
         self.text_storage = text_storage or EmbeddingStorageIntegration()
         self.video_storage = video_storage or VideoEmbeddingStorageService()
         
-        # Performance tracking
+        # Performance tracking with thread safety
+        self._stats_lock = Lock()
         self.search_stats = {
             'total_searches': 0,
             'total_cost': 0.0,
             'average_latency_ms': 0.0,
-            'searches_by_input_type': {}
+            'searches_by_input_type': {},
+            'multi_index_searches': 0,
+            'cross_vector_searches': 0
         }
         
-        logger.info("SimilaritySearchEngine initialized with multimodal capabilities")
+        # Multi-index configuration
+        self.executor = ThreadPoolExecutor(max_workers=10)
+        self.index_registry: Dict[str, Dict[str, Any]] = {}
+        
+        logger.info("SimilaritySearchEngine initialized with multi-vector and multi-index capabilities")
 
     def find_similar_content(self,
                            query: SimilarityQuery,
@@ -379,6 +394,271 @@ class SimilaritySearchEngine:
             )
         
         return self.find_similar_content(query, index_arn, IndexType.MARENGO_MULTIMODAL)
+
+    def search_multi_index(self,
+                          query: SimilarityQuery,
+                          index_configurations: List[Dict[str, Any]],
+                          fusion_method: str = "weighted_average") -> SimilaritySearchResponse:
+        """
+        Search across multiple indexes and fuse results.
+        
+        Args:
+            query: Similarity query with multi-index configuration
+            index_configurations: List of index configs with ARN and type
+            fusion_method: Method for combining results ("weighted_average", "rank_fusion", "max_score")
+            
+        Returns:
+            SimilaritySearchResponse with fused multi-index results
+        """
+        start_time = time.time()
+        query_id = f"multi_index_{int(start_time)}_{id(query)}"
+        input_type = query.get_input_type()
+        
+        logger.info(f"Starting multi-index search: {query_id}, {len(index_configurations)} indexes")
+        
+        # Execute searches across all indexes concurrently
+        search_tasks = []
+        with ThreadPoolExecutor(max_workers=len(index_configurations)) as executor:
+            for i, config in enumerate(index_configurations):
+                index_arn = config['index_arn']
+                index_type = IndexType(config['index_type'])
+                weight = config.get('weight', 1.0)
+                
+                # Create a copy of query for this index
+                index_query = SimilarityQuery(
+                    query_text=query.query_text,
+                    query_video_key=query.query_video_key,
+                    query_video_s3_uri=query.query_video_s3_uri,
+                    query_audio_s3_uri=query.query_audio_s3_uri,
+                    query_image_s3_uri=query.query_image_s3_uri,
+                    query_embedding=query.query_embedding,
+                    top_k=query.top_k * 2,  # Get more results for fusion
+                    similarity_threshold=query.similarity_threshold * 0.8,  # Lower threshold for fusion
+                    metadata_filters=query.metadata_filters,
+                    temporal_filter=query.temporal_filter,
+                    content_type_filter=query.content_type_filter,
+                    extract_entities=query.extract_entities,
+                    expand_synonyms=query.expand_synonyms,
+                    include_explanations=query.include_explanations,
+                    deduplicate_results=query.deduplicate_results,
+                    diversity_factor=query.diversity_factor
+                )
+                
+                future = executor.submit(self._search_single_index_with_metadata, 
+                                       index_query, index_arn, index_type, weight, i)
+                search_tasks.append(future)
+            
+            # Collect all results
+            index_results = []
+            total_cost = 0.0
+            
+            for future in as_completed(search_tasks):
+                try:
+                    result = future.result()
+                    index_results.append(result)
+                    total_cost += result.get('cost', 0.0)
+                except Exception as e:
+                    logger.error(f"Index search failed: {e}")
+                    # Continue with other results
+        
+        # Fuse results from all indexes
+        fused_results = self._fuse_multi_index_results(
+            index_results, query, fusion_method
+        )
+        
+        # Generate final response
+        processing_time_ms = int((time.time() - start_time) * 1000)
+        response = self._generate_search_response(
+            fused_results, query_id, input_type, IndexType.MARENGO_MULTIMODAL,
+            processing_time_ms, total_cost, query
+        )
+        
+        # Update statistics
+        self._update_search_stats(
+            input_type, processing_time_ms, total_cost,
+            is_multi_index=True, is_cross_vector=len(index_configurations) > 1
+        )
+        
+        logger.info(f"Multi-index search completed: {query_id}, {len(fused_results)} final results")
+        return response
+
+    def _search_single_index_with_metadata(self, query: SimilarityQuery, index_arn: str, 
+                                         index_type: IndexType, weight: float, 
+                                         index_id: int) -> Dict[str, Any]:
+        """Search a single index and return results with metadata."""
+        try:
+            response = self.find_similar_content(query, index_arn, index_type)
+            return {
+                'index_arn': index_arn,
+                'index_type': index_type,
+                'weight': weight,
+                'index_id': index_id,
+                'results': response.results,
+                'cost': response.cost_estimate,
+                'processing_time_ms': response.processing_time_ms,
+                'success': True
+            }
+        except Exception as e:
+            logger.error(f"Failed to search index {index_arn}: {e}")
+            return {
+                'index_arn': index_arn,
+                'index_type': index_type,
+                'weight': weight,
+                'index_id': index_id,
+                'results': [],
+                'cost': 0.0,
+                'processing_time_ms': 0,
+                'success': False,
+                'error': str(e)
+            }
+
+    def _fuse_multi_index_results(self,
+                                index_results: List[Dict[str, Any]],
+                                query: SimilarityQuery,
+                                fusion_method: str) -> List[SimilarityResult]:
+        """Fuse results from multiple indexes using the specified method."""
+        if fusion_method == "weighted_average":
+            return self._fuse_weighted_average(index_results, query)
+        elif fusion_method == "rank_fusion":
+            return self._fuse_rank_based(index_results, query)
+        elif fusion_method == "max_score":
+            return self._fuse_max_score(index_results, query)
+        else:
+            logger.warning(f"Unknown fusion method: {fusion_method}, using weighted_average")
+            return self._fuse_weighted_average(index_results, query)
+
+    def _fuse_weighted_average(self, index_results: List[Dict[str, Any]], 
+                             query: SimilarityQuery) -> List[SimilarityResult]:
+        """Fuse results using weighted average of similarity scores."""
+        result_map = {}
+        
+        for index_result in index_results:
+            if not index_result['success']:
+                continue
+                
+            weight = index_result['weight']
+            for result in index_result['results']:
+                key = result.key
+                if key not in result_map:
+                    result_map[key] = {
+                        'result': result,
+                        'weighted_score': 0.0,
+                        'weight_sum': 0.0,
+                        'index_count': 0
+                    }
+                
+                result_map[key]['weighted_score'] += result.similarity_score * weight
+                result_map[key]['weight_sum'] += weight
+                result_map[key]['index_count'] += 1
+        
+        # Calculate final scores and create results
+        fused_results = []
+        for key, data in result_map.items():
+            if data['weight_sum'] > 0:
+                final_score = data['weighted_score'] / data['weight_sum']
+                result = data['result']
+                result.similarity_score = final_score
+                result.confidence_score = final_score * (data['index_count'] / len(index_results))
+                fused_results.append(result)
+        
+        # Sort by final score and limit results
+        fused_results.sort(key=lambda x: x.similarity_score, reverse=True)
+        return fused_results[:query.top_k]
+
+    def _fuse_rank_based(self, index_results: List[Dict[str, Any]], 
+                       query: SimilarityQuery) -> List[SimilarityResult]:
+        """Fuse results using reciprocal rank fusion."""
+        result_map = {}
+        
+        for index_result in index_results:
+            if not index_result['success']:
+                continue
+                
+            weight = index_result['weight']
+            for rank, result in enumerate(index_result['results']):
+                key = result.key
+                if key not in result_map:
+                    result_map[key] = {
+                        'result': result,
+                        'rrf_score': 0.0,
+                        'index_count': 0
+                    }
+                
+                # Reciprocal Rank Fusion: 1 / (k + rank) where k=60 is common
+                rrf_score = weight * (1.0 / (60 + rank + 1))
+                result_map[key]['rrf_score'] += rrf_score
+                result_map[key]['index_count'] += 1
+        
+        # Create final results
+        fused_results = []
+        for key, data in result_map.items():
+            result = data['result']
+            result.similarity_score = data['rrf_score']
+            result.confidence_score = data['rrf_score'] * (data['index_count'] / len(index_results))
+            fused_results.append(result)
+        
+        # Sort by RRF score and limit results
+        fused_results.sort(key=lambda x: x.similarity_score, reverse=True)
+        return fused_results[:query.top_k]
+
+    def _fuse_max_score(self, index_results: List[Dict[str, Any]], 
+                      query: SimilarityQuery) -> List[SimilarityResult]:
+        """Fuse results by taking maximum score across indexes."""
+        result_map = {}
+        
+        for index_result in index_results:
+            if not index_result['success']:
+                continue
+                
+            for result in index_result['results']:
+                key = result.key
+                if key not in result_map or result.similarity_score > result_map[key].similarity_score:
+                    result_map[key] = result
+        
+        # Sort by score and limit results
+        fused_results = list(result_map.values())
+        fused_results.sort(key=lambda x: x.similarity_score, reverse=True)
+        return fused_results[:query.top_k]
+
+    def register_index(self, index_arn: str, index_type: IndexType, 
+                      vector_types: List[str], metadata: Dict[str, Any] = None) -> None:
+        """Register an index for multi-index search coordination."""
+        self.index_registry[index_arn] = {
+            'index_type': index_type,
+            'vector_types': set(vector_types),
+            'metadata': metadata or {},
+            'registered_at': time.time()
+        }
+        logger.info(f"Registered index {index_arn} with vector types: {vector_types}")
+
+    def get_compatible_indexes(self, query: SimilarityQuery) -> List[str]:
+        """Get list of indexes compatible with the query."""
+        input_type = query.get_input_type()
+        compatible_indexes = []
+        
+        for index_arn, config in self.index_registry.items():
+            index_type = config['index_type']
+            vector_types = config['vector_types']
+            
+            # Check compatibility based on input type and index type
+            if self._is_query_compatible(input_type, index_type, vector_types):
+                # Apply vector type filter if specified
+                if query.vector_types:
+                    if any(vt in vector_types for vt in query.vector_types):
+                        compatible_indexes.append(index_arn)
+                else:
+                    compatible_indexes.append(index_arn)
+        
+        return compatible_indexes
+
+    def _is_query_compatible(self, input_type: QueryInputType, index_type: IndexType, 
+                           vector_types: Set[str]) -> bool:
+        """Check if query input type is compatible with index."""
+        if index_type == IndexType.TITAN_TEXT:
+            return input_type in [QueryInputType.TEXT, QueryInputType.EMBEDDING]
+        elif index_type == IndexType.MARENGO_MULTIMODAL:
+            return True  # Marengo supports all input types
+        return False
 
     def filter_by_metadata(self,
                          results: List[SimilarityResult],
@@ -881,23 +1161,30 @@ class SimilaritySearchEngine:
             search_suggestions=suggestions
         )
 
-    def _update_search_stats(self, input_type: QueryInputType, processing_time_ms: int, cost: float) -> None:
+    def _update_search_stats(self, input_type: QueryInputType, processing_time_ms: int, cost: float, 
+                           is_multi_index: bool = False, is_cross_vector: bool = False) -> None:
         """Update global search performance statistics."""
-        self.search_stats['total_searches'] += 1
-        self.search_stats['total_cost'] += cost
-        
-        # Update input type stats
-        input_key = input_type.value
-        if input_key not in self.search_stats['searches_by_input_type']:
-            self.search_stats['searches_by_input_type'][input_key] = 0
-        self.search_stats['searches_by_input_type'][input_key] += 1
-        
-        # Update rolling average latency
-        current_avg = self.search_stats['average_latency_ms']
-        total_searches = self.search_stats['total_searches']
-        self.search_stats['average_latency_ms'] = (
-            (current_avg * (total_searches - 1) + processing_time_ms) / total_searches
-        )
+        with self._stats_lock:
+            self.search_stats['total_searches'] += 1
+            self.search_stats['total_cost'] += cost
+            
+            if is_multi_index:
+                self.search_stats['multi_index_searches'] += 1
+            if is_cross_vector:
+                self.search_stats['cross_vector_searches'] += 1
+            
+            # Update input type stats
+            input_key = input_type.value
+            if input_key not in self.search_stats['searches_by_input_type']:
+                self.search_stats['searches_by_input_type'][input_key] = 0
+            self.search_stats['searches_by_input_type'][input_key] += 1
+            
+            # Update rolling average latency
+            current_avg = self.search_stats['average_latency_ms']
+            total_searches = self.search_stats['total_searches']
+            self.search_stats['average_latency_ms'] = (
+                (current_avg * (total_searches - 1) + processing_time_ms) / total_searches
+            )
 
     def get_engine_capabilities(self) -> Dict[str, Any]:
         """Get comprehensive information about search engine capabilities."""

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "updated_at": "2025-09-02T19:28:07.195781+00:00",
+  "active": {
+    "index_arn": null,
+    "vector_bucket": null,
+    "s3_bucket": null,
+    "opensearch_collection": null,
+    "opensearch_domain": null
+  },
+  "vector_buckets": [],
+  "s3_buckets": [],
+  "indexes": [],
+  "opensearch_collections": [],
+  "opensearch_domains": [],
+  "opensearch_pipelines": [],
+  "opensearch_indexes": [],
+  "iam_roles": []
+}
