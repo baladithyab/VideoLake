@@ -15,15 +15,38 @@ import streamlit as st
 
 class ResultsComponents:
     """Results display functionality components for the unified demo."""
-    
+
     def __init__(self):
-        pass
+        # Initialize UI components (frontend)
+        try:
+            from frontend.components.visualization_ui import VisualizationUI
+            self.viz_ui = VisualizationUI()
+        except ImportError:
+            self.viz_ui = None
+
+        try:
+            from frontend.components.video_player_ui import VideoPlayerUI
+            self.video_ui = VideoPlayerUI()
+        except ImportError:
+            self.video_ui = None
     
     def display_search_results(self, search_results: Dict[str, Any]):
         """Display search results with proper formatting for different patterns."""
         if not search_results:
             st.info("📋 **No search results available** - Please complete a search in the Query & Search section first")
             return
+
+        # Display tabs for different views
+        tab1, tab2, tab3 = st.tabs(["📋 Results List", "📊 Visualization", "🎬 Video Player"])
+
+        with tab1:
+            self._display_results_list(search_results)
+
+        with tab2:
+            self._display_embedding_visualization(search_results)
+
+        with tab3:
+            self._display_video_player(search_results)
         
         # Handle different result formats
         if isinstance(search_results, dict):
@@ -282,3 +305,123 @@ class ResultsComponents:
         with col3:
             if st.button("📋 Copy to Clipboard"):
                 st.info("Clipboard functionality will be implemented")
+
+    def _display_results_list(self, search_results: Dict[str, Any]):
+        """Display search results as a list."""
+        st.subheader("📋 Search Results")
+
+        results = search_results.get('results', [])
+        if not results:
+            st.info("No results found")
+            return
+
+        # Display query info
+        query = search_results.get('query', 'Unknown query')
+        vector_types = search_results.get('vector_types', [])
+        st.info(f"🔍 Query: **{query}** | Modalities: **{', '.join(vector_types)}**")
+
+        # Display results
+        for i, result in enumerate(results):
+            with st.expander(f"🎯 Result {i+1}: {result['segment_id']} (Score: {result['similarity']:.3f})"):
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.write(f"**Similarity Score:** {result['similarity']:.3f}")
+                    st.write(f"**Vector Type:** {result['vector_type']}")
+                    st.write(f"**Video:** {result.get('video_s3_uri', 'demo-video.mp4')}")
+
+                with col2:
+                    st.write(f"**Time Range:** {result['start_time']:.1f}s - {result['end_time']:.1f}s")
+                    st.write(f"**Duration:** {result['end_time'] - result['start_time']:.1f}s")
+                    if result.get('metadata'):
+                        st.write(f"**Metadata:** {result['metadata']}")
+
+                # Jump to video button
+                if st.button(f"▶️ Play Segment", key=f"play_{result['segment_id']}"):
+                    st.session_state.selected_video_segment = result
+                    st.success(f"Selected segment: {result['start_time']:.1f}s - {result['end_time']:.1f}s")
+
+    def _display_embedding_visualization(self, search_results: Dict[str, Any]):
+        """Display embedding space visualization."""
+        if not self.viz_ui:
+            st.error("Visualization UI not available")
+            return
+
+        results = search_results.get('results', [])
+        if not results:
+            st.info("No results to visualize")
+            return
+
+        try:
+            # Generate demo embeddings for visualization
+            from frontend.components.visualization_ui import generate_demo_embeddings_for_ui
+
+            query = search_results.get('query', 'demo query')
+            vector_types = search_results.get('vector_types', ['visual-text'])
+
+            # Create embeddings for each vector type
+            all_query_points = []
+            all_result_points = []
+
+            for vector_type in vector_types:
+                query_points, result_points = generate_demo_embeddings_for_ui(
+                    query=query,
+                    vector_type=vector_type,
+                    n_results=len(results)
+                )
+                all_query_points.extend(query_points)
+                all_result_points.extend(result_points)
+
+            # Render visualization using UI component
+            self.viz_ui.render_embedding_visualization(
+                query_embeddings=all_query_points,
+                result_embeddings=all_result_points
+            )
+
+        except Exception as e:
+            st.error(f"Visualization failed: {e}")
+
+    def _display_video_player(self, search_results: Dict[str, Any]):
+        """Display video player with segment navigation."""
+        if not self.video_ui:
+            st.error("Video player UI not available")
+            return
+
+        results = search_results.get('results', [])
+        if not results:
+            st.info("No video segments to display")
+            return
+
+        try:
+            # Convert results to segment dictionaries
+            segments = []
+            for result in results:
+                segment = {
+                    'segment_id': result['segment_id'],
+                    'start_time': result['start_time'],
+                    'end_time': result['end_time'],
+                    'similarity_score': result['similarity'],
+                    'vector_type': result['vector_type'],
+                    'description': f"Segment matching query with {result['similarity']:.3f} similarity",
+                    'duration': result['end_time'] - result['start_time'],
+                    'time_range_str': f"{result['start_time']:.1f}s - {result['end_time']:.1f}s"
+                }
+                segments.append(segment)
+
+            # Get video URI (use first result's video)
+            video_s3_uri = results[0].get('video_s3_uri', 's3://demo-bucket/sample-video.mp4')
+
+            # Get selected segment ID from session state
+            selected_segment_id = None
+            if hasattr(st.session_state, 'selected_video_segment'):
+                selected_segment_id = st.session_state.selected_video_segment.get('segment_id')
+
+            # Render video player using UI component
+            self.video_ui.render_video_with_segments(
+                video_s3_uri=video_s3_uri,
+                segments=segments,
+                selected_segment_id=selected_segment_id
+            )
+
+        except Exception as e:
+            st.error(f"Video player failed: {e}")

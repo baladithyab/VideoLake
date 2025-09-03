@@ -330,76 +330,11 @@ class UnifiedS3VectorDemo:
         if not st.session_state.processed_videos:
             st.warning("⚠️ **No processed videos available** - Please complete the Upload & Processing step first")
             return
-        
-        # Search interface
-        st.subheader("🔍 Semantic Search Query")
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            search_query = st.text_input(
-                "Enter your search query:",
-                placeholder="e.g., 'person walking in the scene', 'car driving on highway', 'music playing'",
-                help="Describe what you're looking for in the videos"
-            )
-        
-        with col2:
-            search_both = st.button("🔍 Search Both Patterns", type="primary")
-        
-        # Independent pattern search buttons
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            search_s3vector = st.button("🎯 Search Direct S3Vector")
-        
-        with col2:
-            search_opensearch = st.button("🔍 Search OpenSearch Hybrid")
-        
-        # Search configuration
-        with st.expander("⚙️ Search Configuration"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                num_results = st.slider("Number of Results:", 1, 20, 10)
-                search_vector_types = st.multiselect(
-                    "Vector Types to Search:",
-                    options=st.session_state.selected_vector_types,
-                    default=st.session_state.selected_vector_types
-                )
-            
-            with col2:
-                similarity_threshold = st.slider("Similarity Threshold:", 0.0, 1.0, 0.7, step=0.05)
-        
-        # Execute search based on button pressed
-        if search_query:
-            # Analyze query
-            st.subheader("🧠 Query Analysis")
-            query_analysis = self.search_components.analyze_search_query(search_query, search_vector_types)
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Detected Intent", query_analysis["intent"])
-            with col2:
-                st.metric("Recommended Vectors", len(query_analysis["recommended_vectors"]))
-            with col3:
-                st.metric("Complexity", query_analysis["complexity"])
-            
-            # Execute search
-            if search_both:
-                st.subheader("🔄 Dual Pattern Search Results")
-                self.search_components.execute_dual_pattern_search(
-                    search_query, query_analysis, search_vector_types, num_results, similarity_threshold
-                )
-            elif search_s3vector:
-                st.subheader("🎯 Direct S3Vector Search Results")
-                self.search_components.execute_s3vector_search(
-                    search_query, query_analysis, search_vector_types, num_results, similarity_threshold
-                )
-            elif search_opensearch:
-                st.subheader("🔍 OpenSearch Hybrid Search Results")
-                self.search_components.execute_opensearch_search(
-                    search_query, query_analysis, search_vector_types, num_results, similarity_threshold
-                )
+
+        # Use the new search interface from search components
+        search_results = self.search_components.render_search_interface(
+            use_real_aws=st.session_state.use_real_aws
+        )
     
     def render_results_playback_section(self):
         """Render the results and playback section."""

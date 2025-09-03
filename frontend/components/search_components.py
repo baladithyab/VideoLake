@@ -17,10 +17,111 @@ import streamlit as st
 
 class SearchComponents:
     """Search functionality components for the unified demo."""
-    
+
     def __init__(self, service_manager=None, coordinator=None):
         self.service_manager = service_manager
         self.coordinator = coordinator
+
+    def render_search_interface(self, use_real_aws: bool = False) -> Dict[str, Any]:
+        """Render the search interface with modality selection and dual storage pattern support."""
+        st.header("🔍 Multi-Vector Search")
+
+        # Query input
+        query = st.text_input(
+            "Enter your search query:",
+            placeholder="e.g., 'person walking in the scene', 'car driving at night'",
+            help="Describe what you're looking for in the videos"
+        )
+
+        # Modality selection (prominent)
+        st.subheader("🎯 Select Search Modality")
+        modality_col1, modality_col2, modality_col3, modality_col4 = st.columns(4)
+
+        with modality_col1:
+            visual_text = st.checkbox("📝 Visual Text", value=True, help="Text content in videos (OCR, captions)")
+        with modality_col2:
+            visual_image = st.checkbox("🖼️ Visual Image", value=True, help="Visual content and objects")
+        with modality_col3:
+            audio = st.checkbox("🔊 Audio", value=False, help="Audio content and speech")
+        with modality_col4:
+            auto_detect = st.checkbox("🤖 Auto-detect", value=False, help="Automatically select best modality")
+
+        # Build vector types list
+        vector_types = []
+        if visual_text:
+            vector_types.append("visual-text")
+        if visual_image:
+            vector_types.append("visual-image")
+        if audio:
+            vector_types.append("audio")
+
+        # Auto-detect modality if enabled
+        if auto_detect and query:
+            try:
+                from src.services.advanced_query_analysis import SimpleQueryAnalyzer
+                analyzer = SimpleQueryAnalyzer()
+                analysis = analyzer.analyze_query(query, ["visual-text", "visual-image", "audio"])
+                vector_types = analysis.recommended_vectors
+                st.info(f"🤖 Auto-detected modalities: {', '.join(vector_types)} (Intent: {analysis.intent.value})")
+            except Exception as e:
+                st.warning(f"Auto-detection failed: {e}")
+                # Fallback to default selection
+                vector_types = ["visual-text", "visual-image"] if not vector_types else vector_types
+
+        # Advanced options in expander
+        with st.expander("🔧 Advanced Search Options"):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                top_k = st.slider(
+                    "Number of results:",
+                    min_value=1, max_value=20, value=5,
+                    help="How many results to return"
+                )
+
+            with col2:
+                similarity_threshold = st.slider(
+                    "Similarity threshold:",
+                    min_value=0.0, max_value=1.0, value=0.7, step=0.05,
+                    help="Minimum similarity score for results"
+                )
+
+        # Search execution
+        search_results = {}
+
+        if query and vector_types and st.button("🔍 Search Videos", type="primary"):
+            with st.spinner("Searching videos..."):
+                # Display selected modalities
+                st.info(f"🎯 Searching with modalities: {', '.join(vector_types)}")
+
+                # Analyze query
+                analysis = self.analyze_search_query(query, vector_types)
+
+                # Execute search for each storage pattern
+                self.execute_dual_pattern_search(
+                    query=query,
+                    analysis=analysis,
+                    vector_types=vector_types,
+                    num_results=top_k,
+                    threshold=similarity_threshold
+                )
+
+                # Generate search results for session state
+                search_results = {
+                    'query': query,
+                    'vector_types': vector_types,
+                    'results': self.generate_demo_search_results(query, "combined", top_k)
+                }
+
+                # Store results in session state
+                st.session_state.search_results = search_results
+                st.session_state.last_query = query
+                st.session_state.selected_vector_types = vector_types
+
+        elif query and not vector_types:
+            st.warning("⚠️ Please select at least one search modality")
+
+        return search_results
     
     def execute_dual_pattern_search(self, query: str, analysis: Dict[str, Any], vector_types: List[str], num_results: int, threshold: float):
         """Execute search on both storage patterns and compare performance."""
