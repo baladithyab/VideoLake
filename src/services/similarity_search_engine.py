@@ -30,8 +30,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from threading import Lock
 
+from src.services.interfaces.search_service_interface import (
+    ISearchService, SearchQuery, SearchResponse, SearchResult,
+    QueryInputType, IndexType
+)
+from src.services.interfaces.service_registry import get_global_service, ServiceNames
 from src.services.embedding_storage_integration import EmbeddingStorageIntegration
-from src.services.video_embedding_storage import VideoEmbeddingStorageService
+from src.services.unified_video_processing_service import UnifiedVideoProcessingService
 from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
@@ -41,20 +46,7 @@ from src.utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-class QueryInputType(Enum):
-    """Supported query input types for similarity search."""
-    TEXT = "text"
-    VIDEO_KEY = "video_key"        # Key of existing video in index
-    VIDEO_FILE = "video_file"      # New video file to process
-    AUDIO_FILE = "audio_file"      # New audio file to process  
-    IMAGE_FILE = "image_file"      # New image file to process
-    EMBEDDING = "embedding"        # Direct embedding vector
-
-
-class IndexType(Enum):
-    """Types of vector indexes supported."""
-    MARENGO_MULTIMODAL = "marengo_multimodal"  # TwelveLabs Marengo index
-    TITAN_TEXT = "titan_text"                  # Bedrock Titan text index
+# Remove duplicate enum definitions - using the ones from interface
 
 
 @dataclass
@@ -182,7 +174,7 @@ class SimilaritySearchResponse:
     search_suggestions: List[str]
 
 
-class SimilaritySearchEngine:
+class SimilaritySearchEngine(ISearchService):
     """
     Unified similarity search engine supporting multimodal search within S3 Vector indexes.
     
@@ -205,7 +197,7 @@ class SimilaritySearchEngine:
                  twelvelabs_service: Optional[TwelveLabsVideoProcessingService] = None,
                  s3_vector_manager: Optional[S3VectorStorageManager] = None,
                  text_storage: Optional[EmbeddingStorageIntegration] = None,
-                 video_storage: Optional[VideoEmbeddingStorageService] = None):
+                 video_storage: Optional[UnifiedVideoProcessingService] = None):
         """
         Initialize the similarity search engine.
         
@@ -220,7 +212,7 @@ class SimilaritySearchEngine:
         self.twelvelabs_service = twelvelabs_service or TwelveLabsVideoProcessingService()
         self.s3_vector_manager = s3_vector_manager or S3VectorStorageManager()
         self.text_storage = text_storage or EmbeddingStorageIntegration()
-        self.video_storage = video_storage or VideoEmbeddingStorageService()
+        self.video_storage = video_storage or UnifiedVideoProcessingService()
         
         # Performance tracking with thread safety
         self._stats_lock = Lock()
@@ -240,9 +232,9 @@ class SimilaritySearchEngine:
         logger.info("SimilaritySearchEngine initialized with multi-vector and multi-index capabilities")
 
     def find_similar_content(self,
-                           query: SimilarityQuery,
+                           query: SearchQuery,
                            index_arn: str,
-                           index_type: IndexType) -> SimilaritySearchResponse:
+                           index_type: IndexType) -> SearchResponse:
         """
         Find similar content using multimodal search within the specified index.
         
@@ -310,8 +302,8 @@ class SimilaritySearchEngine:
                             index_arn: str,
                             index_type: IndexType,
                             top_k: int = 10,
-                            temporal_filter: Optional[TemporalFilter] = None,
-                            metadata_filters: Optional[Dict[str, Any]] = None) -> SimilaritySearchResponse:
+                            temporal_filter: Optional[Dict[str, Any]] = None,
+                            metadata_filters: Optional[Dict[str, Any]] = None) -> SearchResponse:
         """
         Search using natural language text queries.
         
@@ -326,10 +318,9 @@ class SimilaritySearchEngine:
         Returns:
             SimilaritySearchResponse with text query results
         """
-        query = SimilarityQuery(
+        query = SearchQuery(
             query_text=query_text,
             top_k=top_k,
-            temporal_filter=temporal_filter,
             metadata_filters=metadata_filters,
             extract_entities=True,
             expand_synonyms=True,
@@ -396,9 +387,9 @@ class SimilaritySearchEngine:
         return self.find_similar_content(query, index_arn, IndexType.MARENGO_MULTIMODAL)
 
     def search_multi_index(self,
-                          query: SimilarityQuery,
+                          query: SearchQuery,
                           index_configurations: List[Dict[str, Any]],
-                          fusion_method: str = "weighted_average") -> SimilaritySearchResponse:
+                          fusion_method: str = "weighted_average") -> SearchResponse:
         """
         Search across multiple indexes and fuse results.
         
@@ -631,7 +622,7 @@ class SimilaritySearchEngine:
         }
         logger.info(f"Registered index {index_arn} with vector types: {vector_types}")
 
-    def get_compatible_indexes(self, query: SimilarityQuery) -> List[str]:
+    def get_compatible_indexes(self, query: SearchQuery) -> List[str]:
         """Get list of indexes compatible with the query."""
         input_type = query.get_input_type()
         compatible_indexes = []

@@ -11,6 +11,7 @@ from typing import List, Optional, Dict, Any
 from datetime import timedelta
 
 from src.utils.logging_config import get_logger
+from src.services.s3_bucket_utils import S3BucketUtilityService
 
 logger = get_logger(__name__)
 
@@ -41,6 +42,7 @@ class SimpleVideoPlayer:
     
     def __init__(self):
         """Initialize the video player."""
+        self.s3_service = S3BucketUtilityService()
         logger.info("Simple video player initialized")
     
     def prepare_video_data(
@@ -138,15 +140,21 @@ class SimpleVideoPlayer:
         return options
     
     def _get_video_url(self, video_s3_uri: str) -> str:
-        """Get video URL for playback.
-        
-        In real implementation, this would generate a presigned URL.
-        For demo, return a placeholder.
-        """
+        """Get video URL for playback using S3 presigned URLs."""
         if video_s3_uri.startswith("s3://"):
-            # In real implementation:
-            # return self.s3_service.generate_presigned_url(video_s3_uri)
-            return f"demo-video-{video_s3_uri.split('/')[-1]}"
+            try:
+                # Generate presigned URL for video streaming
+                presigned_data = self.s3_service.generate_presigned_url(
+                    s3_uri=video_s3_uri,
+                    expires_in=3600,  # 1 hour expiration
+                    response_content_type="video/mp4"
+                )
+                logger.info(f"Generated presigned URL for video: {video_s3_uri}")
+                return presigned_data["url"]
+            except Exception as e:
+                logger.error(f"Failed to generate presigned URL for {video_s3_uri}: {e}")
+                # Fallback to placeholder for demo purposes
+                return f"demo-video-{video_s3_uri.split('/')[-1]}"
         return video_s3_uri
     
     def get_segment_by_id(self, segments: List[VideoSegment], segment_id: str) -> Optional[VideoSegment]:

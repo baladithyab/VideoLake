@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError, BotoCoreError
 import time
 import random
 
-from src.config import config_manager
+from src.config.unified_config_manager import get_unified_config_manager
 from src.utils.aws_clients import aws_client_factory
 from src.exceptions import ModelAccessError, ValidationError, VectorEmbeddingError
 from src.utils.logging_config import get_logger
@@ -93,7 +93,8 @@ class BedrockEmbeddingService:
     def __init__(self):
         """Initialize the Bedrock embedding service."""
         self.bedrock_client = aws_client_factory.get_bedrock_runtime_client()
-        self.config = config_manager.aws_config
+        config_manager = get_unified_config_manager()
+        self.config = config_manager.get_aws_config()
         
     def get_supported_models(self) -> Dict[str, ModelInfo]:
         """Get information about all supported embedding models."""
@@ -163,7 +164,7 @@ class BedrockEmbeddingService:
             )
         
         if model_id is None:
-            model_id = self.config.bedrock_models['text_embedding']
+            model_id = self.config.get('bedrock_model_id', 'amazon.titan-embed-text-v2:0')
         
         # Validate model access
         self.validate_model_access(model_id)
@@ -235,7 +236,7 @@ class BedrockEmbeddingService:
             )
         
         if model_id is None:
-            model_id = self.config.bedrock_models['text_embedding']
+            model_id = self.config.get('bedrock_model_id', 'amazon.titan-embed-text-v2:0')
         
         # Validate model access
         self.validate_model_access(model_id)
@@ -576,7 +577,7 @@ class BedrockEmbeddingService:
             Dictionary with recommended batch processing parameters
         """
         if model_id is None:
-            model_id = self.config.bedrock_models['text_embedding']
+            model_id = self.config.get('bedrock_model_id', 'amazon.titan-embed-text-v2:0')
         
         model_info = self.SUPPORTED_MODELS[model_id]
         total_texts = len(texts)
@@ -693,7 +694,7 @@ class BedrockEmbeddingService:
             Dictionary containing cost estimation details
         """
         if model_id is None:
-            model_id = self.config.bedrock_models['text_embedding']
+            model_id = self.config.get('bedrock_model_id', 'amazon.titan-embed-text-v2:0')
         
         model_info = self.SUPPORTED_MODELS[model_id]
         
