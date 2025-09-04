@@ -39,7 +39,7 @@ from src.services.similarity_search_engine import (
     TemporalFilter,
     SearchResponse
 )
-from src.services.video_embedding_storage import VideoEmbeddingStorageService
+from src.services.unified_video_processing_service import UnifiedVideoProcessingService
 from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.s3_bucket_utils import S3BucketUtilityService
