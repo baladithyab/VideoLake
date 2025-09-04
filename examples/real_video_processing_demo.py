@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
 from src.services.s3_vector_storage import S3VectorStorageManager
-from src.services.video_embedding_storage import VideoEmbeddingStorageService
+from src.services.unified_video_processing_service import UnifiedVideoProcessingService
 from src.exceptions import VectorEmbeddingError
 from src.utils.logging_config import get_logger
 from src.config import config_manager
