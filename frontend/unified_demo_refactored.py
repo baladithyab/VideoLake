@@ -37,19 +37,15 @@ from src.services import (
 from src.utils.logging_config import get_logger
 
 # Import demo components (using enhanced configuration)
-try:
-    from frontend.components.config_adapter import get_enhanced_config, get_enhanced_utils
-    DemoConfig = get_enhanced_config()
-    DemoUtils = get_enhanced_utils()
-    ENHANCED_CONFIG = True
-except ImportError:
-    from frontend.components.demo_config import DemoConfig, DemoUtils
-    DemoConfig = DemoConfig()
-    DemoUtils = DemoUtils()
-    ENHANCED_CONFIG = False
+# Force use of demo config for now to ensure resources section is available
+from frontend.components.demo_config import DemoConfig, DemoUtils
+DemoConfig = DemoConfig()
+DemoUtils = DemoUtils()
+ENHANCED_CONFIG = False
 from frontend.components.search_components import SearchComponents
 from frontend.components.results_components import ResultsComponents
 from frontend.components.processing_components import ProcessingComponents
+from frontend.components.workflow_resource_manager import render_workflow_resource_manager
 from frontend.components.error_handling import (
     ErrorBoundary,
     FallbackComponents,
@@ -263,13 +259,46 @@ class UnifiedS3VectorDemo:
             self.render_visualization_section()
         elif current_section == "analytics":
             self.render_analytics_section()
-        
+        elif current_section == "resources":
+            self.render_resource_management_section()
+
         # Render section navigation
         self.render_section_navigation(current_section)
     
     def render_upload_processing_section(self):
         """Render the upload and processing section."""
         with ErrorBoundary("Upload & Processing"):
+            # Quick resume option
+            st.subheader("🔄 Resume or Start Fresh")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if st.button("🔄 Resume with Existing Resources", type="primary"):
+                    st.session_state.show_resume_dialog = True
+
+            with col2:
+                if st.button("🆕 Create New Resources"):
+                    st.session_state.show_creation_dialog = True
+
+            # Show dialogs if requested
+            if st.session_state.get('show_resume_dialog', False):
+                with st.expander("🔄 Resume with Existing Resources", expanded=True):
+                    from frontend.components.workflow_resource_manager import WorkflowResourceManager
+                    manager = WorkflowResourceManager()
+                    if manager.render_workflow_resume_section():
+                        st.session_state.show_resume_dialog = False
+                        st.rerun()
+
+            if st.session_state.get('show_creation_dialog', False):
+                with st.expander("🛠️ Create New Resources", expanded=True):
+                    from frontend.components.workflow_resource_manager import WorkflowResourceManager
+                    manager = WorkflowResourceManager()
+                    manager.render_resource_creation_wizard()
+                    if st.button("✅ Done Creating Resources"):
+                        st.session_state.show_creation_dialog = False
+                        st.rerun()
+
             # Storage pattern selection
             st.subheader("🏗️ Storage Pattern Selection")
         
@@ -400,7 +429,13 @@ class UnifiedS3VectorDemo:
             st.subheader("🔧 System Status")
             if st.button("🔄 Refresh Status"):
                 self.test_service_manager_integration()
-    
+
+    def render_resource_management_section(self):
+        """Render the resource management section."""
+        with ErrorBoundary("Resource Management"):
+            # Use workflow resource manager component
+            render_workflow_resource_manager()
+
     def render_section_navigation(self, current_section: str):
         """Render navigation controls for workflow sections."""
         st.markdown("---")

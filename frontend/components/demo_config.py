@@ -44,15 +44,16 @@ class DemoConfig:
     
     # Workflow sections
     workflow_sections: List[str] = field(default_factory=lambda: [
-        "upload", "query", "results", "visualization", "analytics"
+        "upload", "query", "results", "visualization", "analytics", "resources"
     ])
     
     section_titles: Dict[str, str] = field(default_factory=lambda: {
         "upload": "🎬 Upload & Processing",
-        "query": "🔍 Query & Search", 
+        "query": "🔍 Query & Search",
         "results": "🎯 Results & Playback",
         "visualization": "📊 Embedding Visualization",
-        "analytics": "⚙️ Analytics & Management"
+        "analytics": "⚙️ Analytics & Management",
+        "resources": "🔧 Resource Management"
     })
     
     section_descriptions: Dict[str, str] = field(default_factory=lambda: {
@@ -60,7 +61,8 @@ class DemoConfig:
         "query": "Intelligent semantic search with dual storage pattern comparison",
         "results": "Interactive video player with segment overlay and similarity scores",
         "visualization": "Explore embedding space with dimensionality reduction and query overlay",
-        "analytics": "Performance monitoring, cost tracking, and system management"
+        "analytics": "Performance monitoring, cost tracking, and system management",
+        "resources": "Manage AWS resources, resume work, create new resources, and cleanup"
     })
 
 
@@ -243,7 +245,8 @@ class DemoUtils:
             "query": hasattr(session_state, 'processed_videos') and bool(session_state.processed_videos),
             "results": hasattr(session_state, 'search_results') and bool(session_state.search_results),
             "visualization": hasattr(session_state, 'search_results') and bool(session_state.search_results),
-            "analytics": hasattr(session_state, 'processing_jobs') and bool(session_state.processing_jobs)
+            "analytics": hasattr(session_state, 'processing_jobs') and bool(session_state.processing_jobs),
+            "resources": True  # Always available
         }
 
         return {

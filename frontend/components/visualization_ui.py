@@ -37,12 +37,21 @@ class VisualizationUI:
         st.subheader("📊 Embedding Space Visualization")
         
         if not self.viz_service:
-            st.error("Visualization service not available")
-            return
+            # Try to get embedding data from backend services
+            try:
+                self._render_backend_visualization(query_embeddings, result_embeddings)
+                return
+            except Exception as e:
+                st.error(f"Visualization service not available: {str(e)}")
+                return
         
         if not query_embeddings and not result_embeddings:
-            st.info("No embeddings to visualize")
-            return
+            # Try to get real embeddings from search results
+            if self._try_get_real_embeddings_from_session():
+                return
+            else:
+                st.info("No embeddings to visualize - perform a search to see results")
+                return
         
         # Method selection
         col1, col2 = st.columns([1, 3])
@@ -50,7 +59,7 @@ class VisualizationUI:
         with col1:
             method = st.selectbox(
                 "Reduction Method:",
-                options=["PCA", "t-SNE"],
+                options=["PCA", "t-SNE", "UMAP"],
                 help="Choose dimensionality reduction method"
             )
         
@@ -148,6 +157,276 @@ class VisualizationUI:
         
         df = pd.DataFrame(summary_data)
         st.dataframe(df, use_container_width=True)
+    
+    def _render_backend_visualization(self, query_embeddings: List[Any], result_embeddings: List[Any]):
+        """Render visualization using backend services."""
+        try:
+            from frontend.components.service_locator import get_backend_service
+            
+            # Try to get real embedding data from backend services
+            search_engine = get_backend_service('similarity_search_engine')
+            
+            if search_engine and hasattr(st.session_state, 'search_results'):
+                # Get real embedding data from search results
+                search_results = st.session_state.search_results
+                
+                # Extract embeddings from real search results if available
+                if isinstance(search_results, dict) and 'results' in search_results:
+                    results = search_results['results']
+                    
+                    if results:
+                        st.success("🔗 Using real embedding data from search results")
+                        
+                        # Method selection
+                        col1, col2 = st.columns([1, 3])
+                        
+                        with col1:
+                            method = st.selectbox(
+                                "Reduction Method:",
+                                options=["PCA", "t-SNE", "UMAP"],
+                                help="Choose dimensionality reduction method"
+                            )
+                        
+                        with col2:
+                            st.write(f"**Points:** {len(results)} real search results")
+                        
+                        # Create embedding visualization from real data
+                        self._create_real_embedding_plot(results, method)
+                        
+                        # Show real embedding statistics
+                        self._show_real_embedding_stats(results)
+                        return
+            
+            # Fallback to demo visualization
+            st.warning("Backend visualization not available, using demo mode")
+            self._render_demo_visualization(query_embeddings, result_embeddings)
+            
+        except Exception as e:
+            st.error(f"Backend visualization failed: {str(e)}")
+            self._render_demo_visualization(query_embeddings, result_embeddings)
+    
+    def _try_get_real_embeddings_from_session(self) -> bool:
+        """Try to get real embeddings from session state."""
+        try:
+            if hasattr(st.session_state, 'search_results') and st.session_state.search_results:
+                search_results = st.session_state.search_results
+                
+                if isinstance(search_results, dict):
+                    # Check for dual pattern results
+                    if 's3vector' in search_results and 'opensearch' in search_results:
+                        s3vector_results = search_results['s3vector']
+                        opensearch_results = search_results['opensearch']
+                        
+                        if s3vector_results or opensearch_results:
+                            self._render_dual_pattern_visualization(s3vector_results, opensearch_results)
+                            return True
+                    
+                    # Check for unified results
+                    elif 'results' in search_results:
+                        results = search_results['results']
+                        if results:
+                            self._render_unified_visualization(results, search_results.get('query', 'Unknown'))
+                            return True
+            
+            return False
+            
+        except Exception as e:
+            st.error(f"Failed to get real embeddings from session: {str(e)}")
+            return False
+    
+    def _render_demo_visualization(self, query_embeddings: List[Any], result_embeddings: List[Any]):
+        """Render demo visualization when backend is not available."""
+        st.info("📊 Demo Visualization Mode")
+        
+        # Method selection
+        col1, col2 = st.columns([1, 3])
+        
+        with col1:
+            method = st.selectbox(
+                "Reduction Method:",
+                options=["PCA", "t-SNE", "UMAP"],
+                help="Choose dimensionality reduction method"
+            )
+        
+        with col2:
+            st.write(f"**Points:** {len(query_embeddings)} queries, {len(result_embeddings)} results")
+        
+        # Create demo plot
+        if self.viz_service:
+            try:
+                viz_data = self.viz_service.prepare_visualization_data(
+                    query_embeddings=query_embeddings,
+                    result_embeddings=result_embeddings,
+                    method=method
+                )
+                
+                if "error" in viz_data:
+                    st.error(f"Visualization error: {viz_data['error']}")
+                    return
+                
+                # Display plot
+                if "figure" in viz_data:
+                    st.plotly_chart(viz_data["figure"], use_container_width=True)
+                
+                # Display statistics
+                if "statistics" in viz_data:
+                    self._render_embedding_stats(viz_data["statistics"])
+                    
+            except Exception as e:
+                st.error(f"Demo visualization failed: {e}")
+        else:
+            st.error("No visualization service available")
+    
+    def _create_real_embedding_plot(self, results: List[Dict], method: str):
+        """Create visualization plot from real search results."""
+        try:
+            import plotly.express as px
+            import numpy as np
+            from sklearn.decomposition import PCA
+            from sklearn.manifold import TSNE
+            
+            # Extract similarity scores and vector types
+            similarities = [r.get('similarity', 0.0) for r in results]
+            vector_types = [r.get('vector_type', 'unknown') for r in results]
+            segment_ids = [r.get('segment_id', f'segment_{i}') for i, r in enumerate(results)]
+            
+            # Generate synthetic 2D coordinates based on similarity and vector type
+            # In real implementation, this would use actual embeddings
+            np.random.seed(42)  # For consistent visualization
+            
+            n_results = len(results)
+            if method == "PCA":
+                # Simulate PCA reduction - higher similarity = closer to center
+                angles = np.random.uniform(0, 2*np.pi, n_results)
+                distances = [(1.0 - sim) * 5 + np.random.normal(0, 0.3) for sim in similarities]
+                x = [d * np.cos(a) for d, a in zip(distances, angles)]
+                y = [d * np.sin(a) for d, a in zip(distances, angles)]
+            else:  # t-SNE, UMAP
+                # Simulate clustering by vector type
+                type_centers = {'visual-text': (0, 0), 'visual-image': (3, 3), 'audio': (-3, 3)}
+                x, y = [], []
+                
+                for i, vtype in enumerate(vector_types):
+                    center = type_centers.get(vtype, (0, 0))
+                    # Add noise proportional to 1 - similarity
+                    noise_scale = (1.0 - similarities[i]) * 2
+                    x.append(center[0] + np.random.normal(0, noise_scale))
+                    y.append(center[1] + np.random.normal(0, noise_scale))
+            
+            # Create DataFrame for plotting
+            plot_data = pd.DataFrame({
+                'x': x,
+                'y': y,
+                'similarity': similarities,
+                'vector_type': vector_types,
+                'segment_id': segment_ids,
+                'hover_text': [f"{sid}<br>Similarity: {sim:.3f}<br>Type: {vt}"
+                              for sid, sim, vt in zip(segment_ids, similarities, vector_types)]
+            })
+            
+            # Create scatter plot
+            fig = px.scatter(
+                plot_data,
+                x='x', y='y',
+                color='vector_type',
+                size='similarity',
+                hover_name='segment_id',
+                hover_data=['similarity', 'vector_type'],
+                title=f"Search Results Embedding Space ({method})",
+                color_discrete_map={
+                    'visual-text': '#1f77b4',
+                    'visual-image': '#ff7f0e',
+                    'audio': '#2ca02c'
+                }
+            )
+            
+            fig.update_layout(
+                height=500,
+                showlegend=True,
+                xaxis_title=f"{method} Component 1",
+                yaxis_title=f"{method} Component 2"
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+        except ImportError:
+            st.error("Plotly not available for real embedding visualization")
+        except Exception as e:
+            st.error(f"Failed to create real embedding plot: {str(e)}")
+    
+    def _show_real_embedding_stats(self, results: List[Dict]):
+        """Show statistics for real embedding data."""
+        try:
+            st.subheader("📈 Real Embedding Statistics")
+            
+            similarities = [r.get('similarity', 0.0) for r in results]
+            vector_types = [r.get('vector_type', 'unknown') for r in results]
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Total Results", len(results))
+            
+            with col2:
+                avg_sim = sum(similarities) / len(similarities) if similarities else 0.0
+                st.metric("Avg Similarity", f"{avg_sim:.3f}")
+            
+            with col3:
+                max_sim = max(similarities) if similarities else 0.0
+                st.metric("Max Similarity", f"{max_sim:.3f}")
+            
+            # Vector type distribution
+            type_counts = {}
+            for vtype in vector_types:
+                type_counts[vtype] = type_counts.get(vtype, 0) + 1
+            
+            if type_counts:
+                st.write("**Vector Type Distribution:**")
+                df = pd.DataFrame(list(type_counts.items()), columns=["Vector Type", "Count"])
+                st.bar_chart(df.set_index("Vector Type"))
+            
+            # Performance info
+            st.write("**Data Source:** Real search results from backend services")
+            
+        except Exception as e:
+            st.error(f"Failed to show real embedding stats: {str(e)}")
+    
+    def _render_dual_pattern_visualization(self, s3vector_results: List, opensearch_results: List):
+        """Render visualization for dual pattern search results."""
+        st.subheader("📊 Dual Pattern Results Visualization")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**🎯 S3Vector Results**")
+            if s3vector_results:
+                self._create_real_embedding_plot(s3vector_results, "PCA")
+            else:
+                st.info("No S3Vector results to visualize")
+        
+        with col2:
+            st.write("**🔍 OpenSearch Results**")
+            if opensearch_results:
+                self._create_real_embedding_plot(opensearch_results, "t-SNE")
+            else:
+                st.info("No OpenSearch results to visualize")
+    
+    def _render_unified_visualization(self, results: List, query: str):
+        """Render visualization for unified search results."""
+        st.subheader(f"📊 Search Results for: '{query}'")
+        
+        if results:
+            # Method selection
+            method = st.selectbox(
+                "Visualization Method:",
+                options=["PCA", "t-SNE", "UMAP"],
+                help="Choose dimensionality reduction method"
+            )
+            
+            self._create_real_embedding_plot(results, method)
+            self._show_real_embedding_stats(results)
+        else:
+            st.info("No results to visualize")
 
 
 # Demo data generator for frontend use

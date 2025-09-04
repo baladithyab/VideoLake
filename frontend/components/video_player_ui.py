@@ -136,18 +136,37 @@ class VideoPlayerUI:
             return None
     
     def _render_video_player(self, video_data: Dict[str, Any]):
-        """Render the video player component."""
+        """Render the video player component with real streaming support."""
         video_url = video_data.get("video_url", "")
         video_s3_uri = video_data.get("video_s3_uri", "")
         selected_segment = video_data.get("selected_segment")
         
         # Video player
         if video_url.startswith("http"):
-            # Real video URL
-            st.video(video_url)
+            # Real video URL - S3 presigned URL
+            st.success(f"🎬 Streaming video from S3: {video_s3_uri.split('/')[-1]}")
+            
+            # Add video playback with error handling
+            try:
+                # Display video with time controls
+                video_col, info_col = st.columns([3, 1])
+                
+                with video_col:
+                    st.video(video_url, start_time=selected_segment.get('start_time', 0) if selected_segment else 0)
+                
+                with info_col:
+                    st.write("🎯 **Video Info**")
+                    st.write(f"📁 **Source:** {video_s3_uri.split('/')[-1]}")
+                    if selected_segment:
+                        st.write(f"⏱️ **Current Segment:** {selected_segment['time_range_str']}")
+                        st.write(f"📊 **Similarity:** {selected_segment['similarity_score']:.3f}")
+                    
+            except Exception as e:
+                st.error(f"Failed to load video: {e}")
+                st.info("💡 If video fails to load, check S3 permissions and video format")
         else:
             # Demo mode - show placeholder
-            st.info("📹 Video player would display here")
+            st.info("📹 Demo mode - Video player would display here")
             st.code(f"Video: {video_s3_uri}")
             
             # Show selected segment info

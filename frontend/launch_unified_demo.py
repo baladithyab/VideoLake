@@ -86,7 +86,7 @@ def main():
     
     # Get the script directory
     script_dir = Path(__file__).parent
-    app_path = script_dir / "unified_demo_app.py"
+    app_path = script_dir / "unified_demo_refactored.py"
     
     if not app_path.exists():
         print(f"❌ Error: {app_path} not found")
