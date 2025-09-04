@@ -43,6 +43,11 @@ class ValidationError(VectorEmbeddingError):
     pass
 
 
+class ProcessingError(VectorEmbeddingError):
+    """Raised when video or data processing fails."""
+    pass
+
+
 class OpenSearchIntegrationError(VectorEmbeddingError):
     """Raised when OpenSearch integration operations fail."""
     pass

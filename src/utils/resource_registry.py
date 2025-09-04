@@ -103,6 +103,12 @@ class ResourceRegistry:
             data["active"]["s3_bucket"] = bucket
             self._write(data)
 
+    def get_active_s3_bucket(self) -> Optional[str]:
+        """Get active S3 bucket."""
+        with self._lock:
+            data = self._read()
+            return (data.get("active") or {}).get("s3_bucket")
+
     # Creation logs
     def log_vector_bucket_created(
         self,
@@ -554,6 +560,23 @@ class ResourceRegistry:
         with self._lock:
             data = self._read()
             return (data.get("active") or {}).get("opensearch_domain")
+
+    def get_active_resources(self) -> Dict[str, Optional[str]]:
+        """Get all active resource selections."""
+        with self._lock:
+            data = self._read()
+            active = data.get("active", {})
+            return {
+                "s3_bucket": active.get("s3_bucket"),
+                "vector_bucket": active.get("vector_bucket"),
+                "index_arn": active.get("index_arn"),
+                "opensearch_collection": active.get("opensearch_collection"),
+                "opensearch_domain": active.get("opensearch_domain")
+            }
+
+    def set_active_index(self, index_arn: Optional[str]) -> None:
+        """Set active vector index (alias for set_active_index_arn)."""
+        self.set_active_index_arn(index_arn)
 
     # Resource summary methods
     

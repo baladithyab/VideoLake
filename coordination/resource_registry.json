@@ -1,17 +1,219 @@
 {
   "version": 1,
-  "updated_at": "2025-09-02T19:28:07.195781+00:00",
+  "updated_at": "2025-09-04T22:34:08.422555+00:00",
   "active": {
-    "index_arn": null,
+    "index_arn": "arn:aws:s3vectors:us-east-1:123456789012:index/s3vector-setup-1757011789-index",
     "vector_bucket": null,
-    "s3_bucket": null,
-    "opensearch_collection": null,
+    "s3_bucket": "s3vector-setup-1757011789-s3",
+    "opensearch_collection": "s3vector-setup-1757011789-collection",
     "opensearch_domain": null
   },
   "vector_buckets": [],
-  "s3_buckets": [],
-  "indexes": [],
-  "opensearch_collections": [],
+  "s3_buckets": [
+    {
+      "name": "test-bucket-1757008740",
+      "region": "us-east-1",
+      "source": "test",
+      "status": "created",
+      "created_at": "2025-09-04T17:59:00.245156+00:00"
+    },
+    {
+      "name": "test-bucket-1757009024",
+      "region": "us-east-1",
+      "source": "test",
+      "status": "created",
+      "created_at": "2025-09-04T18:03:44.135600+00:00"
+    },
+    {
+      "name": "test-workflow-bucket",
+      "region": "us-east-1",
+      "source": "session_1757009573",
+      "status": "created",
+      "created_at": "2025-09-04T18:12:53.222180+00:00"
+    },
+    {
+      "name": "lifecycle-test-bucket-1757009573",
+      "region": "us-east-1",
+      "source": "session_1757009573",
+      "status": "created",
+      "created_at": "2025-09-04T18:12:53.982692+00:00"
+    },
+    {
+      "name": "simulation-test-bucket-1757010709",
+      "region": "us-east-1",
+      "source": "session_1757010709",
+      "status": "deleted",
+      "created_at": "2025-09-04T18:31:49.025610+00:00",
+      "deleted_at": "2025-09-04T18:31:49.027689+00:00"
+    },
+    {
+      "name": "simulation-setup-1757010709-s3",
+      "region": "us-east-1",
+      "source": "session_1757010709",
+      "status": "deleted",
+      "created_at": "2025-09-04T18:31:49.026926+00:00",
+      "deleted_at": "2025-09-04T18:31:49.028203+00:00"
+    },
+    {
+      "name": "simulation-test-bucket-1757010814",
+      "region": "us-east-1",
+      "source": "session_1757010814",
+      "status": "deleted",
+      "created_at": "2025-09-04T18:33:34.267154+00:00",
+      "deleted_at": "2025-09-04T18:33:34.274066+00:00"
+    },
+    {
+      "name": "simulation-setup-1757010814-s3",
+      "region": "us-east-1",
+      "source": "session_1757010814",
+      "status": "deleted",
+      "created_at": "2025-09-04T18:33:34.268487+00:00",
+      "deleted_at": "2025-09-04T18:33:34.274384+00:00"
+    },
+    {
+      "name": "test-bucket-1757011599",
+      "region": "us-east-1",
+      "source": "test",
+      "status": "created",
+      "created_at": "2025-09-04T18:46:39.036462+00:00"
+    },
+    {
+      "name": "s3vector-setup-1757011757-s3",
+      "region": "us-east-1",
+      "source": "session_1757011745",
+      "status": "created",
+      "created_at": "2025-09-04T18:49:17.634027+00:00"
+    },
+    {
+      "name": "s3vector-setup-1757011789-s3",
+      "region": "us-east-1",
+      "source": "session_1757011787",
+      "status": "created",
+      "created_at": "2025-09-04T18:49:49.974229+00:00"
+    }
+  ],
+  "indexes": [
+    {
+      "bucket": "simulation-setup-1757010814-s3",
+      "name": "simulation-setup-1757010814-index",
+      "arn": "arn:aws:s3vectors:us-east-1:123456789012:index/simulation-setup-1757010814-index",
+      "dimensions": 1024,
+      "distance_metric": "cosine",
+      "source": "session_1757010814",
+      "status": "created",
+      "created_at": "2025-09-04T18:33:34.268765+00:00"
+    },
+    {
+      "bucket": "s3vector-setup-1757011757-s3",
+      "name": "s3vector-setup-1757011757-index",
+      "arn": "arn:aws:s3vectors:us-east-1:123456789012:index/s3vector-setup-1757011757-index",
+      "dimensions": 1024,
+      "distance_metric": "cosine",
+      "source": "session_1757011745",
+      "status": "created",
+      "created_at": "2025-09-04T18:49:17.634833+00:00"
+    },
+    {
+      "bucket": "s3vector-setup-1757011789-s3",
+      "name": "s3vector-setup-1757011789-index",
+      "arn": "arn:aws:s3vectors:us-east-1:123456789012:index/s3vector-setup-1757011789-index",
+      "dimensions": 1024,
+      "distance_metric": "cosine",
+      "source": "session_1757011787",
+      "status": "created",
+      "created_at": "2025-09-04T18:49:49.975041+00:00"
+    },
+    {
+      "bucket": "test-bucket",
+      "name": "test-index",
+      "arn": null,
+      "status": "deleted",
+      "source": "service",
+      "deleted_at": "2025-09-04T22:34:08.419308+00:00"
+    },
+    {
+      "bucket": null,
+      "name": null,
+      "arn": "arn:aws:s3vectors:us-west-2:123456789012:index/test-bucket/test-index",
+      "status": "deleted",
+      "source": "service",
+      "deleted_at": "2025-09-04T22:34:08.420884+00:00"
+    },
+    {
+      "bucket": "test-bucket",
+      "name": "nonexistent-index",
+      "arn": null,
+      "status": "deleted",
+      "source": "service",
+      "deleted_at": "2025-09-04T22:34:08.422548+00:00"
+    }
+  ],
+  "opensearch_collections": [
+    {
+      "name": "test-workflow-collection",
+      "arn": "arn:aws:aoss:us-east-1:123456789012:collection/test-workflow-collection",
+      "region": "us-east-1",
+      "type": "VECTORSEARCH",
+      "source": "session_1757009573",
+      "status": "created",
+      "created_at": "2025-09-04T18:12:53.275913+00:00"
+    },
+    {
+      "name": "lifecycle-test-collection-1757009573",
+      "arn": "arn:aws:aoss:us-east-1:123456789012:collection/lifecycle-test-collection-1757009573",
+      "region": "us-east-1",
+      "type": "VECTORSEARCH",
+      "source": "session_1757009573",
+      "status": "created",
+      "created_at": "2025-09-04T18:12:53.983373+00:00"
+    },
+    {
+      "name": "simulation-test-collection-1757010709",
+      "arn": "arn:aws:aoss:us-east-1:123456789012:collection/simulation-test-collection-1757010709",
+      "region": "us-east-1",
+      "type": "VECTORSEARCH",
+      "source": "session_1757010709",
+      "status": "deleted",
+      "created_at": "2025-09-04T18:31:49.026037+00:00",
+      "deleted_at": "2025-09-04T18:31:49.028812+00:00"
+    },
+    {
+      "name": "simulation-test-collection-1757010814",
+      "arn": "arn:aws:aoss:us-east-1:123456789012:collection/simulation-test-collection-1757010814",
+      "region": "us-east-1",
+      "type": "VECTORSEARCH",
+      "source": "session_1757010814",
+      "status": "created",
+      "created_at": "2025-09-04T18:33:34.267526+00:00"
+    },
+    {
+      "name": "simulation-setup-1757010814-collection",
+      "arn": "arn:aws:aoss:us-east-1:123456789012:collection/simulation-setup-1757010814-collection",
+      "region": "us-east-1",
+      "type": "VECTORSEARCH",
+      "source": "session_1757010814",
+      "status": "created",
+      "created_at": "2025-09-04T18:33:34.269795+00:00"
+    },
+    {
+      "name": "s3vector-setup-1757011757-collection",
+      "arn": "arn:aws:aoss:us-east-1:123456789012:collection/s3vector-setup-1757011757-collection",
+      "region": "us-east-1",
+      "type": "VECTORSEARCH",
+      "source": "session_1757011745",
+      "status": "created",
+      "created_at": "2025-09-04T18:49:17.635837+00:00"
+    },
+    {
+      "name": "s3vector-setup-1757011789-collection",
+      "arn": "arn:aws:aoss:us-east-1:123456789012:collection/s3vector-setup-1757011789-collection",
+      "region": "us-east-1",
+      "type": "VECTORSEARCH",
+      "source": "session_1757011787",
+      "status": "created",
+      "created_at": "2025-09-04T18:49:49.976016+00:00"
+    }
+  ],
   "opensearch_domains": [],
   "opensearch_pipelines": [],
   "opensearch_indexes": [],
