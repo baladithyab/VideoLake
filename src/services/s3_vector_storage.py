@@ -16,10 +16,11 @@ import logging
 
 from src.utils.aws_clients import aws_client_factory
 from src.exceptions import VectorStorageError, ValidationError
-from src.utils.logging_config import get_logger
+from src.utils.logging_config import get_logger, get_structured_logger, LoggedOperation, log_aws_calls
 from src.utils.resource_registry import resource_registry
 
 logger = get_logger(__name__)
+structured_logger = get_structured_logger(__name__)
 
 def _normalize_encryption_type(value: Optional[str]) -> Optional[str]:
     """
@@ -54,21 +55,42 @@ class S3VectorStorageManager:
     """Manages S3 vector bucket operations with multi-index support and proper error handling."""
     
     def __init__(self):
-        self.s3vectors_client = aws_client_factory.get_s3vectors_client()
-        self.s3_client = aws_client_factory.get_s3_client()
+        structured_logger.log_function_entry("__init__")
         
-        # Multi-index coordination
-        self.index_registry: Dict[str, Dict[str, Any]] = {}
-        self._registry_lock = Lock()
-        self.executor = ThreadPoolExecutor(max_workers=10)
-        
-        # Vector type management
-        self.vector_type_configs = {
-            "visual-text": {"dimensions": 1024, "default_metric": "cosine"},
-            "visual-image": {"dimensions": 1024, "default_metric": "cosine"},
-            "audio": {"dimensions": 1024, "default_metric": "cosine"},
-            "text-titan": {"dimensions": 1536, "default_metric": "cosine"}
-        }
+        try:
+            structured_logger.log_aws_api_call("s3vectors", "get_client")
+            self.s3vectors_client = aws_client_factory.get_s3vectors_client()
+            
+            structured_logger.log_aws_api_call("s3", "get_client")
+            self.s3_client = aws_client_factory.get_s3_client()
+            
+            # Multi-index coordination
+            structured_logger.log_operation("initializing_multi_index_coordination", level="DEBUG")
+            self.index_registry: Dict[str, Dict[str, Any]] = {}
+            self._registry_lock = Lock()
+            
+            structured_logger.log_operation("initializing_thread_executor", level="DEBUG", max_workers=10)
+            self.executor = ThreadPoolExecutor(max_workers=10)
+            
+            # Vector type management
+            self.vector_type_configs = {
+                "visual-text": {"dimensions": 1024, "default_metric": "cosine"},
+                "visual-image": {"dimensions": 1024, "default_metric": "cosine"},
+                "audio": {"dimensions": 1024, "default_metric": "cosine"},
+                "text-titan": {"dimensions": 1536, "default_metric": "cosine"}
+            }
+            
+            structured_logger.log_operation(
+                "s3vector_storage_manager_initialized",
+                level="INFO",
+                vector_type_configs=len(self.vector_type_configs)
+            )
+            
+        except Exception as e:
+            structured_logger.log_error("s3vector_storage_manager_init", e)
+            raise
+        finally:
+            structured_logger.log_function_exit("__init__")
     
     def _retry_with_backoff(self, func, max_retries: int = 3, base_delay: float = 1.0):
         """Implement exponential backoff for AWS API calls."""
@@ -165,8 +187,8 @@ class S3VectorStorageManager:
                 error_details={"bucket_name": bucket_name}
             )
     
-    def create_vector_bucket(self, 
-                           bucket_name: str, 
+    def create_vector_bucket(self,
+                           bucket_name: str,
                            encryption_type: str = "SSE-S3",
                            kms_key_arn: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -184,112 +206,168 @@ class S3VectorStorageManager:
             ValidationError: If bucket name or parameters are invalid
             VectorStorageError: If bucket creation fails
         """
+        structured_logger.log_function_entry(
+            "create_vector_bucket",
+            bucket_name=bucket_name,
+            encryption_type=encryption_type,
+            has_kms_key=bool(kms_key_arn)
+        )
+        
+        structured_logger.log_resource_operation(
+            "vector_bucket",
+            "create_start",
+            bucket_name,
+            encryption_type=encryption_type
+        )
         logger.info(f"Creating vector bucket: {bucket_name}")
         
-        # Validate bucket name
-        self._validate_bucket_name(bucket_name)
-        
-        # Validate and normalize encryption configuration
-        norm_enc = _normalize_encryption_type(encryption_type)
-        if norm_enc not in ["AES256", "aws:kms"]:
-            raise ValidationError(
-                f"Invalid encryption type: {encryption_type}. Must be 'SSE-S3'/'AES256' or 'SSE-KMS'/'aws:kms'",
-                error_code="INVALID_ENCRYPTION_TYPE",
-                error_details={"encryption_type": encryption_type}
-            )
-
-        if norm_enc == "aws:kms" and not kms_key_arn:
-            raise ValidationError(
-                "KMS key ARN is required when using SSE-KMS encryption",
-                error_code="MISSING_KMS_KEY_ARN"
-            )
-
-        # Prepare request parameters
-        request_params = {
-            "vectorBucketName": bucket_name
-        }
-
-        # Add encryption configuration if specified
-        if norm_enc:
-            enc_cfg = {"sseType": norm_enc}
-            if norm_enc == "aws:kms" and kms_key_arn:
-                enc_cfg["kmsKeyArn"] = kms_key_arn
-            request_params["encryptionConfiguration"] = enc_cfg
-        
-        def _create_bucket():
-            return self.s3vectors_client.create_vector_bucket(**request_params)
-        
-        try:
-            response = self._retry_with_backoff(_create_bucket)
+        with LoggedOperation(structured_logger, f"create_vector_bucket_{bucket_name}", bucket_name=bucket_name):
+            # Validate bucket name
+            structured_logger.log_operation("validating_bucket_name", level="DEBUG", bucket_name=bucket_name)
+            self._validate_bucket_name(bucket_name)
             
-            logger.info(f"Successfully created vector bucket: {bucket_name}")
-            # Log to local resource registry (best-effort)
-            try:
-                from src.config import config_manager as _cfg
-                resource_registry.log_vector_bucket_created(
-                    bucket_name=bucket_name,
-                    region=_cfg.aws_config.region,
-                    encryption=encryption_type,
-                    kms_key_arn=kms_key_arn,
-                    source="service",
+            # Validate and normalize encryption configuration
+            structured_logger.log_operation("validating_encryption_config", level="DEBUG", encryption_type=encryption_type)
+            norm_enc = _normalize_encryption_type(encryption_type)
+            if norm_enc not in ["AES256", "aws:kms"]:
+                structured_logger.log_operation(
+                    "validation_failed",
+                    level="ERROR",
+                    error="invalid_encryption_type",
+                    provided=encryption_type,
+                    normalized=norm_enc
                 )
-            except Exception:
-                pass
+                raise ValidationError(
+                    f"Invalid encryption type: {encryption_type}. Must be 'SSE-S3'/'AES256' or 'SSE-KMS'/'aws:kms'",
+                    error_code="INVALID_ENCRYPTION_TYPE",
+                    error_details={"encryption_type": encryption_type}
+                )
 
-            return {
-                "bucket_name": bucket_name,
-                "status": "created",
-                "encryption_type": encryption_type,
-                "kms_key_arn": kms_key_arn,
-                "response": response
+            if norm_enc == "aws:kms" and not kms_key_arn:
+                structured_logger.log_operation(
+                    "validation_failed",
+                    level="ERROR",
+                    error="missing_kms_key_arn",
+                    encryption_type=norm_enc
+                )
+                raise ValidationError(
+                    "KMS key ARN is required when using SSE-KMS encryption",
+                    error_code="MISSING_KMS_KEY_ARN"
+                )
+
+            # Prepare request parameters
+            structured_logger.log_operation("preparing_request_params", level="DEBUG")
+            request_params = {
+                "vectorBucketName": bucket_name
             }
+
+            # Add encryption configuration if specified
+            if norm_enc:
+                enc_cfg = {"sseType": norm_enc}
+                if norm_enc == "aws:kms" and kms_key_arn:
+                    enc_cfg["kmsKeyArn"] = kms_key_arn
+                request_params["encryptionConfiguration"] = enc_cfg
+                structured_logger.log_operation(
+                    "encryption_config_added",
+                    level="DEBUG",
+                    encryption_type=norm_enc,
+                    has_kms_key=bool(kms_key_arn)
+                )
             
-        except ClientError as e:
-            error_code = e.response['Error']['Code']
-            error_message = e.response['Error']['Message']
+            def _create_bucket():
+                structured_logger.log_aws_api_call(
+                    "s3vectors",
+                    "create_vector_bucket",
+                    {"bucket_name": bucket_name, "encryption_type": norm_enc}
+                )
+                return self.s3vectors_client.create_vector_bucket(**request_params)
             
-            if error_code == 'ConflictException':
-                logger.warning(f"Vector bucket {bucket_name} already exists")
-                return {
+            try:
+                response = self._retry_with_backoff(_create_bucket)
+                
+                structured_logger.log_resource_operation(
+                    "vector_bucket",
+                    "create_success",
+                    bucket_name,
+                    response_keys=list(response.keys()) if response else []
+                )
+                logger.info(f"Successfully created vector bucket: {bucket_name}")
+                
+                # Log to local resource registry (best-effort)
+                try:
+                    from src.config import config_manager as _cfg
+                    resource_registry.log_vector_bucket_created(
+                        bucket_name=bucket_name,
+                        region=_cfg.aws_config.region,
+                        encryption=encryption_type,
+                        kms_key_arn=kms_key_arn,
+                        source="service",
+                    )
+                    structured_logger.log_operation(
+                        "resource_registry_updated",
+                        level="DEBUG",
+                        bucket_name=bucket_name
+                    )
+                except Exception as e:
+                    structured_logger.log_error("resource_registry_update", e, bucket_name=bucket_name)
+
+                result = {
                     "bucket_name": bucket_name,
-                    "status": "already_exists",
+                    "status": "created",
                     "encryption_type": encryption_type,
                     "kms_key_arn": kms_key_arn,
-                    "message": "Bucket already exists"
+                    "response": response
                 }
-            elif error_code == 'AccessDeniedException':
-                raise VectorStorageError(
-                    f"Access denied when creating vector bucket: {error_message}",
-                    error_code="ACCESS_DENIED",
-                    error_details={
+                
+                structured_logger.log_function_exit("create_vector_bucket", result=result.get("status"))
+                return result
+            
+            except ClientError as e:
+                error_code = e.response['Error']['Code']
+                error_message = e.response['Error']['Message']
+                
+                if error_code == 'ConflictException':
+                    logger.warning(f"Vector bucket {bucket_name} already exists")
+                    return {
                         "bucket_name": bucket_name,
-                        "required_permission": "s3vectors:CreateVectorBucket"
+                        "status": "already_exists",
+                        "encryption_type": encryption_type,
+                        "kms_key_arn": kms_key_arn,
+                        "message": "Bucket already exists"
                     }
-                )
-            elif error_code == 'ServiceQuotaExceededException':
+                elif error_code == 'AccessDeniedException':
+                    raise VectorStorageError(
+                        f"Access denied when creating vector bucket: {error_message}",
+                        error_code="ACCESS_DENIED",
+                        error_details={
+                            "bucket_name": bucket_name,
+                            "required_permission": "s3vectors:CreateVectorBucket"
+                        }
+                    )
+                elif error_code == 'ServiceQuotaExceededException':
+                    raise VectorStorageError(
+                        f"Service quota exceeded when creating vector bucket: {error_message}",
+                        error_code="QUOTA_EXCEEDED",
+                        error_details={"bucket_name": bucket_name}
+                    )
+                else:
+                    raise VectorStorageError(
+                        f"Failed to create vector bucket {bucket_name}: {error_message}",
+                        error_code=error_code,
+                        error_details={
+                            "bucket_name": bucket_name,
+                            "aws_error_code": error_code,
+                            "aws_error_message": error_message
+                        }
+                    )
+            
+            except Exception as e:
+                logger.error(f"Unexpected error creating vector bucket {bucket_name}: {e}")
                 raise VectorStorageError(
-                    f"Service quota exceeded when creating vector bucket: {error_message}",
-                    error_code="QUOTA_EXCEEDED",
-                    error_details={"bucket_name": bucket_name}
+                    f"Unexpected error creating vector bucket {bucket_name}: {str(e)}",
+                    error_code="UNEXPECTED_ERROR",
+                    error_details={"bucket_name": bucket_name, "error": str(e)}
                 )
-            else:
-                raise VectorStorageError(
-                    f"Failed to create vector bucket {bucket_name}: {error_message}",
-                    error_code=error_code,
-                    error_details={
-                        "bucket_name": bucket_name,
-                        "aws_error_code": error_code,
-                        "aws_error_message": error_message
-                    }
-                )
-        
-        except Exception as e:
-            logger.error(f"Unexpected error creating vector bucket {bucket_name}: {e}")
-            raise VectorStorageError(
-                f"Unexpected error creating vector bucket {bucket_name}: {str(e)}",
-                error_code="UNEXPECTED_ERROR",
-                error_details={"bucket_name": bucket_name, "error": str(e)}
-            )
     
     def get_vector_bucket(self, bucket_name: str) -> Dict[str, Any]:
         """
@@ -1184,17 +1262,38 @@ class S3VectorStorageManager:
             ValidationError: If vector data is invalid
             VectorStorageError: If storage operation fails
         """
+        structured_logger.log_function_entry(
+            "put_vectors",
+            index_arn=index_arn,
+            vector_count=len(vectors_data)
+        )
+        
+        structured_logger.log_resource_operation(
+            "vectors",
+            "put_start",
+            index_arn,
+            vector_count=len(vectors_data)
+        )
         logger.info(f"Storing {len(vectors_data)} vectors in index: {index_arn}")
         
-        # Validate inputs
-        if not index_arn or not isinstance(index_arn, str):
-            raise ValidationError(
-                "Index ARN or resource-id must be a non-empty string",
-                error_code="INVALID_INDEX_IDENTIFIER",
-                error_details={"index_arn": index_arn}
-            )
-        
-        self._validate_vector_data(vectors_data)
+        with LoggedOperation(structured_logger, f"put_vectors_{len(vectors_data)}", index_arn=index_arn):
+            # Validate inputs
+            structured_logger.log_operation("validating_index_identifier", level="DEBUG")
+            if not index_arn or not isinstance(index_arn, str):
+                structured_logger.log_operation(
+                    "validation_failed",
+                    level="ERROR",
+                    error="invalid_index_identifier",
+                    provided=index_arn
+                )
+                raise ValidationError(
+                    "Index ARN or resource-id must be a non-empty string",
+                    error_code="INVALID_INDEX_IDENTIFIER",
+                    error_details={"index_arn": index_arn}
+                )
+            
+            structured_logger.log_operation("validating_vector_data", level="DEBUG", vector_count=len(vectors_data))
+            self._validate_vector_data(vectors_data)
         
         # Convert vector data to AWS S3 Vectors format
         formatted_vectors = []

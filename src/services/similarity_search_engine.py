@@ -41,9 +41,10 @@ from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
 from src.exceptions import ValidationError
-from src.utils.logging_config import get_logger
+from src.utils.logging_config import get_logger, get_structured_logger, LoggedOperation, log_function_calls
 
 logger = get_logger(__name__)
+structured_logger = get_structured_logger(__name__)
 
 
 # Remove duplicate enum definitions - using the ones from interface

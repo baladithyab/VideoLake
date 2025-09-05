@@ -70,10 +70,24 @@ class UnifiedS3VectorDemo:
         self.coordinator = None
         self._initialize_services()
         
-        # Initialize component modules
-        self.search_components = SearchComponents(self.service_manager, self.coordinator)
-        self.results_components = ResultsComponents()
-        self.processing_components = ProcessingComponents(self.service_manager, self.coordinator)
+        # Initialize component modules with proper error handling
+        try:
+            self.search_components = SearchComponents(self.service_manager, self.coordinator)
+        except Exception as e:
+            logger.warning(f"Failed to initialize search components: {e}")
+            self.search_components = None
+            
+        try:
+            self.results_components = ResultsComponents()
+        except Exception as e:
+            logger.warning(f"Failed to initialize results components: {e}")
+            self.results_components = None
+            
+        try:
+            self.processing_components = ProcessingComponents(self.service_manager, self.coordinator)
+        except Exception as e:
+            logger.warning(f"Failed to initialize processing components: {e}")
+            self.processing_components = None
         
         # Initialize session state
         self._initialize_session_state()
@@ -365,10 +379,16 @@ class UnifiedS3VectorDemo:
             
             # Cost estimation
             if st.checkbox("Show Cost Estimation", value=True):
-                self.processing_components.show_cost_estimation()
+                if self.processing_components:
+                    self.processing_components.show_cost_estimation()
+                else:
+                    st.info("💰 **Cost Estimation** - Available when backend services are connected")
         
         # Video input section
-        self.processing_components.render_video_input_section()
+        if self.processing_components:
+            self.processing_components.render_video_input_section()
+        else:
+            st.info("📹 **Video Upload** - Available when backend services are connected")
     
     def render_query_search_section(self):
         """Render the query and search section."""
@@ -379,27 +399,42 @@ class UnifiedS3VectorDemo:
 
         # Use the new search interface from search components with error handling
         with ErrorBoundary("Query & Search"):
-            search_results = self.search_components.render_search_interface(
-                use_real_aws=st.session_state.use_real_aws
-            )
+            if self.search_components:
+                search_results = self.search_components.render_search_interface(
+                    use_real_aws=st.session_state.use_real_aws
+                )
+            else:
+                st.info("🔍 **Search Interface** - Available when backend services are connected")
+                st.write("**Demo Search Features:**")
+                st.write("• Dual pattern search (Direct S3Vector + OpenSearch Hybrid)")
+                st.write("• Multi-vector query processing")
+                st.write("• Intelligent query routing")
     
     def render_results_playback_section(self):
         """Render the results and playback section."""
         with ErrorBoundary("Results & Playback"):
-            # Display search results
-            self.results_components.display_search_results(st.session_state.search_results)
+            if self.results_components:
+                # Display search results
+                self.results_components.display_search_results(st.session_state.search_results)
 
-            # Video player
-            self.results_components.render_video_player_placeholder()
+                # Video player
+                self.results_components.render_video_player_placeholder()
 
-            # Segment overlay
-            self.results_components.render_segment_overlay_placeholder()
+                # Segment overlay
+                self.results_components.render_segment_overlay_placeholder()
 
-            # Performance metrics
-            self.results_components.display_performance_metrics(st.session_state.search_results)
+                # Performance metrics
+                self.results_components.display_performance_metrics(st.session_state.search_results)
 
-            # Export functionality
-            self.results_components.render_results_export(st.session_state.search_results)
+                # Export functionality
+                self.results_components.render_results_export(st.session_state.search_results)
+            else:
+                st.info("🎯 **Results & Playback** - Available when backend services are connected")
+                st.write("**Demo Features:**")
+                st.write("• Interactive video player with segment overlay")
+                st.write("• Similarity score visualization")
+                st.write("• Performance metrics dashboard")
+                st.write("• Results export functionality")
     
     def render_visualization_section(self):
         """Render the embedding visualization section."""
@@ -416,10 +451,16 @@ class UnifiedS3VectorDemo:
         """Render the analytics and management section."""
         with ErrorBoundary("Analytics & Management"):
             # Processing progress
-            self.processing_components.show_processing_progress()
+            if self.processing_components:
+                self.processing_components.show_processing_progress()
+            else:
+                st.info("📊 **Processing Progress** - Available when backend services are connected")
 
             # Cost estimation
-            self.processing_components.show_cost_estimation()
+            if self.processing_components:
+                self.processing_components.show_cost_estimation()
+            else:
+                st.info("💰 **Cost Estimation** - Available when backend services are connected")
 
             # Error dashboard
             st.subheader("🐛 Error Dashboard")

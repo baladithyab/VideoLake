@@ -19,10 +19,11 @@ from typing import Dict, Any, Optional, List, Union
 from dataclasses import dataclass, field
 from enum import Enum
 
-from src.utils.logging_config import get_logger
+from src.utils.logging_config import get_logger, get_structured_logger, LoggedOperation
 from src.exceptions import ConfigurationError
 
 logger = get_logger(__name__)
+structured_logger = get_structured_logger(__name__)
 
 
 class Environment(Enum):

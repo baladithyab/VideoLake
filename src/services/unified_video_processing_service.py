@@ -36,9 +36,10 @@ from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.utils.aws_clients import aws_client_factory
 from src.exceptions import VectorEmbeddingError, ValidationError, ProcessingError
-from src.utils.logging_config import get_logger
+from src.utils.logging_config import get_logger, get_structured_logger, LoggedOperation, log_function_calls
 
 logger = get_logger(__name__)
+structured_logger = get_structured_logger(__name__)
 
 
 class UnifiedVideoProcessingService(VideoProcessingService, BatchVideoProcessor, VideoSearchEngine):
@@ -53,41 +54,105 @@ class UnifiedVideoProcessingService(VideoProcessingService, BatchVideoProcessor,
     
     def __init__(self, config: Optional[ProcessingConfig] = None):
         """Initialize the unified video processing service."""
-        super().__init__(config)
+        structured_logger.log_function_entry("__init__", config_provided=config is not None)
         
-        # Initialize core services
-        self.twelvelabs_service = TwelveLabsVideoProcessingService()
-        self.storage_manager = S3VectorStorageManager()
-        self.bedrock_service = BedrockEmbeddingService()
-        self.s3_client = aws_client_factory.get_s3_client()
-        
-        # Thread executor for parallel processing
-        self.executor = ThreadPoolExecutor(max_workers=self.config.max_concurrent_jobs)
-        
-        # Initialize TwelveLabs API service if available
-        self.twelvelabs_api_service = None
-        self._initialize_twelvelabs_api()
-        
-        logger.info("Unified video processing service initialized")
+        try:
+            super().__init__(config)
+            
+            # Initialize core services with detailed logging
+            structured_logger.log_operation("initializing_core_services", level="DEBUG")
+            
+            structured_logger.log_service_call("TwelveLabsVideoProcessingService", "__init__")
+            self.twelvelabs_service = TwelveLabsVideoProcessingService()
+            
+            structured_logger.log_service_call("S3VectorStorageManager", "__init__")
+            self.storage_manager = S3VectorStorageManager()
+            
+            structured_logger.log_service_call("BedrockEmbeddingService", "__init__")
+            self.bedrock_service = BedrockEmbeddingService()
+            
+            structured_logger.log_aws_api_call("s3", "get_client")
+            self.s3_client = aws_client_factory.get_s3_client()
+            
+            # Thread executor for parallel processing
+            max_workers = self.config.max_concurrent_jobs
+            structured_logger.log_operation(
+                "initializing_thread_executor",
+                level="DEBUG",
+                max_workers=max_workers
+            )
+            self.executor = ThreadPoolExecutor(max_workers=max_workers)
+            
+            # Initialize TwelveLabs API service if available
+            self.twelvelabs_api_service = None
+            self._initialize_twelvelabs_api()
+            
+            structured_logger.log_operation(
+                "service_initialization_complete",
+                level="INFO",
+                max_concurrent_jobs=max_workers,
+                vector_types=len(self.config.vector_types),
+                storage_patterns=len(self.config.storage_patterns)
+            )
+            logger.info("Unified video processing service initialized")
+            
+        except Exception as e:
+            structured_logger.log_error("service_initialization", e)
+            raise
+        finally:
+            structured_logger.log_function_exit("__init__")
     
     def _initialize_twelvelabs_api(self):
         """Initialize TwelveLabs API service if available."""
+        structured_logger.log_function_entry("_initialize_twelvelabs_api")
+        
         try:
+            structured_logger.log_operation("loading_twelvelabs_dependencies", level="DEBUG")
             from src.services.twelvelabs_api_service import TwelveLabsAPIService
             from src.config.unified_config_manager import get_unified_config_manager
             
+            structured_logger.log_service_call("unified_config_manager", "get_unified_config_manager")
             config_manager = get_unified_config_manager()
             marengo_config = config_manager.get_marengo_config()
             
-            if marengo_config['is_twelvelabs_api_access'] and marengo_config['twelvelabs_api_key']:
+            has_api_access = marengo_config['is_twelvelabs_api_access']
+            has_api_key = bool(marengo_config.get('twelvelabs_api_key'))
+            
+            structured_logger.log_operation(
+                "checking_twelvelabs_config",
+                level="DEBUG",
+                has_api_access=has_api_access,
+                has_api_key=has_api_key
+            )
+            
+            if has_api_access and has_api_key:
+                structured_logger.log_service_call(
+                    "TwelveLabsAPIService",
+                    "__init__",
+                    {"api_url": marengo_config.get('twelvelabs_api_url')}
+                )
                 self.twelvelabs_api_service = TwelveLabsAPIService(
                     api_key=marengo_config['twelvelabs_api_key'],
                     api_url=marengo_config['twelvelabs_api_url']
                 )
+                structured_logger.log_operation(
+                    "twelvelabs_api_initialized",
+                    level="INFO",
+                    api_url=marengo_config.get('twelvelabs_api_url')
+                )
                 logger.info("TwelveLabs API service initialized")
+            else:
+                structured_logger.log_operation(
+                    "twelvelabs_api_skipped",
+                    level="INFO",
+                    reason="api_access_not_configured"
+                )
                 
         except Exception as e:
+            structured_logger.log_error("twelvelabs_api_initialization", e)
             logger.warning(f"TwelveLabs API service not available: {e}")
+        finally:
+            structured_logger.log_function_exit("_initialize_twelvelabs_api")
     
     def process_video(
         self,
@@ -108,12 +173,34 @@ class UnifiedVideoProcessingService(VideoProcessingService, BatchVideoProcessor,
         Returns:
             ProcessingResult with embeddings and storage information
         """
+        structured_logger.log_function_entry(
+            "process_video",
+            video_s3_uri=video_s3_uri,
+            has_metadata=video_metadata is not None,
+            has_config_override=config_override is not None,
+            has_callback=callback is not None
+        )
+        
         # Use override config if provided
         processing_config = config_override or self.config
         job_id = self.generate_job_id()
         
+        structured_logger.log_video_operation(
+            "process_video_start",
+            video_id=job_id,
+            video_s3_uri=video_s3_uri,
+            processing_mode=processing_config.processing_mode,
+            vector_types=len(processing_config.vector_types),
+            storage_patterns=len(processing_config.storage_patterns)
+        )
+        
         # Initialize video metadata if not provided
         if video_metadata is None:
+            structured_logger.log_operation(
+                "creating_default_video_metadata",
+                level="DEBUG",
+                job_id=job_id
+            )
             video_metadata = VideoMetadata(
                 source_uri=video_s3_uri,
                 duration_sec=0.0,  # Will be updated after processing
@@ -121,6 +208,12 @@ class UnifiedVideoProcessingService(VideoProcessingService, BatchVideoProcessor,
             )
         
         # Create processing result
+        structured_logger.log_operation(
+            "creating_processing_result",
+            level="DEBUG",
+            job_id=job_id,
+            status="PENDING"
+        )
         result = ProcessingResult(
             job_id=job_id,
             status=ProcessingStatus.PENDING,
@@ -130,63 +223,154 @@ class UnifiedVideoProcessingService(VideoProcessingService, BatchVideoProcessor,
         
         # Track the job
         self.active_jobs[job_id] = result
+        structured_logger.log_operation(
+            "job_registered",
+            level="DEBUG",
+            job_id=job_id,
+            total_active_jobs=len(self.active_jobs)
+        )
         
-        try:
-            # Execute processing steps
-            result.status = ProcessingStatus.PROCESSING
-            if callback:
-                callback(result)
-            
-            # Step 1: Process video with TwelveLabs for each vector type
-            result.status = ProcessingStatus.MARENGO_PROCESSING
-            if callback:
-                callback(result)
+        with LoggedOperation(structured_logger, f"video_processing_{job_id}", job_id=job_id, video_s3_uri=video_s3_uri):
+            try:
+                # Execute processing steps
+                structured_logger.log_video_operation("status_change_processing", job_id, status="PROCESSING")
+                result.status = ProcessingStatus.PROCESSING
+                if callback:
+                    callback(result)
                 
-            embeddings_by_type = self._process_video_embeddings(
-                video_s3_uri, processing_config, job_id
-            )
-            
-            # Convert to unified format
-            result.segments = self._convert_embeddings_to_segments(
-                embeddings_by_type, video_metadata
-            )
-            
-            # Update video duration from embeddings
-            if result.segments:
-                video_metadata.duration_sec = max(seg.end_sec for seg in result.segments)
-            
-            # Step 2: Store embeddings if storage patterns configured
-            result.status = ProcessingStatus.STORING_EMBEDDINGS
-            if callback:
-                callback(result)
-            
-            if processing_config.storage_patterns:
-                storage_results = self._store_embeddings_by_patterns(
-                    result, processing_config, job_id
+                # Step 1: Process video with TwelveLabs for each vector type
+                structured_logger.log_video_operation("status_change_marengo_processing", job_id, status="MARENGO_PROCESSING")
+                result.status = ProcessingStatus.MARENGO_PROCESSING
+                if callback:
+                    callback(result)
+                
+                structured_logger.log_operation(
+                    "starting_embedding_generation",
+                    level="INFO",
+                    job_id=job_id,
+                    vector_types=[vt.value for vt in processing_config.vector_types],
+                    processing_mode=processing_config.processing_mode
                 )
-                result.storage_results = storage_results
+                    
+                embeddings_by_type = self._process_video_embeddings(
+                    video_s3_uri, processing_config, job_id
+                )
+                
+                # Convert to unified format
+                structured_logger.log_operation(
+                    "converting_embeddings_to_segments",
+                    level="DEBUG",
+                    job_id=job_id,
+                    embedding_types=list(embeddings_by_type.keys())
+                )
+                result.segments = self._convert_embeddings_to_segments(
+                    embeddings_by_type, video_metadata
+                )
+                
+                # Update video duration from embeddings
+                if result.segments:
+                    max_duration = max(seg.end_sec for seg in result.segments)
+                    video_metadata.duration_sec = max_duration
+                    structured_logger.log_operation(
+                        "video_duration_updated",
+                        level="DEBUG",
+                        job_id=job_id,
+                        duration_sec=max_duration,
+                        total_segments=len(result.segments)
+                    )
+                
+                # Step 2: Store embeddings if storage patterns configured
+                if processing_config.storage_patterns:
+                    structured_logger.log_video_operation("status_change_storing_embeddings", job_id, status="STORING_EMBEDDINGS")
+                    result.status = ProcessingStatus.STORING_EMBEDDINGS
+                    if callback:
+                        callback(result)
+                    
+                    structured_logger.log_operation(
+                        "starting_embedding_storage",
+                        level="INFO",
+                        job_id=job_id,
+                        storage_patterns=[sp.value for sp in processing_config.storage_patterns],
+                        segments_to_store=len(result.segments)
+                    )
+                    
+                    storage_results = self._store_embeddings_by_patterns(
+                        result, processing_config, job_id
+                    )
+                    result.storage_results = storage_results
+                    
+                    structured_logger.log_operation(
+                        "embedding_storage_completed",
+                        level="INFO",
+                        job_id=job_id,
+                        storage_results=storage_results
+                    )
+                else:
+                    structured_logger.log_operation(
+                        "skipping_storage",
+                        level="DEBUG",
+                        job_id=job_id,
+                        reason="no_storage_patterns_configured"
+                    )
+                
+                # Calculate processing metrics
+                result.completed_at = datetime.now(timezone.utc)
+                result.processing_time_ms = int(result.processing_duration_sec * 1000)
+                result.status = ProcessingStatus.COMPLETED
+                
+                structured_logger.log_performance(
+                    f"video_processing_{job_id}",
+                    result.processing_time_ms,
+                    job_id=job_id,
+                    segments_processed=len(result.segments),
+                    video_duration_sec=video_metadata.duration_sec
+                )
+                
+                # Calculate cost if enabled
+                if processing_config.enable_cost_tracking:
+                    cost = self._calculate_processing_cost(result, processing_config)
+                    result.estimated_cost_usd = cost
+                    structured_logger.log_cost(
+                        f"video_processing_{job_id}",
+                        cost,
+                        len(result.segments),
+                        job_id=job_id,
+                        video_duration_sec=video_metadata.duration_sec
+                    )
+                
+                structured_logger.log_video_operation(
+                    "process_video_complete",
+                    job_id,
+                    status="COMPLETED",
+                    segments_processed=len(result.segments),
+                    processing_time_ms=result.processing_time_ms,
+                    estimated_cost_usd=result.estimated_cost_usd
+                )
+                logger.info(f"Video processing completed successfully: {job_id}")
+                
+            except Exception as e:
+                result.status = ProcessingStatus.FAILED
+                result.error_message = str(e)
+                result.completed_at = datetime.now(timezone.utc)
+                
+                processing_time_ms = 0
+                if result.completed_at and result.started_at:
+                    processing_time_ms = int((result.completed_at - result.started_at).total_seconds() * 1000)
+                
+                structured_logger.log_video_operation(
+                    "process_video_failed",
+                    job_id,
+                    status="FAILED",
+                    error_message=str(e),
+                    processing_time_ms=processing_time_ms
+                )
+                logger.error(f"Video processing failed for job {job_id}: {e}")
+                raise ProcessingError(f"Video processing failed: {e}")
             
-            # Calculate processing metrics
-            result.completed_at = datetime.now(timezone.utc)
-            result.processing_time_ms = int(result.processing_duration_sec * 1000)
-            result.status = ProcessingStatus.COMPLETED
-            
-            # Calculate cost if enabled
-            if processing_config.enable_cost_tracking:
-                result.estimated_cost_usd = self._calculate_processing_cost(result, processing_config)
-            
-            logger.info(f"Video processing completed successfully: {job_id}")
-            
-        except Exception as e:
-            result.status = ProcessingStatus.FAILED
-            result.error_message = str(e)
-            result.completed_at = datetime.now(timezone.utc)
-            logger.error(f"Video processing failed for job {job_id}: {e}")
-            raise ProcessingError(f"Video processing failed: {e}")
-        
-        finally:
-            if callback:
-                callback(result)
+            finally:
+                if callback:
+                    callback(result)
+                structured_logger.log_function_exit("process_video", result=result.status)
         
         return result
     
@@ -197,44 +381,139 @@ class UnifiedVideoProcessingService(VideoProcessingService, BatchVideoProcessor,
         job_id: str
     ) -> Dict[VectorType, VideoEmbeddingResult]:
         """Process video to generate embeddings for all configured vector types."""
+        structured_logger.log_function_entry(
+            "_process_video_embeddings",
+            job_id=job_id,
+            processing_mode=config.processing_mode,
+            vector_types=[vt.value for vt in config.vector_types],
+            segment_duration_sec=config.segment_duration_sec
+        )
+        
         embeddings_by_type = {}
         
-        if config.processing_mode == "parallel":
-            # Process all vector types in parallel
-            futures = {}
-            
-            for vector_type in config.vector_types:
-                future = self.executor.submit(
-                    self._process_single_vector_type,
-                    video_s3_uri,
-                    vector_type,
-                    config.segment_duration_sec
+        try:
+            if config.processing_mode == "parallel":
+                structured_logger.log_operation(
+                    "starting_parallel_processing",
+                    level="INFO",
+                    job_id=job_id,
+                    vector_type_count=len(config.vector_types),
+                    max_workers=self.executor._max_workers
                 )
-                futures[vector_type] = future
-            
-            # Collect results
-            for vector_type, future in futures.items():
-                try:
-                    result = future.result(timeout=config.timeout_sec)
-                    embeddings_by_type[vector_type] = result
-                    logger.info(f"Completed {vector_type.value} processing: {result.total_segments} segments")
-                except Exception as e:
-                    logger.error(f"Failed to process {vector_type.value}: {e}")
-                    raise
-        
-        else:  # sequential processing
-            for vector_type in config.vector_types:
-                try:
-                    result = self._process_single_vector_type(
+                
+                # Process all vector types in parallel
+                futures = {}
+                
+                for vector_type in config.vector_types:
+                    structured_logger.log_service_call(
+                        "ThreadPoolExecutor",
+                        "submit",
+                        {
+                            "function": "_process_single_vector_type",
+                            "vector_type": vector_type.value,
+                            "segment_duration_sec": config.segment_duration_sec
+                        }
+                    )
+                    future = self.executor.submit(
+                        self._process_single_vector_type,
                         video_s3_uri,
                         vector_type,
                         config.segment_duration_sec
                     )
-                    embeddings_by_type[vector_type] = result
-                    logger.info(f"Completed {vector_type.value} processing: {result.total_segments} segments")
-                except Exception as e:
-                    logger.error(f"Failed to process {vector_type.value}: {e}")
-                    raise
+                    futures[vector_type] = future
+                
+                # Collect results
+                for vector_type, future in futures.items():
+                    try:
+                        structured_logger.log_operation(
+                            "waiting_for_vector_processing",
+                            level="DEBUG",
+                            job_id=job_id,
+                            vector_type=vector_type.value,
+                            timeout_sec=config.timeout_sec
+                        )
+                        
+                        result = future.result(timeout=config.timeout_sec)
+                        embeddings_by_type[vector_type] = result
+                        
+                        structured_logger.log_video_operation(
+                            "vector_processing_completed",
+                            job_id,
+                            vector_type=vector_type.value,
+                            segments_generated=result.total_segments,
+                            processing_time_ms=result.processing_time_ms
+                        )
+                        logger.info(f"Completed {vector_type.value} processing: {result.total_segments} segments")
+                        
+                    except Exception as e:
+                        structured_logger.log_error(
+                            f"parallel_vector_processing_{vector_type.value}",
+                            e,
+                            job_id=job_id,
+                            vector_type=vector_type.value
+                        )
+                        logger.error(f"Failed to process {vector_type.value}: {e}")
+                        raise
+            
+            else:  # sequential processing
+                structured_logger.log_operation(
+                    "starting_sequential_processing",
+                    level="INFO",
+                    job_id=job_id,
+                    vector_type_count=len(config.vector_types)
+                )
+                
+                for i, vector_type in enumerate(config.vector_types, 1):
+                    try:
+                        structured_logger.log_operation(
+                            "processing_vector_type",
+                            level="DEBUG",
+                            job_id=job_id,
+                            vector_type=vector_type.value,
+                            step=f"{i}/{len(config.vector_types)}"
+                        )
+                        
+                        result = self._process_single_vector_type(
+                            video_s3_uri,
+                            vector_type,
+                            config.segment_duration_sec
+                        )
+                        embeddings_by_type[vector_type] = result
+                        
+                        structured_logger.log_video_operation(
+                            "vector_processing_completed",
+                            job_id,
+                            vector_type=vector_type.value,
+                            segments_generated=result.total_segments,
+                            processing_time_ms=result.processing_time_ms,
+                            sequential_step=f"{i}/{len(config.vector_types)}"
+                        )
+                        logger.info(f"Completed {vector_type.value} processing: {result.total_segments} segments")
+                        
+                    except Exception as e:
+                        structured_logger.log_error(
+                            f"sequential_vector_processing_{vector_type.value}",
+                            e,
+                            job_id=job_id,
+                            vector_type=vector_type.value,
+                            sequential_step=f"{i}/{len(config.vector_types)}"
+                        )
+                        logger.error(f"Failed to process {vector_type.value}: {e}")
+                        raise
+            
+            structured_logger.log_operation(
+                "video_embeddings_processing_complete",
+                level="INFO",
+                job_id=job_id,
+                total_vector_types=len(embeddings_by_type),
+                total_segments=sum(result.total_segments for result in embeddings_by_type.values())
+            )
+            
+        except Exception as e:
+            structured_logger.log_error("video_embeddings_processing", e, job_id=job_id)
+            raise
+        finally:
+            structured_logger.log_function_exit("_process_video_embeddings", result=len(embeddings_by_type))
         
         return embeddings_by_type
     

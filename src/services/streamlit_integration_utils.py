@@ -25,7 +25,7 @@ class StreamlitIntegrationConfig:
     """Configuration for Streamlit integration."""
     enable_multi_vector: bool = True
     enable_concurrent_processing: bool = True
-    default_vector_types: List[str] = None
+    default_vector_types: Optional[List[str]] = None
     max_concurrent_jobs: int = 8
     enable_performance_monitoring: bool = True
     
@@ -66,23 +66,48 @@ class StreamlitServiceManager:
     def _initialize_services(self) -> None:
         """Initialize all core services."""
         try:
-            # Initialize services with enhanced capabilities
-            self.storage_manager = S3VectorStorageManager()
-            self.search_engine = SimilaritySearchEngine()
-            self.twelvelabs_service = TwelveLabsVideoProcessingService()
-            self.bedrock_service = BedrockEmbeddingService()
+            # Import here to avoid circular imports
+            from src.utils.aws_clients import aws_client_factory
             
-            logger.info("Core services initialized successfully")
+            # Check if we're in demo mode
+            demo_mode = aws_client_factory.is_demo_mode()
+            
+            if demo_mode:
+                logger.info("Initializing services in demo mode")
+                # Create mock services for demo mode
+                self.storage_manager = self._create_demo_storage_manager()
+                self.search_engine = self._create_demo_search_engine()
+                self.twelvelabs_service = self._create_demo_twelvelabs_service()
+                self.bedrock_service = self._create_demo_bedrock_service()
+            else:
+                # Initialize real services
+                self.storage_manager = S3VectorStorageManager()
+                self.search_engine = SimilaritySearchEngine()
+                self.twelvelabs_service = TwelveLabsVideoProcessingService()
+                self.bedrock_service = BedrockEmbeddingService()
+            
+            logger.info(f"Core services initialized successfully (demo_mode={demo_mode})")
             
         except Exception as e:
             logger.error(f"Failed to initialize core services: {e}")
-            raise
+            # Fallback to demo mode if initialization fails
+            logger.info("Falling back to demo mode due to initialization error")
+            try:
+                self.storage_manager = self._create_demo_storage_manager()
+                self.search_engine = self._create_demo_search_engine()
+                self.twelvelabs_service = self._create_demo_twelvelabs_service()
+                self.bedrock_service = self._create_demo_bedrock_service()
+                logger.info("Demo mode fallback successful")
+            except Exception as fallback_error:
+                logger.error(f"Demo mode fallback also failed: {fallback_error}")
+                raise
 
     def _initialize_multi_vector_coordinator(self) -> None:
         """Initialize the multi-vector coordinator."""
         try:
+            vector_types = self.config.default_vector_types or ["visual-text", "visual-image", "audio"]
             multi_vector_config = MultiVectorConfig(
-                vector_types=self.config.default_vector_types,
+                vector_types=vector_types,
                 max_concurrent_jobs=self.config.max_concurrent_jobs,
                 enable_cross_vector_search=True,
                 fusion_method="weighted_average"
@@ -115,7 +140,7 @@ class StreamlitServiceManager:
         Returns:
             Dictionary with creation results
         """
-        vector_types = vector_types or self.config.default_vector_types
+        vector_types = vector_types or self.config.default_vector_types or ["visual-text", "visual-image", "audio"]
         
         logger.info(f"Creating multi-index architecture: bucket={bucket_name}, types={vector_types}")
         
@@ -161,7 +186,7 @@ class StreamlitServiceManager:
         if not self.multi_vector_coordinator:
             raise RuntimeError("Multi-vector coordinator not initialized")
         
-        vector_types = vector_types or self.config.default_vector_types
+        vector_types = vector_types or self.config.default_vector_types or ["visual-text", "visual-image", "audio"]
         
         logger.info(f"Processing {len(video_inputs)} videos with {len(vector_types)} vector types")
         
@@ -212,7 +237,7 @@ class StreamlitServiceManager:
         if not self.multi_vector_coordinator:
             raise RuntimeError("Multi-vector coordinator not initialized")
         
-        vector_types = vector_types or self.config.default_vector_types
+        vector_types = vector_types or self.config.default_vector_types or ["visual-text", "visual-image", "audio"]
         
         logger.info(f"Performing multi-vector search across {len(vector_types)} types")
         
@@ -359,12 +384,22 @@ class StreamlitServiceManager:
         """
         capabilities = {}
         
-        for vector_type in self.config.default_vector_types:
-            if vector_type in self.storage_manager.vector_type_configs:
+        vector_types = self.config.default_vector_types or ["visual-text", "visual-image", "audio"]
+        for vector_type in vector_types:
+            if hasattr(self.storage_manager, 'vector_type_configs') and vector_type in self.storage_manager.vector_type_configs:
                 config = self.storage_manager.vector_type_configs[vector_type]
                 capabilities[vector_type] = {
                     'dimensions': config['dimensions'],
                     'default_metric': config['default_metric'],
+                    'supported_operations': ['embedding', 'storage', 'search'],
+                    'service_provider': self._get_service_provider_for_type(vector_type),
+                    'processing_mode': 'batch' if vector_type in ['visual-text', 'visual-image', 'audio'] else 'single'
+                }
+            else:
+                # Provide default capabilities for demo mode
+                capabilities[vector_type] = {
+                    'dimensions': 1024,
+                    'default_metric': 'cosine',
                     'supported_operations': ['embedding', 'storage', 'search'],
                     'service_provider': self._get_service_provider_for_type(vector_type),
                     'processing_mode': 'batch' if vector_type in ['visual-text', 'visual-image', 'audio'] else 'single'
@@ -395,6 +430,57 @@ class StreamlitServiceManager:
             logger.error(f"Error during cleanup: {e}")
         
         logger.info("StreamlitServiceManager cleanup completed")
+
+    def _create_demo_storage_manager(self):
+        """Create a mock storage manager for demo mode."""
+        from unittest.mock import MagicMock
+        mock_manager = MagicMock()
+        mock_manager._demo_mode = True
+        
+        # Mock common methods with realistic responses
+        mock_manager.create_vector_bucket.return_value = {
+            "bucket_name": "demo-bucket",
+            "status": "created",
+            "message": "Demo bucket created (simulation)"
+        }
+        mock_manager.create_vector_index.return_value = {
+            "bucket_name": "demo-bucket",
+            "index_name": "demo-index",
+            "status": "created",
+            "message": "Demo index created (simulation)"
+        }
+        mock_manager.create_multi_index_architecture.return_value = {
+            "successful_indexes": 3,
+            "failed_indexes": 0,
+            "index_results": {
+                "visual-text": {"status": "created"},
+                "visual-image": {"status": "created"},
+                "audio": {"status": "created"}
+            }
+        }
+        
+        return mock_manager
+    
+    def _create_demo_search_engine(self):
+        """Create a mock search engine for demo mode."""
+        from unittest.mock import MagicMock
+        mock_engine = MagicMock()
+        mock_engine._demo_mode = True
+        return mock_engine
+    
+    def _create_demo_twelvelabs_service(self):
+        """Create a mock TwelveLabs service for demo mode."""
+        from unittest.mock import MagicMock
+        mock_service = MagicMock()
+        mock_service._demo_mode = True
+        return mock_service
+    
+    def _create_demo_bedrock_service(self):
+        """Create a mock Bedrock service for demo mode."""
+        from unittest.mock import MagicMock
+        mock_service = MagicMock()
+        mock_service._demo_mode = True
+        return mock_service
 
 
 # Global service manager instance for Streamlit
