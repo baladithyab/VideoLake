@@ -8,7 +8,7 @@ for the vector embedding pipeline.
 import logging
 from typing import Dict, Any, Optional
 
-from src.config import config_manager
+from src.config.unified_config_manager import get_unified_config_manager
 from src.utils.aws_clients import aws_client_factory
 from src.utils.logging_config import setup_logging, StructuredLogger
 from src.exceptions import ConfigurationError, VectorEmbeddingError
@@ -56,17 +56,18 @@ class VectorEmbeddingPOC:
             logger.log_operation("validating_configuration")
             
             # Validate configuration
-            aws_config = config_manager.aws_config
-            processing_config = config_manager.processing_config
+            config_manager = get_unified_config_manager()
+            aws_config = config_manager.config.aws
+            performance_config = config_manager.config.performance
             
             logger.log_operation(
                 "configuration_loaded",
                 aws_region=aws_config.region,
-                s3_bucket=aws_config.s3_vectors_bucket,
+                s3_bucket=aws_config.s3_bucket,
                 batch_sizes={
-                    'text': processing_config.batch_size_text,
-                    'video': processing_config.batch_size_video,
-                    'vectors': processing_config.batch_size_vectors
+                    'text': config_manager.config.storage.batch_size_text,
+                    'video': config_manager.config.video_processing.batch_size_video,
+                    'vectors': config_manager.config.storage.batch_size_vectors
                 }
             )
             
@@ -111,8 +112,11 @@ class VectorEmbeddingPOC:
                 error_code="SYSTEM_NOT_INITIALIZED"
             )
         
-        aws_config = config_manager.aws_config
-        processing_config = config_manager.processing_config
+        config_manager = get_unified_config_manager()
+        aws_config = config_manager.config.aws
+        video_config = config_manager.config.video_processing
+        storage_config = config_manager.config.storage
+        performance_config = config_manager.config.performance
         
         return {
             'initialized': self._initialized,
@@ -120,17 +124,17 @@ class VectorEmbeddingPOC:
                 'region': aws_config.region,
                 's3_vectors_bucket': aws_config.s3_vectors_bucket,
                 'bedrock_models': aws_config.bedrock_models,
-                'opensearch_domain': aws_config.opensearch_domain,
+                'opensearch_endpoint': storage_config.opensearch_endpoint,
                 'max_retries': aws_config.max_retries,
                 'timeout_seconds': aws_config.timeout_seconds
             },
             'processing_config': {
-                'batch_size_text': processing_config.batch_size_text,
-                'batch_size_video': processing_config.batch_size_video,
-                'batch_size_vectors': processing_config.batch_size_vectors,
-                'video_segment_duration': processing_config.video_segment_duration,
-                'max_video_duration': processing_config.max_video_duration,
-                'poll_interval': processing_config.poll_interval
+                'batch_size_text': storage_config.batch_size_text,
+                'batch_size_video': video_config.batch_size_video,
+                'batch_size_vectors': storage_config.batch_size_vectors,
+                'video_segment_duration': video_config.segment_duration_sec,
+                'max_video_duration': video_config.max_video_duration_sec,
+                'poll_interval': video_config.poll_interval_sec
             },
             'logging': {
                 'level': self._log_level,
@@ -157,12 +161,11 @@ class VectorEmbeddingPOC:
             
             all_healthy = all(client_validation.values())
             
+            import datetime
             return {
                 'status': 'healthy' if all_healthy else 'degraded',
                 'clients': client_validation,
-                'timestamp': logger.logger.handlers[0].formatter.formatTime(
-                    logging.LogRecord('', 0, '', 0, '', (), None)
-                ) if logger.logger.handlers else None
+                'timestamp': datetime.datetime.utcnow().isoformat()
             }
             
         except Exception as e:

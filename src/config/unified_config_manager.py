@@ -53,8 +53,8 @@ class AWSConfiguration:
     session_token: Optional[str] = None
     
     # S3 and S3Vector settings
-    s3_bucket: str = "s3vector-demo-bucket"
-    s3_prefix: str = "demo/"
+    s3_bucket: str = "s3vector-production-bucket"
+    s3_prefix: str = "vectors/"
     s3_vectors_bucket: Optional[str] = None
     s3vector_endpoint: Optional[str] = None
     s3vector_access_key: Optional[str] = None
@@ -144,7 +144,7 @@ class StorageConfiguration:
     opensearch_endpoint: Optional[str] = None
     opensearch_username: Optional[str] = None
     opensearch_password: Optional[str] = None
-    opensearch_index_prefix: str = "s3vector-demo"
+    opensearch_index_prefix: str = "s3vector"
     opensearch_max_results: int = 100
     
     # Storage patterns
@@ -168,10 +168,9 @@ class StorageConfiguration:
 class FeatureConfiguration:
     """Feature flags and capabilities."""
     # Core features
-    enable_real_aws: bool = False
+    enable_real_aws: bool = True
     enable_video_upload: bool = True
     enable_cost_estimation: bool = True
-    enable_demo_data: bool = True
     
     # Advanced features
     enable_opensearch_hybrid: bool = True
@@ -191,8 +190,8 @@ class FeatureConfiguration:
 class UIConfiguration:
     """User interface configuration."""
     # Application settings
-    app_title: str = "S3Vector Unified Demo"
-    app_icon: str = "🎬"
+    app_title: str = "S3Vector"
+    app_icon: str = "🔍"
     page_layout: str = "wide"
     sidebar_state: str = "expanded"
     theme: str = "light"

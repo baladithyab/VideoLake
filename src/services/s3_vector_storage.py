@@ -295,10 +295,10 @@ class S3VectorStorageManager:
                 
                 # Log to local resource registry (best-effort)
                 try:
-                    from src.config import config_manager as _cfg
+                    from src.config.unified_config_manager import get_unified_config_manager as _cfg
                     resource_registry.log_vector_bucket_created(
                         bucket_name=bucket_name,
-                        region=_cfg.aws_config.region,
+                        region=_cfg().config.aws.region,
                         encryption=encryption_type,
                         kms_key_arn=kms_key_arn,
                         source="service",
@@ -624,9 +624,9 @@ class S3VectorStorageManager:
             logger.info(f"Successfully created vector index: {index_name} in bucket: {bucket_name}")
             # Log to registry (best-effort)
             try:
-                from src.config import config_manager as _cfg
+                from src.config.unified_config_manager import get_unified_config_manager as _cfg
                 import boto3 as _b3
-                region = _cfg.aws_config.region
+                region = _cfg().config.aws.region
                 sts = _b3.client('sts', region_name=region)
                 account_id = sts.get_caller_identity()['Account']
                 index_arn = f"arn:aws:s3vectors:{region}:{account_id}:bucket/{bucket_name}/index/{index_name}"

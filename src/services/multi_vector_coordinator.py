@@ -27,7 +27,7 @@ from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.exceptions import ValidationError, VectorEmbeddingError, VectorStorageError
 from src.utils.logging_config import get_logger
-from src.config import config_manager
+from src.config.unified_config_manager import get_unified_config_manager
 
 logger = get_logger(__name__)
 

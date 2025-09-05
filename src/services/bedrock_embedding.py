@@ -94,7 +94,13 @@ class BedrockEmbeddingService:
         """Initialize the Bedrock embedding service."""
         self.bedrock_client = aws_client_factory.get_bedrock_runtime_client()
         config_manager = get_unified_config_manager()
-        self.config = config_manager.get_aws_config()
+        # Use the unified configuration system
+        self.config = {
+            'region': config_manager.config.aws.region,
+            'bedrock_model_id': config_manager.config.aws.bedrock_models.get('text_embedding', 'amazon.titan-embed-text-v2:0'),
+            's3_bucket': config_manager.config.aws.s3_bucket,
+            's3_prefix': config_manager.config.aws.s3_prefix
+        }
         
     def get_supported_models(self) -> Dict[str, ModelInfo]:
         """Get information about all supported embedding models."""

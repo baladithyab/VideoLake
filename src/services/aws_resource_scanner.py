@@ -16,7 +16,7 @@ import logging
 from src.utils.aws_clients import aws_client_factory
 from src.utils.resource_registry import resource_registry
 from src.utils.logging_config import get_logger
-from src.config import config_manager
+from src.config.unified_config_manager import get_unified_config_manager
 
 logger = get_logger(__name__)
 
@@ -50,7 +50,8 @@ class AWSResourceScanner:
         Args:
             region: AWS region to scan (defaults to config region)
         """
-        self.region = region or config_manager.aws_config.region
+        config_manager = get_unified_config_manager()
+        self.region = region or config_manager.config.aws.region
         self.resource_registry = resource_registry
         
         # Initialize AWS clients

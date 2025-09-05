@@ -50,8 +50,8 @@ class AWSConfig:
     s3vector_secret_key: Optional[str] = None
     
     # S3 configuration
-    s3_bucket: str = "s3vector-demo-bucket"
-    s3_prefix: str = "demo/"
+    s3_bucket: str = "s3vector-production-bucket"
+    s3_prefix: str = "vectors/"
     
     # Bedrock configuration
     bedrock_model_id: str = "amazon.titan-embed-text-v1"
@@ -125,7 +125,7 @@ class OpenSearchConfig:
     endpoint: Optional[str] = None
     username: Optional[str] = None
     password: Optional[str] = None
-    index_prefix: str = "s3vector-demo"
+    index_prefix: str = "s3vector"
     max_results: int = 100
 
 
@@ -147,8 +147,8 @@ class FeatureFlags:
 @dataclass
 class UIConfig:
     """UI configuration settings."""
-    app_title: str = "S3Vector Unified Demo"
-    app_icon: str = "🎬"
+    app_title: str = "S3Vector"
+    app_icon: str = "🔍"
     page_layout: str = "wide"
     sidebar_state: str = "expanded"
     theme: str = "light"
@@ -286,7 +286,7 @@ class ConfigManager:
         self._config.aws.s3vector_access_key = os.getenv("S3VECTOR_ACCESS_KEY")
         self._config.aws.s3vector_secret_key = os.getenv("S3VECTOR_SECRET_KEY")
         
-        self._config.aws.s3_bucket = os.getenv("S3_BUCKET", "s3vector-demo-bucket")
+        self._config.aws.s3_bucket = os.getenv("S3_BUCKET", "s3vector-production-bucket")
         self._config.aws.bedrock_model_id = os.getenv("BEDROCK_MODEL_ID", "amazon.titan-embed-text-v1")
         
         # Marengo configuration

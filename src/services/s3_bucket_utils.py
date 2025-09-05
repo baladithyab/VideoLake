@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any
 
 from botocore.exceptions import ClientError
 from src.utils.aws_clients import aws_client_factory
-from src.config import config_manager
+from src.config.unified_config_manager import get_unified_config_manager
 from src.utils.logging_config import get_logger
 from src.utils.resource_registry import resource_registry
 
@@ -43,7 +43,8 @@ class S3BucketUtilityService:
 
     def __init__(self):
         self.s3 = aws_client_factory.get_s3_client()
-        self.region = config_manager.aws_config.region
+        config_manager = get_unified_config_manager()
+        self.region = config_manager.config.aws.region
 
     def bucket_exists(self, bucket_name: str) -> bool:
         try:

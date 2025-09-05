@@ -1,4 +1,4 @@
-# S3Vector Unified Demo Configuration
+# S3Vector Configuration
 # This file contains default configuration settings that can be overridden
 # by environment variables or environment-specific config files.
 
@@ -12,8 +12,8 @@ port: 8501
 # AWS Configuration
 aws:
   region: us-east-1
-  s3_bucket: s3vector-demo-bucket
-  s3_prefix: demo/
+  s3_bucket: s3vector-production-bucket
+  s3_prefix: vectors/
   bedrock_model_id: amazon.titan-embed-text-v1
   bedrock_max_tokens: 8192
 
@@ -47,12 +47,13 @@ twelvelabs:
 
 # OpenSearch Configuration
 opensearch:
-  index_prefix: s3vector-demo
+  index_prefix: s3vector
   max_results: 100
 
 # Feature Flags
 features:
-  enable_real_aws: false
+  enable_real_aws: true
+  enable_demo_data: false
   enable_opensearch_hybrid: true
   enable_video_upload: true
   enable_cost_estimation: true
@@ -65,8 +66,8 @@ features:
 
 # UI Configuration
 ui:
-  app_title: "S3Vector Unified Demo"
-  app_icon: "🎬"
+  app_title: "S3Vector"
+  app_icon: "🔍"
   page_layout: wide
   sidebar_state: expanded
   theme: light

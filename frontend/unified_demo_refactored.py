@@ -36,12 +36,8 @@ from src.services import (
 )
 from src.utils.logging_config import get_logger
 
-# Import demo components (using enhanced configuration)
-# Force use of demo config for now to ensure resources section is available
-from frontend.components.demo_config import DemoConfig, DemoUtils
-DemoConfig = DemoConfig()
-DemoUtils = DemoUtils()
-ENHANCED_CONFIG = False
+# Import production configuration
+from src.config.app_config import get_config, get_config_manager
 from frontend.components.search_components import SearchComponents
 from frontend.components.results_components import ResultsComponents
 from frontend.components.processing_components import ProcessingComponents
@@ -58,12 +54,31 @@ logger = get_logger(__name__)
 
 
 class UnifiedS3VectorDemo:
-    """Unified S3Vector Demo Application with modular architecture."""
+    """Unified S3Vector Production Application with modular architecture."""
     
     def __init__(self):
         """Initialize the unified demo application."""
-        self.config = DemoConfig
-        self.utils = DemoUtils
+        self.config_manager = get_config_manager()
+        self.config = self.config_manager.config
+        
+        # Define workflow sections and titles
+        self.workflow_sections = ["upload", "query", "results", "visualization", "analytics", "resources"]
+        self.section_titles = {
+            "upload": "🎬 Upload & Processing",
+            "query": "🔍 Query & Search",
+            "results": "🎯 Results & Playback",
+            "visualization": "📊 Embedding Visualization",
+            "analytics": "⚙️ Analytics & Management",
+            "resources": "🔧 Resource Management"
+        }
+        self.section_descriptions = {
+            "upload": "Select videos and configure multi-vector processing with Marengo 2.7",
+            "query": "Intelligent semantic search with dual storage pattern comparison",
+            "results": "Interactive video player with segment overlay and similarity scores",
+            "visualization": "Explore embedding space with dimensionality reduction and query overlay",
+            "analytics": "Performance monitoring, cost tracking, and system management",
+            "resources": "Manage AWS resources, resume work, create new resources, and cleanup"
+        }
         
         # Initialize service manager and coordinator
         self.service_manager = None
@@ -91,6 +106,53 @@ class UnifiedS3VectorDemo:
         
         # Initialize session state
         self._initialize_session_state()
+    
+    def get_workflow_progress(self, current_section: str) -> float:
+        """Calculate workflow progress percentage."""
+        if current_section not in self.workflow_sections:
+            return 0.0
+        
+        current_index = self.workflow_sections.index(current_section)
+        return (current_index + 1) / len(self.workflow_sections)
+    
+    def get_next_section(self, current_section: str) -> str:
+        """Get the next section in the workflow."""
+        if current_section not in self.workflow_sections:
+            return self.workflow_sections[0] if self.workflow_sections else ""
+        
+        current_index = self.workflow_sections.index(current_section)
+        next_index = (current_index + 1) % len(self.workflow_sections)
+        return self.workflow_sections[next_index]
+    
+    def get_previous_section(self, current_section: str) -> str:
+        """Get the previous section in the workflow."""
+        if current_section not in self.workflow_sections:
+            return self.workflow_sections[-1] if self.workflow_sections else ""
+        
+        current_index = self.workflow_sections.index(current_section)
+        prev_index = (current_index - 1) % len(self.workflow_sections)
+        return self.workflow_sections[prev_index]
+    
+    def check_prerequisites(self, section: str, session_state) -> dict:
+        """Check prerequisites for a workflow section."""
+        prerequisites = {
+            "upload": True,  # Always available
+            "query": hasattr(session_state, 'processed_videos') and bool(session_state.processed_videos),
+            "results": hasattr(session_state, 'search_results') and bool(session_state.search_results),
+            "visualization": hasattr(session_state, 'search_results') and bool(session_state.search_results),
+            "analytics": hasattr(session_state, 'processing_jobs') and bool(session_state.processing_jobs),
+            "resources": True  # Always available
+        }
+
+        return {
+            "met": prerequisites.get(section, False),
+            "required_sections": {
+                "query": ["upload"],
+                "results": ["upload", "query"],
+                "visualization": ["upload", "query"],
+                "analytics": ["upload"]
+            }.get(section, [])
+        }
     
     def _initialize_services(self):
         """Initialize backend services with proper error handling."""
@@ -139,59 +201,43 @@ class UnifiedS3VectorDemo:
         if 'selected_segment' not in st.session_state:
             st.session_state.selected_segment = None
         
-        # Configuration state
+        # Configuration state - using production config
         if 'selected_vector_types' not in st.session_state:
-            st.session_state.selected_vector_types = self.config.default_vector_types.copy()
+            st.session_state.selected_vector_types = self.config.ui.default_vector_types.copy()
         
         if 'selected_storage_patterns' not in st.session_state:
-            st.session_state.selected_storage_patterns = self.config.default_storage_patterns.copy()
+            st.session_state.selected_storage_patterns = self.config.ui.default_storage_patterns.copy()
         
         if 'segment_duration' not in st.session_state:
-            st.session_state.segment_duration = self.config.default_segment_duration
+            st.session_state.segment_duration = self.config.ui.default_segment_duration
         
         if 'processing_mode' not in st.session_state:
-            st.session_state.processing_mode = self.config.default_processing_mode
-        
-        # Demo state
-        if 'use_real_aws' not in st.session_state:
-            st.session_state.use_real_aws = self.config.enable_real_aws
+            st.session_state.processing_mode = self.config.ui.default_processing_mode
     
     def render_page_config(self):
         """Configure Streamlit page settings."""
         st.set_page_config(
-            page_title=self.config.app_title,
-            page_icon=self.config.app_icon,
-            layout="wide",  # Use literal value instead of config
+            page_title=self.config.ui.app_title,
+            page_icon=self.config.ui.app_icon,
+            layout="wide",
             initial_sidebar_state="expanded"
         )
     
     def render_header(self):
         """Render the application header."""
-        st.title(f"{self.config.app_icon} {self.config.app_title}")
-        st.markdown("**Comprehensive Marengo 2.7 Multi-Vector Demo with Dual Storage Pattern Comparison**")
+        st.title(f"{self.config.ui.app_icon} {self.config.ui.app_title}")
+        st.markdown("**Production S3Vector Multi-Vector Application with Dual Storage Pattern Support**")
         
         # Service status indicator
         if self.service_manager and self.coordinator:
             st.success("✅ **Backend Services Connected** - Full functionality available")
         else:
-            st.error("❌ **Backend Services Unavailable** - Running in limited demo mode")
+            st.error("❌ **Backend Services Unavailable** - Limited functionality")
     
-    def render_sidebar(self) -> bool:
+    def render_sidebar(self):
         """Render the sidebar with configuration options."""
         with st.sidebar:
-            st.header("⚙️ Demo Configuration")
-            
-            # AWS mode toggle
-            use_real_aws = st.toggle(
-                "Use Real AWS",
-                value=st.session_state.use_real_aws,
-                help="Toggle between simulation mode and real AWS processing"
-            )
-            
-            if use_real_aws:
-                st.warning("⚠️ **Real AWS Mode** - Costs will be incurred")
-            else:
-                st.info("🛡️ **Safe Mode** - Simulation only, no costs")
+            st.header("⚙️ Configuration")
             
             # Service integration test
             if st.button("🔧 Test Service Integration"):
@@ -202,24 +248,22 @@ class UnifiedS3VectorDemo:
             
             current_section = st.selectbox(
                 "Current Section:",
-                options=self.config.workflow_sections,
-                index=self.config.workflow_sections.index(st.session_state.current_section),
-                format_func=lambda x: self.config.section_titles.get(x, x) or x,
+                options=self.workflow_sections,
+                index=self.workflow_sections.index(st.session_state.current_section),
+                format_func=lambda x: self.section_titles.get(x, x) or x,
                 help="Navigate between workflow sections"
             )
             
             st.session_state.current_section = current_section
             
             # Show workflow progress
-            progress = self.utils.get_workflow_progress(current_section, self.config.workflow_sections)
+            progress = self.get_workflow_progress(current_section)
             st.progress(progress, text=f"Workflow Progress: {progress*100:.0f}%")
             
             # Prerequisites check
-            prereqs = self.utils.check_prerequisites(current_section, st.session_state)
+            prereqs = self.check_prerequisites(current_section, st.session_state)
             if not prereqs["met"]:
                 st.warning(f"⚠️ Prerequisites not met. Complete: {', '.join(prereqs['required_sections'])}")
-            
-            return use_real_aws
     
     def test_service_manager_integration(self):
         """Test service manager integration and display results."""
@@ -259,8 +303,8 @@ class UnifiedS3VectorDemo:
         current_section = st.session_state.current_section
         
         # Render section header
-        st.header(self.config.section_titles.get(current_section, current_section))
-        st.markdown(self.config.section_descriptions.get(current_section, ""))
+        st.header(self.section_titles.get(current_section, current_section))
+        st.markdown(self.section_descriptions.get(current_section, ""))
         
         # Render section content
         if current_section == "upload":
@@ -352,7 +396,7 @@ class UnifiedS3VectorDemo:
             # Vector type selection
             selected_types = st.multiselect(
                 "Select Vector Types:",
-                options=self.config.default_vector_types,
+                options=self.config.ui.default_vector_types,
                 default=st.session_state.selected_vector_types,
                 help="Choose which Marengo 2.7 vector types to generate"
             )
@@ -400,12 +444,10 @@ class UnifiedS3VectorDemo:
         # Use the new search interface from search components with error handling
         with ErrorBoundary("Query & Search"):
             if self.search_components:
-                search_results = self.search_components.render_search_interface(
-                    use_real_aws=st.session_state.use_real_aws
-                )
+                search_results = self.search_components.render_search_interface()
             else:
                 st.info("🔍 **Search Interface** - Available when backend services are connected")
-                st.write("**Demo Search Features:**")
+                st.write("**Production Search Features:**")
                 st.write("• Dual pattern search (Direct S3Vector + OpenSearch Hybrid)")
                 st.write("• Multi-vector query processing")
                 st.write("• Intelligent query routing")
@@ -484,18 +526,18 @@ class UnifiedS3VectorDemo:
         col1, col2, col3 = st.columns([1, 2, 1])
         
         with col1:
-            prev_section = self.utils.get_previous_section(current_section, self.config.workflow_sections)
-            if st.button(f"⬅️ {self.config.section_titles.get(prev_section, prev_section)}"):
+            prev_section = self.get_previous_section(current_section)
+            if st.button(f"⬅️ {self.section_titles.get(prev_section, prev_section)}"):
                 st.session_state.current_section = prev_section
                 st.rerun()
         
         with col2:
-            progress = self.utils.get_workflow_progress(current_section, self.config.workflow_sections)
-            st.progress(progress, text=f"Section {self.config.workflow_sections.index(current_section) + 1} of {len(self.config.workflow_sections)}")
+            progress = self.get_workflow_progress(current_section)
+            st.progress(progress, text=f"Section {self.workflow_sections.index(current_section) + 1} of {len(self.workflow_sections)}")
         
         with col3:
-            next_section = self.utils.get_next_section(current_section, self.config.workflow_sections)
-            if st.button(f"{self.config.section_titles.get(next_section, next_section)} ➡️"):
+            next_section = self.get_next_section(current_section)
+            if st.button(f"{self.section_titles.get(next_section, next_section)} ➡️"):
                 st.session_state.current_section = next_section
                 st.rerun()
     
@@ -508,9 +550,8 @@ class UnifiedS3VectorDemo:
             # Render header
             self.render_header()
             
-            # Render sidebar and get AWS mode
-            use_real_aws = self.render_sidebar()
-            st.session_state.use_real_aws = use_real_aws
+            # Render sidebar
+            self.render_sidebar()
             
             # Render main workflow
             self.render_main_workflow()

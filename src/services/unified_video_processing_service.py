@@ -1040,7 +1040,7 @@ class UnifiedVideoProcessingService(VideoProcessingService, BatchVideoProcessor,
             raise ValidationError(f"Video file not found: {video_file_path}")
         
         # Use default bucket/prefix if not provided
-        bucket_name = bucket_name or "s3vector-demo-bucket"
+        bucket_name = bucket_name or "s3vector-production-bucket"
         key_prefix = key_prefix or "videos"
         
         # Generate unique key

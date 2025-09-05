@@ -153,8 +153,8 @@ class SimpleVideoPlayer:
                 return presigned_data["url"]
             except Exception as e:
                 logger.error(f"Failed to generate presigned URL for {video_s3_uri}: {e}")
-                # Fallback to placeholder for demo purposes
-                return f"demo-video-{video_s3_uri.split('/')[-1]}"
+                # Return empty string if presigned URL generation fails
+                raise RuntimeError(f"Failed to generate video URL for {video_s3_uri}: {e}")
         return video_s3_uri
     
     def get_segment_by_id(self, segments: List[VideoSegment], segment_id: str) -> Optional[VideoSegment]:
@@ -178,37 +178,3 @@ class SimpleVideoPlayer:
         return sorted(segments, key=lambda s: s.similarity_score, reverse=True)[:top_k]
 
 
-# Demo data generator for testing
-def generate_demo_segments(video_s3_uri: str, query: str) -> List[VideoSegment]:
-    """Generate demo video segments for testing."""
-    import random
-    
-    # Demo segments with realistic timecodes
-    demo_segments = [
-        VideoSegment(
-            segment_id=f"seg_{i+1}",
-            start_time=i * 15.0,
-            end_time=(i + 1) * 15.0,
-            similarity_score=random.uniform(0.6, 0.95),
-            vector_type=random.choice(["visual-text", "visual-image", "audio"]),
-            description=f"Demo segment {i+1} matching '{query}'"
-        )
-        for i in range(6)  # 6 segments of 15 seconds each
-    ]
-    
-    return demo_segments
-
-
-# Example usage
-if __name__ == "__main__":
-    # Demo usage
-    player = SimpleVideoPlayer()
-    
-    # Generate demo segments
-    demo_video_uri = "s3://demo-bucket/sample-video.mp4"
-    demo_query = "person walking"
-    segments = generate_demo_segments(demo_video_uri, demo_query)
-    
-    print(f"Generated {len(segments)} demo segments")
-    for segment in segments:
-        print(f"  {segment.segment_id}: {segment.time_range_str} (Score: {segment.similarity_score:.3f})")

@@ -16,7 +16,7 @@ from src.services.bedrock_embedding import BedrockEmbeddingService, EmbeddingRes
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.exceptions import VectorEmbeddingError, ValidationError, VectorStorageError
 from src.utils.logging_config import get_logger
-from src.config import config_manager
+from src.config.unified_config_manager import get_unified_config_manager
 
 logger = get_logger(__name__)
 
@@ -111,7 +111,8 @@ class EmbeddingStorageIntegration:
         """Initialize the integration service."""
         self.bedrock_service = BedrockEmbeddingService()
         self.storage_manager = S3VectorStorageManager()
-        self.config = config_manager.aws_config
+        config_manager = get_unified_config_manager()
+        self.config = config_manager.config.aws
         
         logger.info("Initialized EmbeddingStorageIntegration service")
     

@@ -89,9 +89,8 @@ def test_backend_service_logging():
     try:
         from src.utils.aws_clients import aws_client_factory
         print("☁️ Testing AWS client factory...")
-        demo_mode = aws_client_factory.is_demo_mode()
         s3_client = aws_client_factory.get_s3vectors_client()
-        print(f"✅ AWS clients initialized (demo_mode: {demo_mode})")
+        print(f"✅ AWS clients initialized")
     except Exception as e:
         print(f"❌ AWS client factory test failed: {e}")
     
@@ -234,7 +233,7 @@ def test_frontend_interaction_simulation():
     ui_interactions = [
         ("button_click", "resource_management", {"button": "create_vector_bucket"}),
         ("form_submit", "search_components", {"query": "test video", "top_k": 10}),
-        ("video_play", "video_player_ui", {"video_id": "demo123", "timestamp": 45.2}),
+        ("video_play", "video_player_ui", {"video_id": "video123", "timestamp": 45.2}),
         ("visualization_update", "visualization_ui", {"view": "3d_scatter", "dimensions": 3}),
         ("service_init", "service_locator", {"service": "similarity_search"})
     ]
@@ -287,7 +286,7 @@ def test_aws_operations_logging():
         ("s3vectors", "put_vectors", {"index_arn": "arn:test", "vector_count": 100}),
         ("s3vectors", "query_vectors", {"index_arn": "arn:test", "top_k": 10}),
         ("bedrock-runtime", "invoke_model", {"model_id": "marengo", "input_type": "text"}),
-        ("s3", "put_object", {"bucket": "demo-bucket", "key": "video.mp4"})
+        ("s3", "put_object", {"bucket": "production-bucket", "key": "video.mp4"})
     ]
     
     for service, operation, params in aws_operations:
@@ -347,7 +346,7 @@ def generate_logging_report():
                 "s3_vector_storage.py": "✅ AWS API call logging", 
                 "opensearch_integration.py": "✅ Integration pattern logging",
                 "similarity_search_engine.py": "✅ Search operation logging",
-                "aws_clients.py": "✅ Client creation and demo mode detection",
+                "aws_clients.py": "✅ Client creation and configuration",
                 "unified_config_manager.py": "✅ Configuration loading logging"
             },
             "frontend_components": {
@@ -440,7 +439,7 @@ def main():
             "component": "unified_video_processing_service",
             "video_operation": "process_video_start",
             "job_id": "job_20241205_064523_abc123",
-            "video_s3_uri": "s3://demo-bucket/sample.mp4",
+            "video_s3_uri": "s3://production-bucket/sample.mp4",
             "processing_mode": "parallel",
             "vector_types": 3,
             "storage_patterns": 1

@@ -23,6 +23,9 @@ if str(project_root) not in sys.path:
 from src.utils.resource_registry import resource_registry
 from src.utils.logging_config import get_logger, get_structured_logger, LoggedOperation
 
+# Initialize structured logger
+structured_logger = get_structured_logger(__name__)
+
 # Import AWS resource scanner and storage manager
 try:
     from src.services.aws_resource_scanner import AWSResourceScanner
@@ -333,19 +336,8 @@ class ResourceManagementComponent:
         """Render resource creation interface."""
         st.subheader("🚀 Create AWS Resources")
         
-        # Check if we're in demo mode
-        demo_mode = False
-        try:
-            if AWS_STORAGE_AVAILABLE:
-                demo_mode = aws_client_factory.is_demo_mode()
-        except:
-            demo_mode = True
-        
         # Show current mode
-        if demo_mode:
-            st.warning("🎭 **Demo Mode**: Resource creation will be simulated (no real AWS resources will be created)")
-        else:
-            st.success("☁️ **Real AWS Mode**: Resources will be created in your AWS account")
+        st.info("☁️ **Production Mode**: Resources will be created in your AWS account. Ensure your AWS credentials are properly configured.")
         
         # Resource creation forms
         col1, col2 = st.columns(2)
@@ -377,7 +369,7 @@ class ResourceManagementComponent:
                 create_bucket = st.form_submit_button("🪣 Create Vector Bucket", type="primary")
                 
                 if create_bucket:
-                    self._create_vector_bucket(bucket_name, encryption_type, kms_key_arn, demo_mode)
+                    self._create_vector_bucket(bucket_name, encryption_type, kms_key_arn)
             
             st.write("**Vector Indexes**")
             
@@ -421,7 +413,7 @@ class ResourceManagementComponent:
                 create_index = st.form_submit_button("📊 Create Vector Index", type="primary")
                 
                 if create_index:
-                    self._create_vector_index(selected_bucket, index_name, dimensions, distance_metric, demo_mode)
+                    self._create_vector_index(selected_bucket, index_name, dimensions, distance_metric)
         
         with col2:
             st.write("**Multi-Index Architecture**")
@@ -451,7 +443,7 @@ class ResourceManagementComponent:
                 create_multi = st.form_submit_button("🏗️ Create Multi-Index Architecture", type="primary")
                 
                 if create_multi:
-                    self._create_multi_index_architecture(base_bucket_name, vector_types, base_dimensions, demo_mode)
+                    self._create_multi_index_architecture(base_bucket_name, vector_types, base_dimensions)
             
             # Resource cleanup section
             st.write("**Resource Cleanup**")
@@ -473,7 +465,7 @@ class ResourceManagementComponent:
                 delete_bucket = st.form_submit_button("🗑️ Delete Vector Bucket", type="secondary")
                 
                 if delete_bucket:
-                    self._delete_vector_bucket(cleanup_bucket, cascade_delete, demo_mode)
+                    self._delete_vector_bucket(cleanup_bucket, cascade_delete)
     
     def _start_resource_scan(self, scan_types: List[str], region: str):
         """Start scanning for AWS resources."""
@@ -721,246 +713,136 @@ class ResourceManagementComponent:
         except Exception:
             return []
     
-    def _create_vector_bucket(self, bucket_name: str, encryption_type: str, kms_key_arn: Optional[str], demo_mode: bool):
+    def _create_vector_bucket(self, bucket_name: str, encryption_type: str, kms_key_arn: Optional[str]):
         """Create a vector bucket."""
-        structured_logger.log_function_entry(
-            "_create_vector_bucket",
-            bucket_name=bucket_name,
-            encryption_type=encryption_type,
-            demo_mode=demo_mode
-        )
-        
         if not bucket_name or not bucket_name.strip():
-            structured_logger.log_operation(
-                "vector_bucket_creation_validation_failed",
-                level="WARNING",
-                error="empty_bucket_name"
-            )
             st.error("❌ Bucket name is required")
             return
         
-        structured_logger.log_resource_operation(
-            "vector_bucket",
-            "create_initiated",
-            bucket_name,
-            encryption_type=encryption_type,
-            demo_mode=demo_mode
-        )
+        if not AWS_STORAGE_AVAILABLE:
+            st.error("❌ AWS Storage services not available. Please ensure AWS credentials are properly configured.")
+            return
         
-        with LoggedOperation(structured_logger, f"frontend_create_vector_bucket_{bucket_name}", bucket_name=bucket_name, demo_mode=demo_mode):
-            if demo_mode:
-                # Demo mode simulation
-                structured_logger.log_operation(
-                    "demo_vector_bucket_creation_start",
-                    level="INFO",
-                    bucket_name=bucket_name
+        try:
+            from src.services.s3_vector_storage import S3VectorStorageManager
+            
+            with st.spinner("☁️ Creating vector bucket..."):
+                storage_manager = S3VectorStorageManager()
+                result = storage_manager.create_vector_bucket(
+                    bucket_name=bucket_name,
+                    encryption_type=encryption_type,
+                    kms_key_arn=kms_key_arn
                 )
-                
-                with st.spinner("🎭 Creating vector bucket (demo mode)..."):
-                    time.sleep(2)  # Simulate creation time
-                    st.success(f"✅ Demo bucket '{bucket_name}' created successfully!")
-                    st.info("🎭 This was a simulation - no real AWS resources were created")
-                    
-                    # Add to registry for demo purposes
-                    try:
-                        structured_logger.log_operation(
-                            "updating_registry_demo_bucket",
-                            level="DEBUG",
-                            bucket_name=bucket_name
-                        )
-                        self.resource_registry.log_vector_bucket_created(
-                            bucket_name=bucket_name,
-                            region="us-east-1",
-                            encryption=encryption_type,
-                            kms_key_arn=kms_key_arn,
-                            source="demo"
-                        )
-                        structured_logger.log_resource_operation(
-                            "vector_bucket",
-                            "create_demo_success",
-                            bucket_name
-                        )
-                    except Exception as e:
-                        structured_logger.log_error("registry_update_demo_bucket", e, bucket_name=bucket_name)
-                        st.warning(f"Could not update registry: {e}")
+            
+            status = result.get('status')
+            
+            if status == 'created':
+                st.success(f"✅ Vector bucket '{bucket_name}' created successfully!")
+                # Update registry
+                self.resource_registry.log_vector_bucket_created(
+                    bucket_name=bucket_name,
+                    region="us-east-1",  # TODO: Get from config
+                    encryption=encryption_type,
+                    kms_key_arn=kms_key_arn,
+                    source="frontend"
+                )
+            elif status == 'already_exists':
+                st.warning(f"⚠️ Vector bucket '{bucket_name}' already exists")
             else:
-                # Real AWS creation
-                if not AWS_STORAGE_AVAILABLE:
-                    structured_logger.log_operation(
-                        "aws_storage_unavailable",
-                        level="ERROR",
-                        bucket_name=bucket_name
-                    )
-                    st.error("❌ AWS Storage services not available")
-                    return
+                st.error(f"❌ Failed to create bucket: {result}")
                 
-                try:
-                    structured_logger.log_service_call(
-                        "S3VectorStorageManager",
-                        "create_vector_bucket",
-                        {
-                            "bucket_name": bucket_name,
-                            "encryption_type": encryption_type
-                        }
-                    )
-                    
-                    from src.services.s3_vector_storage import S3VectorStorageManager
-                    
-                    with st.spinner("☁️ Creating vector bucket..."):
-                        storage_manager = S3VectorStorageManager()
-                        result = storage_manager.create_vector_bucket(
-                            bucket_name=bucket_name,
-                            encryption_type=encryption_type,
-                            kms_key_arn=kms_key_arn
-                        )
-                    
-                    status = result.get('status')
-                    structured_logger.log_resource_operation(
-                        "vector_bucket",
-                        "create_real_complete",
-                        bucket_name,
-                        status=status,
-                        result_keys=list(result.keys())
-                    )
-                    
-                    if status == 'created':
-                        st.success(f"✅ Vector bucket '{bucket_name}' created successfully!")
-                    elif status == 'already_exists':
-                        st.warning(f"⚠️ Vector bucket '{bucket_name}' already exists")
-                    else:
-                        st.error(f"❌ Failed to create bucket: {result}")
-                        
-                except Exception as e:
-                    structured_logger.log_error("real_vector_bucket_creation", e, bucket_name=bucket_name)
-                    st.error(f"❌ Error creating vector bucket: {e}")
-                    logger.error(f"Vector bucket creation failed: {e}")
-        
-        structured_logger.log_function_exit("_create_vector_bucket")
+        except Exception as e:
+            st.error(f"❌ Error creating vector bucket: {e}")
+            logger.error(f"Vector bucket creation failed: {e}")
     
-    def _create_vector_index(self, bucket_name: str, index_name: str, dimensions: int, distance_metric: str, demo_mode: bool):
+    def _create_vector_index(self, bucket_name: str, index_name: str, dimensions: int, distance_metric: str):
         """Create a vector index."""
         if not bucket_name or not index_name:
             st.error("❌ Bucket name and index name are required")
             return
         
-        if demo_mode:
-            # Demo mode simulation
-            with st.spinner("🎭 Creating vector index (demo mode)..."):
-                time.sleep(2)
-                st.success(f"✅ Demo index '{index_name}' created in bucket '{bucket_name}'!")
-                st.info("🎭 This was a simulation - no real AWS resources were created")
-                
-                # Add to registry for demo purposes
-                try:
-                    self.resource_registry.log_index_created(
-                        bucket_name=bucket_name,
-                        index_name=index_name,
-                        arn=f"arn:aws:s3vectors:us-east-1:123456789012:bucket/{bucket_name}/index/{index_name}",
-                        dimensions=dimensions,
-                        distance_metric=distance_metric,
-                        source="demo"
-                    )
-                except Exception as e:
-                    st.warning(f"Could not update registry: {e}")
-        else:
-            # Real AWS creation
-            if not AWS_STORAGE_AVAILABLE:
-                st.error("❌ AWS Storage services not available")
-                return
+        if not AWS_STORAGE_AVAILABLE:
+            st.error("❌ AWS Storage services not available. Please ensure AWS credentials are properly configured.")
+            return
+        
+        try:
+            from src.services.s3_vector_storage import S3VectorStorageManager
             
-            try:
-                from src.services.s3_vector_storage import S3VectorStorageManager
+            with st.spinner("☁️ Creating vector index..."):
+                storage_manager = S3VectorStorageManager()
+                result = storage_manager.create_vector_index(
+                    bucket_name=bucket_name,
+                    index_name=index_name,
+                    dimensions=dimensions,
+                    distance_metric=distance_metric
+                )
+            
+            if result.get('status') == 'created':
+                st.success(f"✅ Vector index '{index_name}' created successfully!")
+                # Update registry
+                self.resource_registry.log_index_created(
+                    bucket_name=bucket_name,
+                    index_name=index_name,
+                    arn=result.get('arn', f"arn:aws:s3vectors:us-east-1:123456789012:bucket/{bucket_name}/index/{index_name}"),
+                    dimensions=dimensions,
+                    distance_metric=distance_metric,
+                    source="frontend"
+                )
+            elif result.get('status') == 'already_exists':
+                st.warning(f"⚠️ Vector index '{index_name}' already exists")
+            else:
+                st.error(f"❌ Failed to create index: {result}")
                 
-                with st.spinner("☁️ Creating vector index..."):
-                    storage_manager = S3VectorStorageManager()
-                    result = storage_manager.create_vector_index(
-                        bucket_name=bucket_name,
-                        index_name=index_name,
-                        dimensions=dimensions,
-                        distance_metric=distance_metric
-                    )
-                
-                if result.get('status') == 'created':
-                    st.success(f"✅ Vector index '{index_name}' created successfully!")
-                elif result.get('status') == 'already_exists':
-                    st.warning(f"⚠️ Vector index '{index_name}' already exists")
-                else:
-                    st.error(f"❌ Failed to create index: {result}")
-                    
-            except Exception as e:
-                st.error(f"❌ Error creating vector index: {e}")
-                logger.error(f"Vector index creation failed: {e}")
+        except Exception as e:
+            st.error(f"❌ Error creating vector index: {e}")
+            logger.error(f"Vector index creation failed: {e}")
     
-    def _create_multi_index_architecture(self, bucket_name: str, vector_types: List[str], base_dimensions: int, demo_mode: bool):
+    def _create_multi_index_architecture(self, bucket_name: str, vector_types: List[str], base_dimensions: int):
         """Create a multi-index architecture."""
         if not bucket_name or not vector_types:
             st.error("❌ Bucket name and vector types are required")
             return
         
-        if demo_mode:
-            # Demo mode simulation
-            with st.spinner("🎭 Creating multi-index architecture (demo mode)..."):
-                progress = st.progress(0)
-                
-                # Simulate bucket creation
-                progress.progress(20)
-                time.sleep(1)
-                
-                # Simulate index creation for each type
-                for i, vector_type in enumerate(vector_types):
-                    progress.progress(20 + (70 * (i + 1) / len(vector_types)))
-                    time.sleep(1)
-                
-                progress.progress(100)
-                
-                st.success(f"✅ Demo multi-index architecture created with {len(vector_types)} indexes!")
-                st.info("🎭 This was a simulation - no real AWS resources were created")
-                
-                # Show created indexes
-                for vector_type in vector_types:
-                    st.write(f"  • **{vector_type}** index created")
-        else:
-            # Real AWS creation
-            if not AWS_STORAGE_AVAILABLE:
-                st.error("❌ AWS Storage services not available")
-                return
+        if not AWS_STORAGE_AVAILABLE:
+            st.error("❌ AWS Storage services not available. Please ensure AWS credentials are properly configured.")
+            return
+        
+        try:
+            from src.services.s3_vector_storage import S3VectorStorageManager
             
-            try:
-                from src.services.s3_vector_storage import S3VectorStorageManager
+            with st.spinner("☁️ Creating multi-index architecture..."):
+                storage_manager = S3VectorStorageManager()
+                result = storage_manager.create_multi_index_architecture(
+                    bucket_name=bucket_name,
+                    vector_types=vector_types,
+                    base_dimensions=base_dimensions,
+                    distance_metric="cosine"
+                )
+            
+            successful = result.get('successful_indexes', 0)
+            failed = result.get('failed_indexes', 0)
+            
+            if successful > 0:
+                st.success(f"✅ Multi-index architecture created: {successful} indexes successful")
                 
-                with st.spinner("☁️ Creating multi-index architecture..."):
-                    storage_manager = S3VectorStorageManager()
-                    result = storage_manager.create_multi_index_architecture(
-                        bucket_name=bucket_name,
-                        vector_types=vector_types,
-                        base_dimensions=base_dimensions,
-                        distance_metric="cosine"
-                    )
+                # Show details
+                index_results = result.get('index_results', {})
+                for vector_type, index_result in index_results.items():
+                    status = index_result.get('status', 'unknown')
+                    st.write(f"  • **{vector_type}**: {status}")
+            
+            if failed > 0:
+                st.warning(f"⚠️ {failed} indexes failed to create")
                 
-                successful = result.get('successful_indexes', 0)
-                failed = result.get('failed_indexes', 0)
-                
-                if successful > 0:
-                    st.success(f"✅ Multi-index architecture created: {successful} indexes successful")
+                failed_indexes = result.get('failed_indexes', [])
+                for failure in failed_indexes:
+                    st.error(f"  • {failure.get('vector_type')}: {failure.get('error')}")
                     
-                    # Show details
-                    index_results = result.get('index_results', {})
-                    for vector_type, index_result in index_results.items():
-                        status = index_result.get('status', 'unknown')
-                        st.write(f"  • **{vector_type}**: {status}")
-                
-                if failed > 0:
-                    st.warning(f"⚠️ {failed} indexes failed to create")
-                    
-                    failed_indexes = result.get('failed_indexes', [])
-                    for failure in failed_indexes:
-                        st.error(f"  • {failure.get('vector_type')}: {failure.get('error')}")
-                        
-            except Exception as e:
-                st.error(f"❌ Error creating multi-index architecture: {e}")
-                logger.error(f"Multi-index architecture creation failed: {e}")
+        except Exception as e:
+            st.error(f"❌ Error creating multi-index architecture: {e}")
+            logger.error(f"Multi-index architecture creation failed: {e}")
     
-    def _delete_vector_bucket(self, bucket_name: str, cascade_delete: bool, demo_mode: bool):
+    def _delete_vector_bucket(self, bucket_name: str, cascade_delete: bool):
         """Delete a vector bucket."""
         if not bucket_name or not bucket_name.strip():
             st.error("❌ Bucket name is required")
@@ -974,50 +856,39 @@ class ResourceManagementComponent:
                 st.rerun()
             return
         
-        if demo_mode:
-            # Demo mode simulation
-            with st.spinner("🎭 Deleting vector bucket (demo mode)..."):
-                time.sleep(2)
-                st.success(f"✅ Demo bucket '{bucket_name}' deleted successfully!")
-                st.info("🎭 This was a simulation - no real AWS resources were affected")
-                
-                # Update registry for demo purposes
-                try:
-                    self.resource_registry.log_vector_bucket_deleted(
-                        bucket_name=bucket_name,
-                        source="demo"
-                    )
-                except Exception as e:
-                    st.warning(f"Could not update registry: {e}")
-        else:
-            # Real AWS deletion
-            if not AWS_STORAGE_AVAILABLE:
-                st.error("❌ AWS Storage services not available")
-                return
+        if not AWS_STORAGE_AVAILABLE:
+            st.error("❌ AWS Storage services not available. Please ensure AWS credentials are properly configured.")
+            return
+        
+        try:
+            from src.services.s3_vector_storage import S3VectorStorageManager
             
-            try:
-                from src.services.s3_vector_storage import S3VectorStorageManager
+            with st.spinner("☁️ Deleting vector bucket..."):
+                storage_manager = S3VectorStorageManager()
+                result = storage_manager.delete_vector_bucket(
+                    bucket_name=bucket_name,
+                    cascade=cascade_delete
+                )
+            
+            if result.get('status') == 'deleted':
+                deleted_indexes = result.get('indexes_deleted', 0)
+                st.success(f"✅ Vector bucket '{bucket_name}' deleted successfully!")
+                if deleted_indexes > 0:
+                    st.info(f"📊 {deleted_indexes} indexes were also deleted")
                 
-                with st.spinner("☁️ Deleting vector bucket..."):
-                    storage_manager = S3VectorStorageManager()
-                    result = storage_manager.delete_vector_bucket(
-                        bucket_name=bucket_name,
-                        cascade=cascade_delete
-                    )
+                # Update registry
+                self.resource_registry.log_vector_bucket_deleted(
+                    bucket_name=bucket_name,
+                    source="frontend"
+                )
+            elif result.get('status') == 'not_found':
+                st.warning(f"⚠️ Bucket '{bucket_name}' was not found (may already be deleted)")
+            else:
+                st.error(f"❌ Failed to delete bucket: {result}")
                 
-                if result.get('status') == 'deleted':
-                    deleted_indexes = result.get('indexes_deleted', 0)
-                    st.success(f"✅ Vector bucket '{bucket_name}' deleted successfully!")
-                    if deleted_indexes > 0:
-                        st.info(f"📊 {deleted_indexes} indexes were also deleted")
-                elif result.get('status') == 'not_found':
-                    st.warning(f"⚠️ Bucket '{bucket_name}' was not found (may already be deleted)")
-                else:
-                    st.error(f"❌ Failed to delete bucket: {result}")
-                    
-            except Exception as e:
-                st.error(f"❌ Error deleting vector bucket: {e}")
-                logger.error(f"Vector bucket deletion failed: {e}")
+        except Exception as e:
+            st.error(f"❌ Error deleting vector bucket: {e}")
+            logger.error(f"Vector bucket deletion failed: {e}")
         
         # Clear confirmation state
         if f'confirm_delete_{bucket_name}' in st.session_state:

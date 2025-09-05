@@ -1308,8 +1308,10 @@ s3-vectors-pipeline:
             sts_client = boto3.client('sts', region_name=self.region_name)
             response = sts_client.get_caller_identity()
             return response['Account']
-        except Exception:
-            return "123456789012"  # Fallback for testing
+        except Exception as e:
+            self.logger.log_operation("Failed to get AWS account ID", level="ERROR", error=str(e))
+            # Don't fall back to fake account - raise exception to prevent simulation mode
+            raise OpenSearchIntegrationError(f"Failed to get real AWS account ID: {e}")
 
     # Resource Management and Cleanup Methods
     

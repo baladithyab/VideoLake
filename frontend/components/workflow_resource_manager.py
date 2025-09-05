@@ -12,9 +12,11 @@ Streamlit component focused on practical user workflows:
 import streamlit as st
 import pandas as pd
 import time
+import boto3
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import json
+from botocore.exceptions import ClientError, NoCredentialsError
 
 # Add project root to path for imports
 import sys
@@ -25,6 +27,7 @@ if str(project_root) not in sys.path:
 
 from src.utils.resource_registry import resource_registry
 from src.utils.logging_config import get_logger
+from src.config.unified_config_manager import UnifiedConfigManager
 
 logger = get_logger(__name__)
 
@@ -35,6 +38,10 @@ class WorkflowResourceManager:
     def __init__(self):
         """Initialize workflow resource manager."""
         self.resource_registry = resource_registry
+        self.config_manager = UnifiedConfigManager()
+        
+        # Initialize AWS clients
+        self._init_aws_clients()
         
         # Initialize session state for workflow continuity
         if 'workflow_state' not in st.session_state:
@@ -45,6 +52,163 @@ class WorkflowResourceManager:
                 'created_resources': [],
                 'session_id': f"session_{int(time.time())}"
             }
+    
+    def _init_aws_clients(self):
+        """Initialize AWS service clients for real resource creation."""
+        try:
+            # Get AWS region from config or default
+            region = 'us-east-1'  # Default region
+            try:
+                config = self.config_manager.config
+                if hasattr(config, 'aws') and hasattr(config.aws, 'region'):
+                    region = config.aws.region
+            except Exception:
+                # Use default region if config access fails
+                pass
+            
+            # Initialize AWS clients
+            self.s3_client = boto3.client('s3', region_name=region)
+            self.s3vectors_client = boto3.client('s3vectors', region_name=region)
+            self.opensearch_client = boto3.client('opensearchserverless', region_name=region)
+            self.sts_client = boto3.client('sts', region_name=region)
+            
+            # Get real AWS account ID
+            try:
+                identity = self.sts_client.get_caller_identity()
+                self.account_id = identity['Account']
+                self.region = region
+                logger.info(f"Initialized AWS clients for account {self.account_id} in region {region}")
+            except Exception as e:
+                logger.error(f"Failed to get AWS account ID: {e}")
+                # Don't fall back to fake account - this should fail if AWS isn't available
+                raise
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize AWS clients: {e}")
+            # Re-raise the exception to prevent using fake resources
+            st.error("❌ Failed to initialize AWS connection. Please check your AWS credentials and configuration.")
+            raise
+
+    def _create_real_s3_bucket(self, bucket_name: str, enable_versioning: bool) -> bool:
+        """Create a real S3 bucket using AWS API."""
+        try:
+            # Create S3 bucket
+            if self.region == 'us-east-1':
+                self.s3_client.create_bucket(Bucket=bucket_name)
+            else:
+                self.s3_client.create_bucket(
+                    Bucket=bucket_name,
+                    CreateBucketConfiguration={'LocationConstraint': self.region}
+                )
+            
+            # Enable versioning if requested
+            if enable_versioning:
+                self.s3_client.put_bucket_versioning(
+                    Bucket=bucket_name,
+                    VersioningConfiguration={'Status': 'Enabled'}
+                )
+            
+            logger.info(f"Successfully created real S3 bucket: {bucket_name}")
+            return True
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'BucketAlreadyOwnedByYou':
+                logger.info(f"S3 bucket {bucket_name} already exists and is owned by you")
+                return True
+            elif error_code == 'BucketAlreadyExists':
+                logger.error(f"S3 bucket {bucket_name} already exists globally")
+                st.error(f"❌ Bucket name '{bucket_name}' is already taken globally. Please choose a different name.")
+                return False
+            else:
+                logger.error(f"Failed to create S3 bucket {bucket_name}: {e}")
+                st.error(f"❌ Failed to create S3 bucket: {e}")
+                return False
+        except Exception as e:
+            logger.error(f"Unexpected error creating S3 bucket {bucket_name}: {e}")
+            st.error(f"❌ Failed to create S3 bucket: {e}")
+            return False
+
+    def _create_real_s3vector_index(self, bucket_name: str, index_name: str, vector_dimension: int) -> tuple[bool, str]:
+        """Create a real S3Vector index using AWS API."""
+        try:
+            # Create S3Vector index
+            response = self.s3vectors_client.create_index(
+                BucketName=bucket_name,
+                IndexName=index_name,
+                VectorDimension=vector_dimension,
+                DistanceMetric='COSINE'  # Default distance metric
+            )
+            
+            index_arn = response['IndexArn']
+            logger.info(f"Successfully created real S3Vector index: {index_arn}")
+            return True, index_arn
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'IndexAlreadyExists':
+                # Get existing index ARN
+                try:
+                    response = self.s3vectors_client.describe_index(
+                        BucketName=bucket_name,
+                        IndexName=index_name
+                    )
+                    index_arn = response['IndexDetails']['IndexArn']
+                    logger.info(f"S3Vector index {index_name} already exists: {index_arn}")
+                    return True, index_arn
+                except Exception:
+                    # Fallback to constructed ARN
+                    index_arn = f"arn:aws:s3vectors:{self.region}:{self.account_id}:index/{bucket_name}/{index_name}"
+                    return True, index_arn
+            else:
+                logger.error(f"Failed to create S3Vector index {index_name}: {e}")
+                st.error(f"❌ Failed to create S3Vector index: {e}")
+                return False, ""
+        except Exception as e:
+            logger.error(f"Unexpected error creating S3Vector index {index_name}: {e}")
+            st.error(f"❌ Failed to create S3Vector index: {e}")
+            return False, ""
+
+    def _create_real_opensearch_collection(self, collection_name: str, collection_type: str) -> tuple[bool, str]:
+        """Create a real OpenSearch Serverless collection using AWS API."""
+        try:
+            # Create OpenSearch Serverless collection
+            response = self.opensearch_client.create_collection(
+                name=collection_name,
+                type=collection_type,
+                description=f'S3Vector collection: {collection_name}'
+            )
+            
+            collection_arn = response['createCollectionDetail']['arn']
+            logger.info(f"Successfully created real OpenSearch collection: {collection_arn}")
+            return True, collection_arn
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'ConflictException':
+                # Collection already exists, get its ARN
+                try:
+                    response = self.opensearch_client.batch_get_collection(names=[collection_name])
+                    if response['collectionDetails']:
+                        collection_arn = response['collectionDetails'][0]['arn']
+                        logger.info(f"OpenSearch collection {collection_name} already exists: {collection_arn}")
+                        return True, collection_arn
+                    else:
+                        # Fallback to constructed ARN
+                        collection_arn = f"arn:aws:aoss:{self.region}:{self.account_id}:collection/{collection_name}"
+                        return True, collection_arn
+                except Exception:
+                    # Fallback to constructed ARN
+                    collection_arn = f"arn:aws:aoss:{self.region}:{self.account_id}:collection/{collection_name}"
+                    return True, collection_arn
+            else:
+                logger.error(f"Failed to create OpenSearch collection {collection_name}: {e}")
+                st.error(f"❌ Failed to create OpenSearch collection: {e}")
+                return False, ""
+        except Exception as e:
+            logger.error(f"Unexpected error creating OpenSearch collection {collection_name}: {e}")
+            st.error(f"❌ Failed to create OpenSearch collection: {e}")
+            return False, ""
     
     def render_workflow_resume_section(self):
         """Render the workflow resume section."""
@@ -457,24 +621,29 @@ class WorkflowResourceManager:
                     st.success("✅ Custom resources created successfully!")
     
     def _create_complete_setup(self, setup_name: str, region: str) -> bool:
-        """Create a complete S3Vector setup."""
+        """Create a complete S3Vector setup using real AWS resources."""
         try:
-            # This would implement actual resource creation
-            # For now, simulate the creation and log to registry
-            
             session_id = st.session_state.workflow_state['session_id']
             
-            # Create S3 bucket
+            # Create S3 bucket using real AWS API
             s3_bucket_name = f"{setup_name}-s3"
+            if not self._create_real_s3_bucket(s3_bucket_name, enable_versioning=True):
+                return False
+            
+            # Log S3 bucket creation
             self.resource_registry.log_s3_bucket_created(
                 bucket_name=s3_bucket_name,
-                region=region,
+                region=self.region,
                 source=session_id
             )
             
-            # Create S3Vector index
+            # Create S3Vector index using real AWS API
             index_name = f"{setup_name}-index"
-            index_arn = f"arn:aws:s3vectors:{region}:123456789012:index/{index_name}"
+            success, index_arn = self._create_real_s3vector_index(s3_bucket_name, index_name, 1024)
+            if not success:
+                return False
+            
+            # Log S3Vector index creation
             self.resource_registry.log_index_created(
                 bucket_name=s3_bucket_name,
                 index_name=index_name,
@@ -484,13 +653,17 @@ class WorkflowResourceManager:
                 source=session_id
             )
             
-            # Create OpenSearch collection
+            # Create OpenSearch collection using real AWS API
             collection_name = f"{setup_name}-collection"
-            collection_arn = f"arn:aws:aoss:{region}:123456789012:collection/{collection_name}"
+            success, collection_arn = self._create_real_opensearch_collection(collection_name, "VECTORSEARCH")
+            if not success:
+                return False
+            
+            # Log OpenSearch collection creation
             self.resource_registry.log_opensearch_collection_created(
                 collection_name=collection_name,
                 collection_arn=collection_arn,
-                region=region,
+                region=self.region,
                 source=session_id
             )
             
@@ -507,17 +680,22 @@ class WorkflowResourceManager:
             
         except Exception as e:
             logger.error(f"Failed to create complete setup: {e}")
+            st.error(f"❌ Failed to create complete setup: {e}")
             return False
     
     def _create_s3_bucket(self, bucket_name: str, enable_versioning: bool) -> bool:
-        """Create an S3 bucket."""
+        """Create an S3 bucket using real AWS API."""
         try:
             session_id = st.session_state.workflow_state['session_id']
             
-            # Simulate S3 bucket creation
+            # Create real S3 bucket
+            if not self._create_real_s3_bucket(bucket_name, enable_versioning):
+                return False
+            
+            # Log S3 bucket creation
             self.resource_registry.log_s3_bucket_created(
                 bucket_name=bucket_name,
-                region="us-east-1",
+                region=self.region,
                 source=session_id
             )
             
@@ -532,17 +710,24 @@ class WorkflowResourceManager:
             return False
     
     def _create_s3vector_index(self, index_name: str, vector_dimension: int) -> bool:
-        """Create an S3Vector index."""
+        """Create an S3Vector index using real AWS API."""
         try:
             session_id = st.session_state.workflow_state['session_id']
-            index_arn = f"arn:aws:s3vectors:us-east-1:123456789012:index/{index_name}"
 
             # Get active S3 bucket or create a default one
             active_bucket = self.resource_registry.get_active_s3_bucket()
             if not active_bucket:
                 active_bucket = f"default-bucket-for-{index_name}"
+                # Create the default bucket if needed
+                if not self._create_real_s3_bucket(active_bucket, enable_versioning=True):
+                    return False
 
-            # Simulate S3Vector index creation
+            # Create real S3Vector index
+            success, index_arn = self._create_real_s3vector_index(active_bucket, index_name, vector_dimension)
+            if not success:
+                return False
+
+            # Log S3Vector index creation
             self.resource_registry.log_index_created(
                 bucket_name=active_bucket,
                 index_name=index_name,
@@ -563,16 +748,20 @@ class WorkflowResourceManager:
             return False
     
     def _create_opensearch_collection(self, collection_name: str, collection_type: str) -> bool:
-        """Create an OpenSearch collection."""
+        """Create an OpenSearch collection using real AWS API."""
         try:
             session_id = st.session_state.workflow_state['session_id']
-            collection_arn = f"arn:aws:aoss:us-east-1:123456789012:collection/{collection_name}"
             
-            # Simulate OpenSearch collection creation
+            # Create real OpenSearch collection
+            success, collection_arn = self._create_real_opensearch_collection(collection_name, collection_type)
+            if not success:
+                return False
+            
+            # Log OpenSearch collection creation
             self.resource_registry.log_opensearch_collection_created(
                 collection_name=collection_name,
                 collection_arn=collection_arn,
-                region="us-east-1",
+                region=self.region,
                 source=session_id
             )
             

@@ -359,7 +359,7 @@ class ResultsComponents:
                 with col1:
                     st.write(f"**Similarity Score:** {result['similarity']:.3f}")
                     st.write(f"**Vector Type:** {result['vector_type']}")
-                    st.write(f"**Video:** {result.get('video_s3_uri', 'demo-video.mp4')}")
+                    st.write(f"**Video:** {result.get('video_s3_uri', 'sample-video.mp4')}")
 
                 with col2:
                     st.write(f"**Time Range:** {result['start_time']:.1f}s - {result['end_time']:.1f}s")
@@ -440,7 +440,7 @@ class ResultsComponents:
                 segments.append(segment)
 
             # Get video URI (use first result's video)
-            video_s3_uri = results[0].get('video_s3_uri', 's3://demo-bucket/sample-video.mp4')
+            video_s3_uri = results[0].get('video_s3_uri', 's3://production-bucket/sample-video.mp4')
 
             # Get selected segment ID from session state
             selected_segment_id = None

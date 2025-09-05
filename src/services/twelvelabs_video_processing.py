@@ -18,7 +18,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
-from src.config import config_manager
+from src.config.unified_config_manager import get_unified_config_manager
 from src.utils.aws_clients import aws_client_factory
 from src.exceptions import ModelAccessError, ValidationError, VectorEmbeddingError
 from src.utils.logging_config import get_logger
@@ -82,7 +82,10 @@ class TwelveLabsVideoProcessingService:
         Args:
             region: AWS region (defaults to config_manager region, must be supported by TwelveLabs)
         """
-        self.region = region or config_manager.aws_config.region
+        # Initialize unified configuration manager first
+        config_manager = get_unified_config_manager()
+        
+        self.region = region or config_manager.config.aws.region
 
         # Validate region support
         if self.region not in VideoProcessingConfig.SUPPORTED_REGIONS:
@@ -96,7 +99,7 @@ class TwelveLabsVideoProcessingService:
 
         # Initialize AWS clients - create clients directly for specific region
         # if different from default config region
-        if self.region != config_manager.aws_config.region:
+        if self.region != config_manager.config.aws.region:
             # Create clients for specific region
             import boto3
             from botocore.config import Config
@@ -141,7 +144,8 @@ class TwelveLabsVideoProcessingService:
         model_id = model_id or self.config.model_id
         
         try:
-            if self.region != config_manager.aws_config.region:
+            config_manager = get_unified_config_manager()
+            if self.region != config_manager.config.aws.region:
                 # Create bedrock client for specific region
                 import boto3
                 from botocore.config import Config
@@ -162,7 +166,7 @@ class TwelveLabsVideoProcessingService:
                     retries={'max_attempts': 3, 'mode': 'adaptive'},
                     read_timeout=60,
                     connect_timeout=10,
-                    region_name=config_manager.aws_config.region
+                    region_name=config_manager.config.aws.region
                 )
                 bedrock_client = boto3.client('bedrock', config=client_config)
             response = bedrock_client.list_foundation_models()
@@ -220,7 +224,8 @@ class TwelveLabsVideoProcessingService:
         if not output_s3_uri:
             # Generate default output location using regular S3 bucket (not S3 Vector bucket)
             # TwelveLabs output must go to a regular S3 bucket, not S3 Vector bucket
-            vector_bucket_name = config_manager.aws_config.s3_vectors_bucket
+            config_manager = get_unified_config_manager()
+            vector_bucket_name = config_manager.config.aws.s3_vectors_bucket
             regular_bucket_name = f"{vector_bucket_name}-videos"  # Use the same regular bucket as input
             timestamp = datetime.utcnow().strftime('%Y%m%dT%H%M%S')
             output_s3_uri = f"s3://{regular_bucket_name}/video-processing-results/{timestamp}/"
@@ -644,7 +649,8 @@ class TwelveLabsVideoProcessingService:
             # We need to temporarily modify the start_video_processing call for text embeddings
             
             # Generate default output location
-            vector_bucket_name = config_manager.aws_config.s3_vectors_bucket
+            config_manager = get_unified_config_manager()
+            vector_bucket_name = config_manager.config.aws.s3_vectors_bucket
             regular_bucket_name = f"{vector_bucket_name}-videos"
             timestamp = datetime.utcnow().strftime('%Y%m%dT%H%M%S')
             output_s3_uri = f"s3://{regular_bucket_name}/text-embedding-results/{timestamp}/"
