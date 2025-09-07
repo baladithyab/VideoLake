@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "updated_at": "2025-09-07T01:01:21.211584+00:00",
+  "active": {
+    "index_arn": null,
+    "vector_bucket": "s3v-1757205899-vector-bucket",
+    "s3_bucket": "s3v-1757205899-data-bucket",
+    "opensearch_collection": null,
+    "opensearch_domain": "s3v-1757205899-domain"
+  },
+  "vector_buckets": [
+    {
+      "name": "s3v-1757205899-vector-bucket",
+      "region": "us-east-1",
+      "encryption": "SSE-S3",
+      "kms_key_arn": null,
+      "source": "session_1757205882",
+      "status": "created",
+      "created_at": "2025-09-07T00:44:59.987461+00:00"
+    }
+  ],
+  "s3_buckets": [
+    {
+      "name": "s3v-1757205899-data-bucket",
+      "region": "us-east-1",
+      "source": "session_1757205882",
+      "status": "created",
+      "created_at": "2025-09-07T00:44:59.717275+00:00"
+    }
+  ],
+  "indexes": [],
+  "opensearch_collections": [],
+  "opensearch_domains": [
+    {
+      "name": "s3v-1757205899-domain",
+      "arn": "arn:aws:es:us-east-1:386931836011:domain/s3v-1757205899-domain",
+      "region": "us-east-1",
+      "engine_version": "OpenSearch_2.19",
+      "s3_vectors_enabled": false,
+      "source": "session_1757205882",
+      "status": "created",
+      "created_at": "2025-09-07T01:01:21.209628+00:00"
+    }
+  ],
+  "opensearch_pipelines": [],
+  "opensearch_indexes": [],
+  "iam_roles": []
+}

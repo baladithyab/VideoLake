@@ -329,6 +329,14 @@ def example_with_boundary():
         raise RuntimeError("Example boundary error")
 
 
+def _is_rerun_exception(exception: Exception) -> bool:
+    """Check if an exception is a Streamlit rerun exception."""
+    return (
+        hasattr(exception, '__class__') and
+        exception.__class__.__name__ == 'RerunException'
+    )
+
+
 # Export the global error handler for use in other components
 def get_error_handler() -> ErrorHandler:
     """Get the global error handler instance."""

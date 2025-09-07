@@ -515,9 +515,17 @@ class UnifiedS3VectorDemo:
 
     def render_resource_management_section(self):
         """Render the resource management section."""
-        with ErrorBoundary("Resource Management"):
-            # Use workflow resource manager component
+        # Use workflow resource manager component directly
+        # Note: Removed ErrorBoundary to allow RerunException to bubble up naturally
+        try:
             render_workflow_resource_manager()
+        except Exception as e:
+            # Only catch actual errors, not RerunException
+            from frontend.components.error_handling import _is_rerun_exception
+            if _is_rerun_exception(e):
+                raise  # Let RerunException bubble up
+            st.error(f"⚠️ Issue in Resource Management: {e}")
+            st.info("🔄 Please refresh the page if the issue persists.")
 
     def render_section_navigation(self, current_section: str):
         """Render navigation controls for workflow sections."""
