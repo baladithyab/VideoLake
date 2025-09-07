@@ -87,6 +87,24 @@ class SearchQuery:
     include_explanations: bool = False
     deduplicate_results: bool = True
     cross_index_fusion: bool = True
+    
+    def get_input_type(self) -> QueryInputType:
+        """Determine the input type based on provided query parameters."""
+        if self.query_text:
+            return QueryInputType.TEXT
+        elif self.query_video_key:
+            return QueryInputType.VIDEO_KEY
+        elif self.query_video_s3_uri:
+            return QueryInputType.VIDEO_FILE
+        elif self.query_audio_s3_uri:
+            return QueryInputType.AUDIO_FILE
+        elif self.query_image_s3_uri:
+            return QueryInputType.IMAGE_FILE
+        elif self.query_embedding:
+            return QueryInputType.EMBEDDING
+        else:
+            from src.exceptions import ValidationError
+            raise ValidationError("No query input provided")
 
 
 class ISearchService(ABC):

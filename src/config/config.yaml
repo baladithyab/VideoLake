@@ -13,6 +13,7 @@ port: 8501
 aws:
   region: us-east-1
   s3_bucket: s3vector-production-bucket
+  s3_vectors_bucket: s3vector-production-bucket
   s3_prefix: vectors/
   bedrock_model_id: amazon.titan-embed-text-v1
   bedrock_max_tokens: 8192

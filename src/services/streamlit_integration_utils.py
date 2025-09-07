@@ -59,7 +59,12 @@ class StreamlitServiceManager:
         
         # Setup multi-vector coordinator
         if self.config.enable_multi_vector:
-            self._initialize_multi_vector_coordinator()
+            try:
+                self._initialize_multi_vector_coordinator()
+            except Exception as e:
+                logger.error(f"Multi-vector coordinator initialization failed: {e}")
+                # Don't fail the entire service manager, but log the issue
+                self.multi_vector_coordinator = None
         
         logger.info("StreamlitServiceManager initialized successfully")
 
@@ -89,6 +94,16 @@ class StreamlitServiceManager:
                 fusion_method="weighted_average"
             )
             
+            # Validate that required services are available
+            if not self.twelvelabs_service:
+                raise RuntimeError("TwelveLabs service not initialized")
+            if not self.search_engine:
+                raise RuntimeError("Search engine not initialized")
+            if not self.storage_manager:
+                raise RuntimeError("Storage manager not initialized")
+            if not self.bedrock_service:
+                raise RuntimeError("Bedrock service not initialized")
+            
             self.multi_vector_coordinator = MultiVectorCoordinator(
                 config=multi_vector_config,
                 twelvelabs_service=self.twelvelabs_service,
@@ -97,11 +112,17 @@ class StreamlitServiceManager:
                 bedrock_service=self.bedrock_service
             )
             
+            # Validate coordinator was created successfully
+            if self.multi_vector_coordinator is None:
+                raise RuntimeError("MultiVectorCoordinator creation returned None")
+            
             logger.info("Multi-vector coordinator initialized successfully")
             
         except Exception as e:
             logger.error(f"Failed to initialize multi-vector coordinator: {e}")
             self.multi_vector_coordinator = None
+            # Re-raise the exception so calling code knows initialization failed
+            raise RuntimeError(f"MultiVectorCoordinator initialization failed: {e}")
 
     def create_multi_index_architecture(self,
                                       bucket_name: str,

@@ -2,10 +2,7 @@
 """
 Media Processing Page - Streamlit Multi-page App
 
-This page handles all media processing functionality by leveraging existing components:
-- Uses ProcessingComponents for video input and processing
-- Uses sample_video_manager for multiselect interface
-- Maintains all existing functionality while providing clean page separation
+Clean, organized interface for video processing with minimal redundancy.
 """
 
 import streamlit as st
@@ -20,6 +17,7 @@ if str(project_root) not in sys.path:
 
 from frontend.components.processing_components import ProcessingComponents
 from frontend.components.error_handling import ErrorBoundary
+from frontend.components.sample_video_data import sample_video_manager
 from src.config.app_config import get_config
 
 # Page configuration
@@ -32,163 +30,204 @@ st.set_page_config(
 
 def main():
     """Main function for the media processing page."""
-    # Get service manager and coordinator from session state if available
+    # Get service manager and coordinator from session state
     service_manager = st.session_state.get('service_manager')
     coordinator = st.session_state.get('coordinator')
     
+    # Minimal service status in sidebar
+    with st.sidebar:
+        st.subheader("🔧 Service Status")
+        if service_manager and coordinator:
+            st.success("✅ Services Connected")
+        else:
+            st.error("❌ Services Unavailable")
+            if st.button("🔄 Retry Initialization"):
+                initialize_services()
+    
     render_media_processing_page(service_manager, coordinator)
 
+def initialize_services():
+    """Initialize services if not available."""
+    try:
+        from src.services import get_service_manager, StreamlitIntegrationConfig
+        
+        integration_config = StreamlitIntegrationConfig(
+            enable_multi_vector=True,
+            enable_concurrent_processing=True,
+            default_vector_types=["visual-text", "visual-image", "audio"],
+            max_concurrent_jobs=8,
+            enable_performance_monitoring=True
+        )
+        
+        service_manager = get_service_manager(integration_config)
+        if service_manager:
+            st.session_state.service_manager = service_manager
+            coordinator = getattr(service_manager, 'multi_vector_coordinator', None)
+            if coordinator:
+                st.session_state.coordinator = coordinator
+                st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"Initialization failed: {str(e)}")
 
 def render_media_processing_page(service_manager=None, coordinator=None):
-    """Render the media processing page using existing components."""
+    """Render the clean, organized media processing page."""
     st.title("🎬 Media Processing")
-    st.markdown("**Select videos, configure processing, and manage ingestion settings**")
     
-    # Initialize processing components (reuse existing work)
+    # Single service status indicator
+    if not service_manager or not coordinator:
+        st.warning("⚠️ **Limited Mode**: Configuration available, processing disabled")
+    
+    # Initialize processing components
     processing_components = ProcessingComponents(service_manager, coordinator)
     config = get_config()
     
-    # Page description
-    st.info("""
-    **Media Processing Features:**
-    - 📹 Sample video selection with clean multiselect interface
-    - 📤 File upload with drag-and-drop support
-    - 🔗 S3 URI input for existing videos
-    - 🧠 Multi-vector configuration (Marengo 2.7)
-    - 🏗️ Storage pattern selection
-    - ⚙️ Processing duration and quality settings
-    """)
-    
-    # Storage pattern selection (moved from upload section)
-    render_storage_pattern_selection()
-    
-    # Vector configuration (moved from upload section)
-    render_vector_configuration(config)
-    
-    # Use existing video input section from ProcessingComponents
-    st.subheader("📹 Video Input & Selection")
-    with ErrorBoundary("Video Input & Processing"):
-        if processing_components:
-            # This uses all the existing work in ProcessingComponents
-            processing_components.render_video_input_section()
-        else:
-            st.info("📹 **Video Input** - Available when backend services are connected")
-    
-    # Cost estimation and processing controls
-    render_processing_controls(processing_components)
+    # Main workflow sections
+    render_configuration_section(config)
+    render_video_selection_section(processing_components)
+    render_processing_section(processing_components)
 
-
-def render_storage_pattern_selection():
-    """Render storage pattern selection interface (extracted from existing code)."""
-    st.subheader("🏗️ Storage Pattern Selection")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.info("**Pattern 1: Direct S3Vector**")
-        st.write("• Query S3Vector indexes directly")
-        st.write("• Native S3Vector performance")
-        st.write("• Cost-effective vector storage")
-    
-    with col2:
-        st.info("**Pattern 2: OpenSearch + S3Vector Hybrid**")
-        st.write("• OpenSearch with S3Vector backend")
-        st.write("• Hybrid search capabilities")
-        st.write("• Text + vector search fusion")
-    
-    # Storage pattern selection with dropdown - FIXED: Added unique key
-    storage_pattern_options = {
-        "Direct S3Vector Only": ["direct_s3vector"],
-        "OpenSearch Hybrid Only": ["opensearch_s3vector_hybrid"],
-        "Both Patterns (Recommended)": ["direct_s3vector", "opensearch_s3vector_hybrid"]
-    }
-    
-    selected_pattern_key = st.selectbox(
-        "Choose Storage Pattern Configuration:",
-        options=list(storage_pattern_options.keys()),
-        index=2,  # Default to "Both Patterns"
-        help="Select which storage patterns to use for processing and comparison",
-        key="media_processing_storage_pattern_selectbox"  # UNIQUE KEY ADDED
-    )
-    
-    st.session_state.selected_storage_patterns = storage_pattern_options[selected_pattern_key]
-    
-    # Show selected patterns
-    st.success(f"**Selected Patterns:** {', '.join(st.session_state.selected_storage_patterns)}")
-
-
-def render_vector_configuration(config):
-    """Render vector type and processing configuration (extracted from existing code)."""
-    st.subheader("🧠 Multi-Vector Configuration")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Vector type selection
-        selected_types = st.multiselect(
-            "Select Vector Types:",
-            options=config.ui.default_vector_types,
-            default=st.session_state.get('selected_vector_types', config.ui.default_vector_types),
-            help="Choose which Marengo 2.7 vector types to generate",
-            key="media_processing_vector_types_multiselect"  # UNIQUE KEY ADDED
-        )
-        st.session_state.selected_vector_types = selected_types
+def render_configuration_section(config):
+    """Render consolidated configuration section."""
+    with st.expander("⚙️ Processing Configuration", expanded=True):
+        col1, col2 = st.columns(2)
         
-        # Segment duration
-        segment_duration = st.slider(
-            "Segment Duration (seconds):",
-            min_value=2.0,
-            max_value=10.0,
-            value=st.session_state.get('segment_duration', config.ui.default_segment_duration),
-            step=0.5,
-            help="Duration of each video segment for processing",
-            key="media_processing_segment_duration_slider"  # UNIQUE KEY ADDED
-        )
-        st.session_state.segment_duration = segment_duration
-    
-    with col2:
-        # Processing mode - FIXED: Added unique key
-        processing_mode = st.selectbox(
-            "Processing Strategy:",
-            options=["parallel", "sequential", "adaptive"],
-            index=["parallel", "sequential", "adaptive"].index(
-                st.session_state.get('processing_mode', config.ui.default_processing_mode)
-            ),
-            help="How to process multiple videos",
-            key="media_processing_strategy_selectbox"  # UNIQUE KEY ADDED
-        )
-        st.session_state.processing_mode = processing_mode
+        with col1:
+            st.subheader("🏗️ Storage Pattern")
+            storage_pattern_options = {
+                "Direct S3Vector": ["direct_s3vector"],
+                "OpenSearch Hybrid": ["opensearch_s3vector_hybrid"],
+                "Both (Recommended)": ["direct_s3vector", "opensearch_s3vector_hybrid"]
+            }
+            
+            selected_pattern_key = st.selectbox(
+                "Storage Configuration:",
+                options=list(storage_pattern_options.keys()),
+                index=2,
+                key="storage_pattern_select"
+            )
+            st.session_state.selected_storage_patterns = storage_pattern_options[selected_pattern_key]
+            
+            # Vector types
+            selected_types = st.multiselect(
+                "Vector Types:",
+                options=config.ui.default_vector_types,
+                default=st.session_state.get('selected_vector_types', config.ui.default_vector_types),
+                key="vector_types_select"
+            )
+            st.session_state.selected_vector_types = selected_types
         
-        # Quality preset - FIXED: Added unique key
-        quality_preset = st.selectbox(
-            "Quality Preset:",
-            options=["standard", "high", "maximum"],
-            index=0,
-            help="Processing quality vs speed tradeoff",
-            key="media_processing_quality_preset_selectbox"  # UNIQUE KEY ADDED
-        )
-        st.session_state.quality_preset = quality_preset
+        with col2:
+            st.subheader("🎯 Processing Settings")
+            
+            # Segment duration
+            segment_duration = st.slider(
+                "Segment Duration (seconds):",
+                min_value=2.0,
+                max_value=10.0,
+                value=st.session_state.get('segment_duration', config.ui.default_segment_duration),
+                step=0.5,
+                key="segment_duration_slider"
+            )
+            st.session_state.segment_duration = segment_duration
+            
+            # Processing mode
+            processing_mode = st.selectbox(
+                "Processing Strategy:",
+                options=["parallel", "sequential", "adaptive"],
+                index=0,
+                key="processing_mode_select"
+            )
+            st.session_state.processing_mode = processing_mode
+            
+            # Quality preset
+            quality_preset = st.selectbox(
+                "Quality Preset:",
+                options=["standard", "high", "maximum"],
+                index=0,
+                key="quality_preset_select"
+            )
+            st.session_state.quality_preset = quality_preset
 
-
-def render_processing_controls(processing_components):
-    """Render processing controls using existing components."""
-    st.subheader("⚙️ Processing Controls")
+def render_video_selection_section(processing_components):
+    """Render streamlined video selection section."""
+    st.subheader("📹 Video Selection")
     
-    # Processing controls - always use real AWS resources
+    # Simplified tabs
+    tab1, tab2 = st.tabs(["🎬 Sample Videos", "📤 Upload & S3"])
+    
+    with tab1:
+        render_sample_video_selection(processing_components)
+    
+    with tab2:
+        render_upload_and_s3_section(processing_components)
+
+def render_sample_video_selection(processing_components):
+    """Render clean sample video selection."""
+    selected_videos = sample_video_manager.render_multi_select_interface()
+    
+    if selected_videos:
+        # Single consolidated summary
+        selection_info = sample_video_manager.get_selected_videos_info(selected_videos)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Videos", selection_info["total_videos"])
+        with col2:
+            st.metric("Est. Duration", f"{selection_info['estimated_duration_minutes']} min")
+        with col3:
+            st.metric("Creators", len(selection_info["creators"]))
+        
+        # Single process button
+        if st.button("🚀 Process Selected Videos", type="primary", use_container_width=True):
+            processing_components.process_sample_videos(selected_videos)
+
+def render_upload_and_s3_section(processing_components):
+    """Render simplified upload and S3 input."""
     col1, col2 = st.columns(2)
     
     with col1:
-        st.info("🔧 **Real AWS Processing**: All operations use live AWS resources")
-        # Remove fake AWS toggle - always use real AWS
-        st.session_state.use_real_aws = True
+        st.write("**📤 File Upload**")
+        uploaded_files = st.file_uploader(
+            "Choose video files:",
+            type=['mp4', 'avi', 'mov', 'mkv', 'webm'],
+            accept_multiple_files=True
+        )
+        
+        if uploaded_files:
+            st.success(f"✅ {len(uploaded_files)} file(s) uploaded")
+            if st.button("🚀 Process Files", type="primary", use_container_width=True):
+                processing_components.start_file_upload_processing(uploaded_files)
     
     with col2:
-        if st.button("📊 Show Progress", use_container_width=True, key="media_processing_show_progress"):
-            # Use existing progress display from ProcessingComponents
+        st.write("**🔗 S3 URI Input**")
+        s3_uri = st.text_input(
+            "S3 URI:",
+            placeholder="s3://bucket/video.mp4"
+        )
+        
+        if s3_uri and s3_uri.startswith('s3://'):
+            if st.button("🚀 Process S3 Video", type="primary", use_container_width=True):
+                processing_components.start_dual_pattern_processing(s3_uri)
+
+def render_processing_section(processing_components):
+    """Render clean processing controls and status."""
+    st.subheader("⚙️ Processing & Results")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📊 Show Progress", use_container_width=True):
             if processing_components:
                 processing_components.show_processing_progress()
             else:
-                st.info("📊 **Processing Progress** - Available when backend services are connected")
+                st.info("Processing progress available when services are connected")
+    
+    with col2:
+        if st.button("💰 Cost Estimation", use_container_width=True):
+            if processing_components:
+                processing_components.show_cost_estimation()
+            else:
+                st.info("Cost estimation available when services are connected")
 
 
 if __name__ == "__main__":

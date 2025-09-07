@@ -16,13 +16,20 @@ import time
 import asyncio
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
-from typing import Dict, Any, Optional, List, Set, Union, Tuple
+from typing import Dict, Any, Optional, List, Set, Union, Tuple, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 import logging
 
 from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService, VideoEmbeddingResult
+from src.services.comprehensive_video_processing_service import (
+    ComprehensiveVideoProcessingService,
+    ProcessingMode as CompProcessingMode,
+    VectorType as CompVectorType,
+    ProcessingConfig as CompProcessingConfig
+)
 from src.services.similarity_search_engine import SimilaritySearchEngine, SimilarityQuery, IndexType
+from src.services.interfaces.search_service_interface import SearchQuery
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.exceptions import ValidationError, VectorEmbeddingError, VectorStorageError
@@ -117,7 +124,8 @@ class MultiVectorCoordinator:
                  twelvelabs_service: Optional[TwelveLabsVideoProcessingService] = None,
                  search_engine: Optional[SimilaritySearchEngine] = None,
                  storage_manager: Optional[S3VectorStorageManager] = None,
-                 bedrock_service: Optional[BedrockEmbeddingService] = None):
+                 bedrock_service: Optional[BedrockEmbeddingService] = None,
+                 comprehensive_service: Optional[ComprehensiveVideoProcessingService] = None):
         """
         Initialize the Multi-Vector Coordinator.
         
@@ -127,6 +135,7 @@ class MultiVectorCoordinator:
             search_engine: Enhanced similarity search engine
             storage_manager: S3 vector storage manager
             bedrock_service: Bedrock embedding service
+            comprehensive_service: Comprehensive video processing service
         """
         self.config = config or MultiVectorConfig()
         
@@ -135,6 +144,15 @@ class MultiVectorCoordinator:
         self.search_engine = search_engine or SimilaritySearchEngine()
         self.storage = storage_manager or S3VectorStorageManager()
         self.bedrock = bedrock_service or BedrockEmbeddingService()
+        
+        # Initialize comprehensive video processing service (primary for video URLs)
+        self.comprehensive_service = comprehensive_service or ComprehensiveVideoProcessingService(
+            CompProcessingConfig(
+                processing_mode=CompProcessingMode.BEDROCK_PRIMARY,
+                vector_types=[CompVectorType.VISUAL_TEXT, CompVectorType.AUDIO],
+                enable_cost_tracking=True
+            )
+        )
         
         # Multi-vector coordination state
         self._coordination_lock = Lock()
@@ -164,6 +182,117 @@ class MultiVectorCoordinator:
         self._setup_index_coordination()
         
         logger.info(f"MultiVectorCoordinator initialized with {len(self.config.vector_types)} vector types")
+
+    def process_video_urls(
+        self,
+        video_urls: List[str],
+        target_indexes: Optional[Dict[str, str]] = None,
+        progress_callback: Optional[Callable[[int, int, Dict[str, Any]], None]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Process videos from URLs using the comprehensive video processing service.
+        
+        This method provides the missing functionality for real AWS operations:
+        1. Downloads videos from URLs to S3
+        2. Processes with Bedrock Marengo 2.7 (primary) or TwelveLabs API (secondary)
+        3. Stores embeddings in S3Vector indexes
+        
+        Args:
+            video_urls: List of HTTP/HTTPS video URLs to process
+            target_indexes: Mapping of vector types to S3Vector index ARNs
+            progress_callback: Optional progress callback (current, total, result)
+            
+        Returns:
+            List of processing results
+        """
+        logger.info(f"Processing {len(video_urls)} video URLs with comprehensive service")
+        
+        # Convert target_indexes to CompVectorType mapping if provided
+        comp_target_indexes = None
+        if target_indexes:
+            comp_target_indexes = {}
+            for vector_type_str, index_arn in target_indexes.items():
+                try:
+                    comp_vector_type = CompVectorType(vector_type_str)
+                    comp_target_indexes[comp_vector_type] = index_arn
+                except ValueError:
+                    logger.warning(f"Unknown vector type: {vector_type_str}")
+        
+        # Create wrapper callback to match expected signature
+        def wrapper_callback(current: int, total: int, result) -> None:
+            if progress_callback:
+                # Convert VideoProcessingResult to dict for callback
+                result_dict = {
+                    'job_id': result.job_id,
+                    'status': result.status,
+                    'source_url': result.source_url,
+                    's3_uri': result.s3_uri,
+                    'is_successful': result.is_successful,
+                    'error_message': result.error_message
+                }
+                progress_callback(current, total, result_dict)
+        
+        # Process videos using comprehensive service
+        results = self.comprehensive_service.batch_process_videos(
+            video_urls=video_urls,
+            target_indexes=comp_target_indexes,
+            progress_callback=wrapper_callback if progress_callback else None
+        )
+        
+        # Convert results to MultiVectorCoordinator format
+        converted_results = []
+        for result in results:
+            converted_result = {
+                'job_id': result.job_id,
+                'status': result.status,
+                'source_url': result.source_url,
+                's3_uri': result.s3_uri,
+                'embeddings_by_type': result.embeddings_by_type,
+                'storage_results': result.storage_results,
+                'processing_time_ms': result.processing_time_ms,
+                'estimated_cost_usd': result.estimated_cost_usd,
+                'total_segments': result.total_segments,
+                'is_successful': result.is_successful,
+                'error_message': result.error_message
+            }
+            converted_results.append(converted_result)
+        
+        successful = len([r for r in converted_results if r['is_successful']])
+        logger.info(f"Video URL processing completed: {successful}/{len(video_urls)} successful")
+        
+        return converted_results
+
+    def process_sample_videos(
+        self,
+        sample_videos: List[Dict[str, Any]],
+        target_indexes: Optional[Dict[str, str]] = None,
+        progress_callback: Optional[Callable[[int, int, Dict[str, Any]], None]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Process sample videos from the sample video data.
+        
+        Args:
+            sample_videos: List of sample video dictionaries with 'sources' field
+            target_indexes: Mapping of vector types to S3Vector index ARNs
+            progress_callback: Optional progress callback
+            
+        Returns:
+            List of processing results
+        """
+        # Extract video URLs from sample video data
+        video_urls = []
+        for video in sample_videos:
+            sources = video.get('sources', [])
+            if sources:
+                video_urls.append(sources[0])  # Use first source URL
+        
+        logger.info(f"Processing {len(video_urls)} sample videos")
+        
+        return self.process_video_urls(
+            video_urls=video_urls,
+            target_indexes=target_indexes,
+            progress_callback=progress_callback
+        )
 
     def _setup_index_coordination(self) -> None:
         """Setup coordination patterns between different vector indexes."""
@@ -608,6 +737,10 @@ class MultiVectorCoordinator:
         """Search specific indexes directly."""
         logger.debug(f"Searching specific indexes: {search_request.target_indexes}")
         
+        # Validate target_indexes is not None
+        if not search_request.target_indexes:
+            raise ValidationError("No target indexes specified for search")
+        
         # Build index configurations
         index_configs = []
         for index_arn in search_request.target_indexes:
@@ -619,12 +752,12 @@ class MultiVectorCoordinator:
                 'weight': 1.0
             })
         
-        # Create similarity query
-        similarity_query = self._build_similarity_query(search_request)
+        # Create search query (using interface type)
+        search_query = self._build_similarity_query(search_request)
         
         # Execute multi-index search
         response = self.search_engine.search_multi_index(
-            similarity_query, index_configs, search_request.fusion_method
+            search_query, index_configs, search_request.fusion_method
         )
         
         return {
@@ -637,6 +770,10 @@ class MultiVectorCoordinator:
     def _search_by_vector_types(self, search_request: SearchRequest, search_id: str) -> Dict[str, Any]:
         """Search by vector types with auto-discovery of indexes."""
         logger.debug(f"Searching by vector types: {search_request.vector_types}")
+        
+        # Validate vector_types is not None
+        if not search_request.vector_types:
+            raise ValidationError("No vector types specified for search")
         
         # Find compatible indexes for each vector type
         index_configs = []
@@ -655,12 +792,12 @@ class MultiVectorCoordinator:
         if not index_configs:
             raise ValidationError(f"No compatible indexes found for vector types: {search_request.vector_types}")
         
-        # Create similarity query
-        similarity_query = self._build_similarity_query(search_request)
+        # Create search query (using interface type)
+        search_query = self._build_similarity_query(search_request)
         
         # Execute multi-index search
         response = self.search_engine.search_multi_index(
-            similarity_query, index_configs, search_request.fusion_method
+            search_query, index_configs, search_request.fusion_method
         )
         
         return {
@@ -675,11 +812,11 @@ class MultiVectorCoordinator:
         """Auto-discover compatible indexes and search all."""
         logger.debug("Auto-discovering compatible indexes")
         
-        # Create similarity query to determine compatibility
-        similarity_query = self._build_similarity_query(search_request)
+        # Create search query to determine compatibility
+        search_query = self._build_similarity_query(search_request)
         
         # Get compatible indexes from search engine
-        compatible_indexes = self.search_engine.get_compatible_indexes(similarity_query)
+        compatible_indexes = self.search_engine.get_compatible_indexes(search_query)
         
         if not compatible_indexes:
             raise ValidationError("No compatible indexes found for search query")
@@ -696,7 +833,7 @@ class MultiVectorCoordinator:
         
         # Execute multi-index search
         response = self.search_engine.search_multi_index(
-            similarity_query, index_configs, search_request.fusion_method
+            search_query, index_configs, search_request.fusion_method
         )
         
         return {
@@ -708,9 +845,9 @@ class MultiVectorCoordinator:
             'fusion_method': search_request.fusion_method
         }
 
-    def _build_similarity_query(self, search_request: SearchRequest) -> SimilarityQuery:
-        """Build SimilarityQuery from SearchRequest."""
-        return SimilarityQuery(
+    def _build_similarity_query(self, search_request: SearchRequest) -> SearchQuery:
+        """Build SearchQuery from SearchRequest for compatibility with SimilaritySearchEngine."""
+        return SearchQuery(
             query_text=search_request.query_text,
             query_video_s3_uri=search_request.query_media_uri if search_request.query_media_uri and search_request.query_media_uri.startswith('s3://') else None,
             query_embedding=search_request.query_embedding.get('default') if search_request.query_embedding else None,
@@ -726,14 +863,18 @@ class MultiVectorCoordinator:
 
     def _determine_index_type(self, index_arn: str) -> IndexType:
         """Determine the index type for an index ARN."""
-        # Check storage registry
-        with self.storage._registry_lock:
-            if index_arn in self.storage.index_registry:
-                vector_type = self.storage.index_registry[index_arn].get('vector_type')
-                if vector_type in ['visual-text', 'visual-image', 'audio']:
-                    return IndexType.MARENGO_MULTIMODAL
-                elif vector_type == 'text-titan':
-                    return IndexType.TITAN_TEXT
+        # Check storage registry if available
+        try:
+            if hasattr(self.storage, '_registry_lock') and hasattr(self.storage, 'index_registry'):
+                with self.storage._registry_lock:
+                    if index_arn in self.storage.index_registry:
+                        vector_type = self.storage.index_registry[index_arn].get('vector_type')
+                        if vector_type in ['visual-text', 'visual-image', 'audio']:
+                            return IndexType.MARENGO_MULTIMODAL
+                        elif vector_type == 'text-titan':
+                            return IndexType.TITAN_TEXT
+        except Exception as e:
+            logger.warning(f"Could not access storage registry: {e}")
         
         # Default based on index name patterns
         if 'titan' in index_arn.lower() or 'text' in index_arn.lower():
@@ -745,10 +886,15 @@ class MultiVectorCoordinator:
         """Find indexes compatible with a specific vector type."""
         compatible_indexes = []
         
-        with self.storage._registry_lock:
-            for index_arn, config in self.storage.index_registry.items():
-                if config.get('vector_type') == vector_type:
-                    compatible_indexes.append(index_arn)
+        try:
+            if hasattr(self.storage, '_registry_lock') and hasattr(self.storage, 'index_registry'):
+                with self.storage._registry_lock:
+                    for index_arn, config in self.storage.index_registry.items():
+                        if config.get('vector_type') == vector_type:
+                            compatible_indexes.append(index_arn)
+        except Exception as e:
+            logger.warning(f"Could not access storage registry for vector type {vector_type}: {e}")
+            # Return empty list if registry access fails
         
         return compatible_indexes
 

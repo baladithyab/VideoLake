@@ -29,7 +29,7 @@ class TaskStatus(Enum):
 class EmbeddingOption(Enum):
     """Embedding option enumeration."""
     VISUAL_TEXT = "visual-text"
-    VISUAL_IMAGE = "visual-image"  # Note: docs show visual-text and audio, but visual-image is common
+    VISUAL_IMAGE = "visual-image"  # Supported by Bedrock Marengo 2.7, check TwelveLabs API docs for direct API usage
     AUDIO = "audio"
 
 

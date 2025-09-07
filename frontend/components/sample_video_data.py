@@ -237,90 +237,62 @@ class SampleVideoData:
             st.write(description)
     
     def render_multi_select_interface(self) -> List[Dict[str, Any]]:
-        """Render clean multiselect interface for sample videos."""
-        st.subheader("📹 Select Sample Videos")
-        st.write("Choose one or more videos from the Google sample collection to process:")
-        
+        """Render streamlined multiselect interface for sample videos."""
         all_videos = self.get_all_videos()
         video_titles = [video["title"] for video in all_videos]
         
-        # Create a clean multiselect dropdown
+        # Clean multiselect dropdown
         selected_titles = st.multiselect(
             "Select videos to process:",
             options=video_titles,
             default=st.session_state.get('selected_sample_video_titles', []),
-            help="Use the dropdown to select multiple videos for processing",
             key="sample_video_multiselect"
         )
         
         # Update session state
         st.session_state.selected_sample_video_titles = selected_titles
         
-        # Quick selection buttons
-        if len(video_titles) > 0:
-            st.write("**Quick Selection Options:**")
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                if st.button("🎯 Select All", use_container_width=True):
-                    st.session_state.selected_sample_video_titles = video_titles
-                    st.rerun()
-            
-            with col2:
-                blender_titles = [v["title"] for v in all_videos if "Blender" in v["subtitle"]]
-                if st.button("🎬 Blender Films", use_container_width=True):
-                    st.session_state.selected_sample_video_titles = blender_titles
-                    st.rerun()
-            
-            with col3:
-                chromecast_titles = [v["title"] for v in all_videos if "Chromecast" in v["description"]]
-                if st.button("📺 Chromecast Ads", use_container_width=True):
-                    st.session_state.selected_sample_video_titles = chromecast_titles
-                    st.rerun()
-            
-            with col4:
-                car_titles = [v["title"] for v in all_videos if "Garage419" in v["subtitle"]]
-                if st.button("🚗 Car Reviews", use_container_width=True):
-                    st.session_state.selected_sample_video_titles = car_titles
-                    st.rerun()
-            
-            # Clear selection button
-            if st.button("🗑️ Clear Selection"):
+        # Simplified quick selection buttons
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            if st.button("🎯 All", use_container_width=True):
+                st.session_state.selected_sample_video_titles = video_titles
+                st.rerun()
+        
+        with col2:
+            blender_titles = [v["title"] for v in all_videos if "Blender" in v["subtitle"]]
+            if st.button("🎬 Blender", use_container_width=True):
+                st.session_state.selected_sample_video_titles = blender_titles
+                st.rerun()
+        
+        with col3:
+            chromecast_titles = [v["title"] for v in all_videos if "Chromecast" in v["description"]]
+            if st.button("📺 Ads", use_container_width=True):
+                st.session_state.selected_sample_video_titles = chromecast_titles
+                st.rerun()
+        
+        with col4:
+            if st.button("🗑️ Clear", use_container_width=True):
                 st.session_state.selected_sample_video_titles = []
                 st.rerun()
         
-        # Show selected videos with preview cards
+        # Return selected video objects without redundant preview
         if selected_titles:
-            st.markdown("---")
-            st.subheader("📋 Selected Videos Preview")
-            
             selected_video_objects = []
             for title in selected_titles:
                 video = self.get_video_by_title(title)
                 if video:
                     selected_video_objects.append(video)
-                    
-                    # Show compact video card
-                    with st.expander(f"📹 {video['title']}", expanded=False):
-                        self.render_compact_video_card(video)
             
-            # Selection summary
+            # Single line summary instead of detailed metrics
             if selected_video_objects:
                 selection_info = self.get_selected_videos_info(selected_video_objects)
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Videos Selected", selection_info["total_videos"])
-                with col2:
-                    st.metric("Est. Duration", f"{selection_info['estimated_duration_minutes']} min")
-                with col3:
-                    creators_text = ", ".join([f"{k} ({v})" for k, v in selection_info["creators"].items()])
-                    st.write("**Creators:**")
-                    st.write(creators_text)
+                st.success(f"✅ {selection_info['total_videos']} videos selected (~{selection_info['estimated_duration_minutes']} min)")
             
             return selected_video_objects
         else:
-            st.info("ℹ️ No videos selected. Use the dropdown above to choose videos for processing.")
+            st.info("👆 Select videos above to process")
             return []
     
     def get_selected_videos_info(self, selected_videos: List[Dict[str, Any]]) -> Dict[str, Any]:

@@ -118,19 +118,32 @@ class ResourceRegistry:
         kms_key_arn: Optional[str] = None,
         source: str = "ui"
     ) -> None:
-        rec = {
-            "name": bucket_name,
-            "region": region,
-            "encryption": encryption,
-            "kms_key_arn": kms_key_arn,
-            "source": source,
-            "status": "created",
-            "created_at": _utc_now_iso(),
-        }
+        """
+        Log vector bucket creation with deduplication.
+        Only adds a new record if the bucket isn't already registered.
+        """
         with self._lock:
             data = self._read()
-            data.setdefault("vector_buckets", [])
-            data["vector_buckets"].append(rec)
+            vector_buckets = data.setdefault("vector_buckets", [])
+            
+            # Check if bucket is already registered
+            for existing_bucket in vector_buckets:
+                if (existing_bucket.get("name") == bucket_name and
+                    existing_bucket.get("status") == "created"):
+                    # Bucket already registered, don't add duplicate
+                    return
+            
+            # Add new record only if not already present
+            rec = {
+                "name": bucket_name,
+                "region": region,
+                "encryption": encryption,
+                "kms_key_arn": kms_key_arn,
+                "source": source,
+                "status": "created",
+                "created_at": _utc_now_iso(),
+            }
+            vector_buckets.append(rec)
             self._write(data)
 
     def log_s3_bucket_created(
@@ -139,17 +152,30 @@ class ResourceRegistry:
         region: str,
         source: str = "ui"
     ) -> None:
-        rec = {
-            "name": bucket_name,
-            "region": region,
-            "source": source,
-            "status": "created",
-            "created_at": _utc_now_iso(),
-        }
+        """
+        Log S3 bucket creation with deduplication.
+        Only adds a new record if the bucket isn't already registered.
+        """
         with self._lock:
             data = self._read()
-            data.setdefault("s3_buckets", [])
-            data["s3_buckets"].append(rec)
+            s3_buckets = data.setdefault("s3_buckets", [])
+            
+            # Check if bucket is already registered
+            for existing_bucket in s3_buckets:
+                if (existing_bucket.get("name") == bucket_name and
+                    existing_bucket.get("status") == "created"):
+                    # Bucket already registered, don't add duplicate
+                    return
+            
+            # Add new record only if not already present
+            rec = {
+                "name": bucket_name,
+                "region": region,
+                "source": source,
+                "status": "created",
+                "created_at": _utc_now_iso(),
+            }
+            s3_buckets.append(rec)
             self._write(data)
 
     def log_vector_bucket_deleted(
@@ -596,6 +622,157 @@ class ResourceRegistry:
                 "last_updated": data.get("updated_at"),
                 "active_resources": data.get("active", {})
             }
+
+    def deduplicate_resources(self) -> Dict[str, int]:
+        """
+        Remove duplicate resource entries, keeping the earliest created entry for each resource.
+        
+        Returns:
+            Dictionary with counts of duplicates removed for each resource type
+        """
+        with self._lock:
+            data = self._read()
+            removed_counts = {
+                "s3_buckets": 0,
+                "vector_buckets": 0,
+                "indexes": 0,
+                "opensearch_collections": 0,
+                "opensearch_domains": 0,
+                "opensearch_pipelines": 0,
+                "opensearch_indexes": 0,
+                "iam_roles": 0
+            }
+            
+            # Deduplicate S3 buckets
+            s3_buckets = data.get("s3_buckets", [])
+            if s3_buckets:
+                seen_buckets = {}
+                deduplicated_s3 = []
+                
+                for bucket in s3_buckets:
+                    bucket_name = bucket.get("name")
+                    bucket_status = bucket.get("status", "created")
+                    
+                    if bucket_name and bucket_status == "created":
+                        if bucket_name not in seen_buckets:
+                            seen_buckets[bucket_name] = bucket
+                            deduplicated_s3.append(bucket)
+                        else:
+                            # Keep the earliest created entry
+                            existing_created_at = seen_buckets[bucket_name].get("created_at", "")
+                            current_created_at = bucket.get("created_at", "")
+                            
+                            if current_created_at < existing_created_at:
+                                # Replace with earlier entry
+                                deduplicated_s3 = [b for b in deduplicated_s3 if b != seen_buckets[bucket_name]]
+                                deduplicated_s3.append(bucket)
+                                seen_buckets[bucket_name] = bucket
+                            
+                            removed_counts["s3_buckets"] += 1
+                    else:
+                        # Keep non-created status entries (deleted, etc.)
+                        deduplicated_s3.append(bucket)
+                
+                data["s3_buckets"] = deduplicated_s3
+            
+            # Deduplicate vector buckets
+            vector_buckets = data.get("vector_buckets", [])
+            if vector_buckets:
+                seen_vector_buckets = {}
+                deduplicated_vector = []
+                
+                for bucket in vector_buckets:
+                    bucket_name = bucket.get("name")
+                    bucket_status = bucket.get("status", "created")
+                    
+                    if bucket_name and bucket_status == "created":
+                        if bucket_name not in seen_vector_buckets:
+                            seen_vector_buckets[bucket_name] = bucket
+                            deduplicated_vector.append(bucket)
+                        else:
+                            # Keep the earliest created entry
+                            existing_created_at = seen_vector_buckets[bucket_name].get("created_at", "")
+                            current_created_at = bucket.get("created_at", "")
+                            
+                            if current_created_at < existing_created_at:
+                                # Replace with earlier entry
+                                deduplicated_vector = [b for b in deduplicated_vector if b != seen_vector_buckets[bucket_name]]
+                                deduplicated_vector.append(bucket)
+                                seen_vector_buckets[bucket_name] = bucket
+                            
+                            removed_counts["vector_buckets"] += 1
+                    else:
+                        # Keep non-created status entries (deleted, etc.)
+                        deduplicated_vector.append(bucket)
+                
+                data["vector_buckets"] = deduplicated_vector
+            
+            # Deduplicate indexes by ARN
+            indexes = data.get("indexes", [])
+            if indexes:
+                seen_indexes = {}
+                deduplicated_indexes = []
+                
+                for index in indexes:
+                    index_arn = index.get("arn")
+                    index_status = index.get("status", "created")
+                    
+                    if index_arn and index_status == "created":
+                        if index_arn not in seen_indexes:
+                            seen_indexes[index_arn] = index
+                            deduplicated_indexes.append(index)
+                        else:
+                            removed_counts["indexes"] += 1
+                    else:
+                        # Keep non-created status entries
+                        deduplicated_indexes.append(index)
+                
+                data["indexes"] = deduplicated_indexes
+            
+            # Deduplicate OpenSearch collections
+            collections = data.get("opensearch_collections", [])
+            if collections:
+                seen_collections = {}
+                deduplicated_collections = []
+                
+                for collection in collections:
+                    collection_name = collection.get("name")
+                    collection_status = collection.get("status", "created")
+                    
+                    if collection_name and collection_status == "created":
+                        if collection_name not in seen_collections:
+                            seen_collections[collection_name] = collection
+                            deduplicated_collections.append(collection)
+                        else:
+                            removed_counts["opensearch_collections"] += 1
+                    else:
+                        deduplicated_collections.append(collection)
+                
+                data["opensearch_collections"] = deduplicated_collections
+            
+            # Deduplicate OpenSearch domains
+            domains = data.get("opensearch_domains", [])
+            if domains:
+                seen_domains = {}
+                deduplicated_domains = []
+                
+                for domain in domains:
+                    domain_name = domain.get("name")
+                    domain_status = domain.get("status", "created")
+                    
+                    if domain_name and domain_status == "created":
+                        if domain_name not in seen_domains:
+                            seen_domains[domain_name] = domain
+                            deduplicated_domains.append(domain)
+                        else:
+                            removed_counts["opensearch_domains"] += 1
+                    else:
+                        deduplicated_domains.append(domain)
+                
+                data["opensearch_domains"] = deduplicated_domains
+            
+            self._write(data)
+            return removed_counts
 
 
 # Global singleton for easy import

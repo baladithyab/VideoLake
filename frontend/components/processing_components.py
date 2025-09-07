@@ -14,6 +14,16 @@ import random
 from typing import Dict, Any, List, Optional
 import streamlit as st
 from .sample_video_data import sample_video_manager
+from src.services.comprehensive_video_processing_service import (
+    ComprehensiveVideoProcessingService,
+    ProcessingConfig,
+    ProcessingMode,
+    VectorType,
+    StoragePattern
+)
+from src.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class ProcessingComponents:
@@ -22,131 +32,278 @@ class ProcessingComponents:
     def __init__(self, service_manager=None, coordinator=None):
         self.service_manager = service_manager
         self.coordinator = coordinator
+        
+        # Initialize comprehensive video processing service
+        self.comprehensive_service = None
+        self._last_vector_types = None  # Track last used vector types for reinit detection
+        self._initialize_comprehensive_service()
+    
+    def _initialize_comprehensive_service(self):
+        """Initialize the comprehensive video processing service."""
+        try:
+            # Get vector types from session state or use defaults
+            import streamlit as st
+            from src.config.app_config import get_config
+            
+            app_config = get_config()
+            selected_vector_types = st.session_state.get('selected_vector_types', app_config.ui.default_vector_types)
+            
+            # Convert string vector types to VectorType enums
+            vector_type_mapping = {
+                "visual-text": VectorType.VISUAL_TEXT,
+                "visual-image": VectorType.VISUAL_IMAGE,
+                "audio": VectorType.AUDIO
+            }
+            
+            vector_types = []
+            for vector_type_str in selected_vector_types:
+                if vector_type_str in vector_type_mapping:
+                    vector_types.append(vector_type_mapping[vector_type_str])
+                else:
+                    logger.warning(f"Unknown vector type: {vector_type_str}")
+            
+            # Ensure we have at least one vector type
+            if not vector_types:
+                vector_types = [VectorType.VISUAL_TEXT, VectorType.VISUAL_IMAGE, VectorType.AUDIO]
+                logger.info("No valid vector types found, using all defaults")
+            
+            logger.info(f"Initializing ComprehensiveVideoProcessingService with vector types: {[vt.value for vt in vector_types]}")
+            
+            # Create processing configuration for Bedrock primary mode
+            config = ProcessingConfig(
+                processing_mode=ProcessingMode.BEDROCK_PRIMARY,
+                vector_types=vector_types,
+                storage_patterns=[StoragePattern.DIRECT_S3VECTOR],
+                segment_duration_sec=st.session_state.get('segment_duration', 5.0),
+                enable_cost_tracking=True
+            )
+            
+            self.comprehensive_service = ComprehensiveVideoProcessingService(config)
+            self._last_vector_types = selected_vector_types.copy()  # Track current vector types
+            logger.info(f"ComprehensiveVideoProcessingService initialized successfully with {len(vector_types)} vector types")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize ComprehensiveVideoProcessingService: {e}")
+            self.comprehensive_service = None
+    
+    def _ensure_service_updated(self):
+        """Ensure the comprehensive service is updated with current session state configuration."""
+        try:
+            import streamlit as st
+            from src.config.app_config import get_config
+            
+            app_config = get_config()
+            current_vector_types = st.session_state.get('selected_vector_types', app_config.ui.default_vector_types)
+            
+            # Check if vector types have changed
+            if (self._last_vector_types != current_vector_types or
+                self.comprehensive_service is None):
+                
+                logger.info(f"Vector types changed from {self._last_vector_types} to {current_vector_types}, reinitializing service")
+                self._initialize_comprehensive_service()
+                
+        except Exception as e:
+            logger.error(f"Failed to update comprehensive service: {e}")
+    
+    def process_sample_videos(self, selected_videos: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Process sample videos using the ComprehensiveVideoProcessingService.
+        
+        This method performs real AWS operations:
+        1. Downloads videos from URLs to S3
+        2. Processes with Bedrock Marengo 2.7
+        3. Stores embeddings in S3Vector indexes
+        
+        Args:
+            selected_videos: List of video dictionaries from sample_video_manager
+            
+        Returns:
+            Dictionary with processing results and job information
+        """
+        # Ensure service is updated with current configuration
+        self._ensure_service_updated()
+        
+        if not self.comprehensive_service:
+            st.error("❌ ComprehensiveVideoProcessingService not available")
+            return {"status": "error", "message": "Service not initialized"}
+        
+        if not selected_videos:
+            st.error("❌ No videos selected for processing")
+            return {"status": "error", "message": "No videos selected"}
+        
+        # Extract video URLs from selected videos
+        video_urls = []
+        for video in selected_videos:
+            if video.get("sources") and len(video["sources"]) > 0:
+                video_urls.append(video["sources"][0])
+            else:
+                logger.warning(f"No source URL found for video: {video.get('title', 'Unknown')}")
+        
+        if not video_urls:
+            st.error("❌ No valid video URLs found in selected videos")
+            return {"status": "error", "message": "No valid video URLs"}
+        
+        st.info(f"🚀 Starting real AWS processing for {len(video_urls)} videos...")
+        
+        # Create processing job tracking
+        job_id = f"sample_videos_job_{int(time.time())}"
+        
+        # Initialize processing jobs if not exists
+        if 'processing_jobs' not in st.session_state:
+            st.session_state.processing_jobs = {}
+        
+        # Create job info
+        job_info = {
+            "job_id": job_id,
+            "type": "sample_videos_real_aws",
+            "video_count": len(video_urls),
+            "video_urls": video_urls,
+            "video_titles": [v.get("title", "Unknown") for v in selected_videos],
+            "status": "processing",
+            "started_at": time.time(),
+            "processing_method": "comprehensive_video_service"
+        }
+        
+        st.session_state.processing_jobs[job_id] = job_info
+        st.success(f"✅ Started real AWS processing job: {job_id}")
+        
+        try:
+            # Process videos using ComprehensiveVideoProcessingService
+            st.info("🔄 Processing videos with ComprehensiveVideoProcessingService...")
+            
+            # Create progress callback
+            def progress_callback(current: int, total: int, result):
+                progress_pct = (current / total) * 100
+                st.progress(progress_pct / 100, text=f"Processing video {current}/{total}: {progress_pct:.1f}%")
+                
+                if result.is_successful:
+                    st.success(f"✅ Completed: {result.source_url}")
+                else:
+                    st.error(f"❌ Failed: {result.source_url} - {result.error_message}")
+            
+            # Process all videos in batch
+            results = self.comprehensive_service.batch_process_videos(
+                video_urls=video_urls,
+                progress_callback=progress_callback
+            )
+            
+            # Update job info with results
+            successful_results = [r for r in results if r.is_successful]
+            failed_results = [r for r in results if not r.is_successful]
+            
+            job_info.update({
+                "status": "completed",
+                "completed_at": time.time(),
+                "successful_count": len(successful_results),
+                "failed_count": len(failed_results),
+                "total_segments": sum(r.total_segments for r in successful_results),
+                "total_cost_usd": sum(r.estimated_cost_usd or 0 for r in results),
+                "processing_results": [
+                    {
+                        "job_id": r.job_id,
+                        "source_url": r.source_url,
+                        "s3_uri": r.s3_uri,
+                        "status": r.status,
+                        "total_segments": r.total_segments,
+                        "processing_time_ms": r.processing_time_ms,
+                        "estimated_cost_usd": r.estimated_cost_usd,
+                        "error_message": r.error_message
+                    }
+                    for r in results
+                ]
+            })
+            
+            st.session_state.processing_jobs[job_id] = job_info
+            
+            # Show results summary
+            if successful_results:
+                st.success(f"🎉 Successfully processed {len(successful_results)} videos!")
+                st.info(f"📊 Total segments generated: {sum(r.total_segments for r in successful_results)}")
+                
+                total_cost = sum(r.estimated_cost_usd or 0 for r in results)
+                if total_cost > 0:
+                    st.info(f"💰 Estimated cost: ${total_cost:.4f}")
+            
+            if failed_results:
+                st.warning(f"⚠️ {len(failed_results)} videos failed to process")
+                with st.expander("Show failed videos"):
+                    for result in failed_results:
+                        st.error(f"❌ {result.source_url}: {result.error_message}")
+            
+            return {
+                "status": "completed",
+                "job_id": job_id,
+                "successful_count": len(successful_results),
+                "failed_count": len(failed_results),
+                "results": results
+            }
+            
+        except Exception as e:
+            # Update job with error
+            job_info.update({
+                "status": "failed",
+                "completed_at": time.time(),
+                "error_message": str(e)
+            })
+            st.session_state.processing_jobs[job_id] = job_info
+            
+            st.error(f"❌ Processing failed: {e}")
+            logger.error(f"Sample videos processing failed: {e}")
+            
+            return {
+                "status": "error",
+                "job_id": job_id,
+                "message": str(e)
+            }
     
     def render_video_input_section(self):
-        """Render enhanced video input options with improved UX."""
-        st.subheader("📹 Video Input & Selection")
-        
-        # Create tabs for better organization
-        tab1, tab2, tab3, tab4 = st.tabs([
+        """Render streamlined video input options."""
+        # Simplified tabs - removed redundant batch processing tab
+        tab1, tab2 = st.tabs([
             "🎬 Sample Videos",
-            "📤 Upload Files",
-            "🔗 S3 URIs",
-            "📦 Batch Processing"
+            "📤 Upload & S3"
         ])
         
         with tab1:
             self._render_enhanced_sample_videos()
         
         with tab2:
-            self._render_enhanced_file_upload()
-        
-        with tab3:
-            self._render_enhanced_s3_uri_input()
-        
-        with tab4:
-            self._render_batch_processing_options()
+            col1, col2 = st.columns(2)
+            with col1:
+                self._render_enhanced_file_upload()
+            with col2:
+                self._render_enhanced_s3_uri_input()
     
     def _render_enhanced_sample_videos(self):
-        """Render enhanced sample video selection with multi-select functionality."""
-        st.write("**Google Sample Video Collection**")
-        st.write("Select one or more videos from the curated collection for processing:")
-        
+        """Render streamlined sample video selection."""
         # Use the sample video manager for multi-select interface
         selected_videos = sample_video_manager.render_multi_select_interface()
         
         if selected_videos:
-            # Show selection summary
-            selection_info = sample_video_manager.get_selected_videos_info(selected_videos)
-            
-            with st.expander("📊 Selection Summary", expanded=True):
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric("Videos Selected", selection_info["total_videos"])
-                
-                with col2:
-                    st.metric("Est. Duration", f"{selection_info['estimated_duration_minutes']} min")
-                
-                with col3:
-                    creators_text = ", ".join([f"{k} ({v})" for k, v in selection_info["creators"].items()])
-                    st.write("**Creators:**")
-                    st.write(creators_text)
-            
-            # Processing options
-            st.subheader("🚀 Processing Options")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("🎬 Process Selected Videos", type="primary", use_container_width=True):
-                    self.start_multi_video_processing(selected_videos)
-            
-            with col2:
-                if st.button("🔄 Process with Custom Settings", type="secondary", use_container_width=True):
-                    st.session_state.show_custom_processing = True
-            
-            # Custom processing settings
-            if st.session_state.get('show_custom_processing', False):
-                with st.expander("⚙️ Custom Processing Settings", expanded=True):
-                    self._render_custom_processing_settings(selected_videos)
-        else:
-            st.info("👆 Select videos above to see processing options")
+            # Single process button - removed redundant options
+            if st.button("🚀 Process Selected Videos", type="primary", use_container_width=True):
+                self.process_sample_videos(selected_videos)
     
-    def _render_sample_collection(self):
-        """Render sample collection processing interface."""
-        st.info("📦 **Sample Collection Processing**")
-        st.write("Process multiple videos simultaneously to demonstrate batch capabilities")
-        
-        collection_size = st.selectbox(
-            "Collection Size:",
-            options=[3, 5, 10],
-            index=0,
-            help="Number of videos to process in batch"
-        )
-        
-        if st.button("🚀 Process Sample Collection", type="primary"):
-            self.start_collection_processing(collection_size)
-    
-    def _render_file_upload(self):
-        """Render file upload interface."""
-        st.info("📤 **File Upload**")
-        uploaded_file = st.file_uploader(
-            "Upload Video File:",
-            type=['mp4', 'avi', 'mov', 'mkv'],
-            help="Upload a video file for processing"
-        )
-        
-        if uploaded_file:
-            st.success(f"Uploaded: {uploaded_file.name}")
-            if st.button("🚀 Process Uploaded Video", type="primary"):
-                self.start_upload_processing(uploaded_file)
-    
-    def _render_s3_uri_input(self):
-        """Render S3 URI input interface."""
-        st.info("🔗 **S3 URI Input**")
-        s3_uri = st.text_input(
-            "Enter S3 URI:",
-            placeholder="s3://your-bucket/path/to/video.mp4",
-            help="Provide S3 URI of video to process"
-        )
-        
-        if s3_uri and st.button("🚀 Process S3 Video", type="primary"):
-            self.start_dual_pattern_processing(s3_uri)
     
     def start_dual_pattern_processing(self, video_uri: str):
         """Start processing video with dual storage patterns using real AWS resources."""
+        # Ensure service is updated with current configuration
+        self._ensure_service_updated()
+        
         # Always use real AWS processing - no simulation mode
         st.info("🔧 **Real AWS Processing** - Processing with live AWS resources")
         
         try:
             # Use the multi-vector coordinator for real processing
             processing_config = {
-                "vector_types": st.session_state.get('selected_vector_types', ['visual-text']),
+                "vector_types": st.session_state.get('selected_vector_types', ['visual-text', 'visual-image', 'audio']),
                 "storage_patterns": st.session_state.get('selected_storage_patterns', ['direct_s3vector']),
                 "segment_duration": st.session_state.get('segment_duration', 5.0),
                 "processing_mode": st.session_state.get('processing_mode', 'parallel')
             }
+            
+            # Log the vector types being processed for debugging
+            st.info(f"🔍 Processing with vector types: {processing_config['vector_types']}")
             
             # Create real processing job
             job_id = f"aws_job_{int(time.time())}"
@@ -170,16 +327,67 @@ class ProcessingComponents:
             
             # Integrate with actual MultiVectorCoordinator
             if self.coordinator:
-                st.info("🔄 Integrating with MultiVectorCoordinator for real processing...")
-                # Real processing would happen here
+                st.info("🔄 Processing with MultiVectorCoordinator...")
+                try:
+                    # Create content input for coordinator
+                    content_input = {
+                        'id': job_id,
+                        'video_s3_uri': video_uri,
+                        'processing_params': {
+                            'segment_duration_sec': processing_config["segment_duration"],
+                            'processing_mode': processing_config["processing_mode"]
+                        }
+                    }
+                    
+                    # Start real multi-vector processing
+                    result = self.coordinator.process_multi_vector_content(
+                        content_inputs=[content_input],
+                        vector_types=processing_config["vector_types"]
+                    )
+                    
+                    # Update job status with real results
+                    job_info.update({
+                        'status': 'completed',
+                        'result': result,
+                        'completed_at': time.time()
+                    })
+                    st.session_state.processing_jobs[job_id] = job_info
+                    st.success(f"✅ Processing completed successfully! Generated {len(result.successful_types)} vector types")
+                    
+                except Exception as e:
+                    # Update job with error
+                    job_info.update({
+                        'status': 'failed',
+                        'error': str(e),
+                        'completed_at': time.time()
+                    })
+                    st.session_state.processing_jobs[job_id] = job_info
+                    st.error(f"❌ Processing failed: {e}")
+                    logger.error(f"MultiVectorCoordinator processing failed: {e}")
             else:
                 st.warning("⚠️ MultiVectorCoordinator not available - check backend services")
+                # Show detailed service status for debugging
+                service_manager = st.session_state.get('service_manager')
+                if service_manager:
+                    st.info("🔍 Service manager available, checking coordinator initialization...")
+                    if hasattr(service_manager, 'multi_vector_coordinator'):
+                        if service_manager.multi_vector_coordinator is None:
+                            st.error("❌ MultiVectorCoordinator failed to initialize - check AWS credentials and configuration")
+                        else:
+                            st.info("✅ MultiVectorCoordinator exists but not passed to component")
+                    else:
+                        st.error("❌ Service manager missing multi_vector_coordinator attribute")
+                else:
+                    st.error("❌ Service manager not available in session state")
                 
         except Exception as e:
             st.error(f"Processing failed: {e}")
     
     def start_collection_processing(self, collection_size: int):
         """Start processing a collection of videos using real AWS resources."""
+        # Ensure service is updated with current configuration
+        self._ensure_service_updated()
+        
         st.info(f"🔄 Processing collection of {collection_size} videos with real AWS resources...")
         
         # Always use real AWS processing
@@ -194,10 +402,13 @@ class ProcessingComponents:
             "type": "collection",
             "collection_size": collection_size,
             "status": "processing",
-            "vector_types": st.session_state.get('selected_vector_types', ['visual-text']),
+            "vector_types": st.session_state.get('selected_vector_types', ['visual-text', 'visual-image', 'audio']),
             "storage_patterns": st.session_state.get('selected_storage_patterns', ['direct_s3vector']),
             "started_at": time.time()
         }
+        
+        # Log the vector types being processed for debugging
+        st.info(f"🔍 Collection processing with vector types: {job_info['vector_types']}")
         
         st.session_state.processing_jobs[job_id] = job_info
         st.success(f"✅ Started AWS collection processing: {job_id}")
@@ -276,326 +487,101 @@ class ProcessingComponents:
         }
     
     def show_processing_progress(self):
-        """Show processing progress for active jobs."""
+        """Show concise processing progress for active jobs."""
         if not hasattr(st.session_state, 'processing_jobs') or not st.session_state.processing_jobs:
             st.info("📋 No active processing jobs")
             return
 
-        st.subheader("🔄 Processing Progress")
+        st.subheader("🔄 Processing Status")
 
         for job_id, job_info in st.session_state.processing_jobs.items():
-            with st.expander(f"Job: {job_id}", expanded=True):
-                col1, col2, col3 = st.columns(3)
+            with st.expander(f"Job: {job_id[-8:]}", expanded=True):  # Show only last 8 chars of job ID
+                col1, col2 = st.columns(2)
 
                 with col1:
-                    st.metric("Status", job_info.get('status', 'unknown').title())
+                    status = job_info.get('status', 'unknown').title()
+                    if status == 'Processing':
+                        st.info(f"🔄 {status}")
+                    elif status == 'Completed':
+                        st.success(f"✅ {status}")
+                    elif status == 'Failed':
+                        st.error(f"❌ {status}")
+                    else:
+                        st.write(f"📋 {status}")
 
                 with col2:
-                    if job_info.get('type') == 'collection':
-                        st.metric("Collection Size", job_info.get('collection_size', 0))
-                    else:
-                        st.metric("Video", "Single Video")
+                    video_count = job_info.get('video_count', job_info.get('collection_size', 1))
+                    st.metric("Videos", video_count)
 
-                with col3:
-                    vector_types = len(job_info.get('vector_types', []))
-                    st.metric("Vector Types", vector_types)
-
-                # Progress simulation
-                elapsed = time.time() - job_info.get('started_at', time.time())
-                estimated_total = 300  # 5 minutes default
-                progress = min(elapsed / estimated_total, 1.0)
-
-                st.progress(progress, text=f"Progress: {progress*100:.1f}%")
-
-                # Job details
-                st.write("**Configuration:**")
-                st.write(f"• Vector Types: {', '.join(job_info.get('vector_types', []))}")
-                st.write(f"• Storage Patterns: {', '.join(job_info.get('storage_patterns', []))}")
-                st.write(f"• Segment Duration: {job_info.get('segment_duration', 5.0)}s")
-                st.write(f"• Processing Mode: {job_info.get('processing_mode', 'parallel')}")
+                # Simple progress bar for active jobs
+                if job_info.get('status') == 'processing':
+                    elapsed = time.time() - job_info.get('started_at', time.time())
+                    estimated_total = 300  # 5 minutes default
+                    progress = min(elapsed / estimated_total, 1.0)
+                    st.progress(progress, text=f"Progress: {progress*100:.1f}%")
 
     def show_cost_estimation(self):
-        """Show cost estimation for processing."""
+        """Show simplified cost estimation for processing."""
         st.subheader("💰 Cost Estimation")
 
         # Get processing parameters
         vector_types = st.session_state.get('selected_vector_types', ['visual-text'])
         storage_patterns = st.session_state.get('selected_storage_patterns', ['direct_s3vector'])
 
-        # Estimate video duration (placeholder)
+        # Estimate costs
         estimated_duration_minutes = 10.0  # Default estimate
-
-        # TwelveLabs Marengo pricing: $0.05 per minute
-        marengo_cost_per_minute = 0.05
-        marengo_cost = estimated_duration_minutes * marengo_cost_per_minute * len(vector_types)
-
-        # Storage costs (estimated)
-        s3vector_storage_cost = 0.02 * len(vector_types)  # Per index
+        marengo_cost = estimated_duration_minutes * 0.05 * len(vector_types)
+        storage_cost = 0.02 * len(vector_types)
         opensearch_cost = 0.05 if 'opensearch_s3vector_hybrid' in storage_patterns else 0
+        total_cost = marengo_cost + storage_cost + opensearch_cost
 
-        total_cost = marengo_cost + s3vector_storage_cost + opensearch_cost
-
-        col1, col2, col3, col4 = st.columns(4)
-
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Marengo Processing", f"${marengo_cost:.3f}")
-
+            st.metric("Processing", f"${marengo_cost:.3f}")
         with col2:
-            st.metric("S3Vector Storage", f"${s3vector_storage_cost:.3f}")
-
+            st.metric("Storage", f"${storage_cost + opensearch_cost:.3f}")
         with col3:
-            st.metric("OpenSearch (if used)", f"${opensearch_cost:.3f}")
+            st.metric("Total", f"${total_cost:.3f}")
 
-        with col4:
-            st.metric("Total Estimated", f"${total_cost:.3f}")
-
-        # Cost breakdown
-        with st.expander("📊 Cost Breakdown"):
-            st.write("**Processing Costs:**")
-            st.write(f"• Video Duration: {estimated_duration_minutes:.1f} minutes")
-            st.write(f"• Vector Types: {len(vector_types)} types")
-            st.write(f"• Marengo Rate: ${marengo_cost_per_minute:.3f} per minute per type")
-            st.write(f"• Total Processing: ${marengo_cost:.3f}")
-            st.write("")
-
-            st.write("**Storage Costs:**")
-            st.write(f"• S3Vector Indexes: {len(vector_types)} indexes")
-            st.write(f"• Storage Rate: $0.02 per index per processing session")
-            st.write(f"• OpenSearch: {'Enabled' if opensearch_cost > 0 else 'Disabled'}")
-            st.write(f"• Total Storage: ${s3vector_storage_cost + opensearch_cost:.3f}")
-
-        # Always use real AWS - show cost warning
-        st.warning("⚠️ **Real AWS Processing**: These costs will be charged to your AWS account")
+        st.info(f"💡 Estimate for {estimated_duration_minutes:.0f} min video, {len(vector_types)} vector types")
+        st.warning("⚠️ **Real AWS costs will apply**")
     
     def _render_enhanced_file_upload(self):
-        """Render enhanced file upload interface with drag-and-drop and multiple files."""
-        st.write("**Upload Video Files**")
-        st.write("Upload one or more video files for processing:")
+        """Render simplified file upload interface."""
+        st.write("**📤 Upload Files**")
         
-        # Multiple file upload
         uploaded_files = st.file_uploader(
             "Choose video files:",
             type=['mp4', 'avi', 'mov', 'mkv', 'webm'],
-            accept_multiple_files=True,
-            help="Upload multiple video files for batch processing"
+            accept_multiple_files=True
         )
         
         if uploaded_files:
-            st.success(f"✅ Uploaded {len(uploaded_files)} file(s)")
-            
-            # Show file details
-            with st.expander("📁 File Details", expanded=True):
-                total_size = 0
-                for file in uploaded_files:
-                    file_size_mb = len(file.getvalue()) / (1024 * 1024)
-                    total_size += file_size_mb
-                    st.write(f"• **{file.name}** - {file_size_mb:.1f} MB")
-                
-                st.write(f"**Total Size:** {total_size:.1f} MB")
-            
-            # Processing options
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("🚀 Process All Files", type="primary", use_container_width=True):
-                    self.start_file_upload_processing(uploaded_files)
-            
-            with col2:
-                if st.button("⚙️ Custom Processing", type="secondary", use_container_width=True):
-                    st.session_state.show_upload_custom_settings = True
-            
-            if st.session_state.get('show_upload_custom_settings', False):
-                with st.expander("⚙️ Upload Processing Settings", expanded=True):
-                    self._render_upload_processing_settings(uploaded_files)
+            st.success(f"✅ {len(uploaded_files)} file(s) ready")
+            if st.button("🚀 Process Files", type="primary", use_container_width=True):
+                self.start_file_upload_processing(uploaded_files)
     
     def _render_enhanced_s3_uri_input(self):
-        """Render enhanced S3 URI input with validation and batch support."""
-        st.write("**S3 URI Input**")
-        st.write("Provide S3 URIs of videos to process:")
+        """Render simplified S3 URI input."""
+        st.write("**🔗 S3 URI Input**")
         
-        # Single URI input
-        st.subheader("Single Video")
         s3_uri = st.text_input(
             "S3 URI:",
-            placeholder="s3://your-bucket/path/to/video.mp4",
-            help="Enter the S3 URI of a video file"
+            placeholder="s3://bucket/video.mp4"
         )
         
-        if s3_uri:
-            # Validate URI format
-            if s3_uri.startswith('s3://') and s3_uri.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')):
-                st.success("✅ Valid S3 URI format")
-                if st.button("🚀 Process S3 Video", type="primary"):
-                    self.start_dual_pattern_processing(s3_uri)
-            else:
-                st.error("❌ Invalid S3 URI format. Must start with 's3://' and end with a video extension.")
-        
-        st.markdown("---")
-        
-        # Batch URI input
-        st.subheader("Batch Processing")
-        batch_uris = st.text_area(
-            "Multiple S3 URIs (one per line):",
-            placeholder="s3://bucket/video1.mp4\ns3://bucket/video2.mp4\ns3://bucket/video3.mp4",
-            help="Enter multiple S3 URIs, one per line"
-        )
-        
-        if batch_uris:
-            uris = [uri.strip() for uri in batch_uris.split('\n') if uri.strip()]
-            valid_uris = []
-            invalid_uris = []
-            
-            for uri in uris:
-                if uri.startswith('s3://') and uri.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')):
-                    valid_uris.append(uri)
-                else:
-                    invalid_uris.append(uri)
-            
-            if valid_uris:
-                st.success(f"✅ {len(valid_uris)} valid URIs")
-                
-            if invalid_uris:
-                st.error(f"❌ {len(invalid_uris)} invalid URIs")
-                with st.expander("Show invalid URIs"):
-                    for uri in invalid_uris:
-                        st.write(f"• {uri}")
-            
-            if valid_uris and st.button("🚀 Process Batch S3 Videos", type="primary"):
-                self.start_batch_s3_processing(valid_uris)
+        if s3_uri and s3_uri.startswith('s3://'):
+            if st.button("🚀 Process S3 Video", type="primary", use_container_width=True):
+                self.start_dual_pattern_processing(s3_uri)
+        elif s3_uri:
+            st.error("❌ Invalid S3 URI format")
     
-    def _render_batch_processing_options(self):
-        """Render batch processing options and presets."""
-        st.write("**Batch Processing Presets**")
-        st.write("Quick options for processing multiple videos:")
-        
-        # Preset options
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("🎬 Content Type Presets")
-            
-            if st.button("🎭 Animation Collection", use_container_width=True):
-                # Select Blender animations
-                blender_videos = [v for v in sample_video_manager.get_all_videos()
-                                if "Blender" in v["subtitle"]]
-                self.start_multi_video_processing(blender_videos)
-            
-            if st.button("📺 Commercial Collection", use_container_width=True):
-                # Select Chromecast commercials
-                chromecast_videos = [v for v in sample_video_manager.get_all_videos()
-                                   if "Chromecast" in v["description"]]
-                self.start_multi_video_processing(chromecast_videos)
-            
-            if st.button("🚗 Automotive Collection", use_container_width=True):
-                # Select car review videos
-                car_videos = [v for v in sample_video_manager.get_all_videos()
-                            if "Garage419" in v["subtitle"]]
-                self.start_multi_video_processing(car_videos)
-        
-        with col2:
-            st.subheader("⚡ Processing Presets")
-            
-            if st.button("🚀 Quick Demo (3 videos)", use_container_width=True):
-                # Select first 3 videos for quick demo
-                quick_videos = sample_video_manager.get_all_videos()[:3]
-                self.start_multi_video_processing(quick_videos)
-            
-            if st.button("🎯 Comprehensive Demo (All)", use_container_width=True):
-                # Process all sample videos
-                all_videos = sample_video_manager.get_all_videos()
-                self.start_multi_video_processing(all_videos)
-            
-            if st.button("🧪 Test Processing (1 video)", use_container_width=True):
-                # Process just one video for testing
-                test_video = [sample_video_manager.get_all_videos()[0]]
-                self.start_multi_video_processing(test_video)
-    
-    def _render_custom_processing_settings(self, selected_videos: List[Dict[str, Any]]):
-        """Render custom processing settings for selected videos."""
-        st.write("**Custom Processing Configuration**")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Processing strategy
-            processing_strategy = st.selectbox(
-                "Processing Strategy:",
-                options=["parallel", "sequential", "adaptive"],
-                index=0,
-                help="How to process multiple videos"
-            )
-            
-            # Priority processing
-            priority_mode = st.checkbox(
-                "Priority Processing",
-                help="Process shorter videos first"
-            )
-        
-        with col2:
-            # Custom segment duration
-            custom_segment_duration = st.slider(
-                "Segment Duration (seconds):",
-                min_value=2.0,
-                max_value=15.0,
-                value=5.0,
-                step=0.5
-            )
-            
-            # Quality settings
-            quality_preset = st.selectbox(
-                "Quality Preset:",
-                options=["standard", "high", "maximum"],
-                index=0,
-                help="Processing quality vs speed tradeoff"
-            )
-        
-        # Advanced settings
-        with st.expander("🔧 Advanced Settings"):
-            enable_thumbnails = st.checkbox("Generate Thumbnails", value=True)
-            enable_metadata = st.checkbox("Extract Metadata", value=True)
-            enable_preview = st.checkbox("Generate Preview Clips", value=False)
-        
-        # Start custom processing
-        if st.button("🚀 Start Custom Processing", type="primary"):
-            custom_config = {
-                "processing_strategy": processing_strategy,
-                "priority_mode": priority_mode,
-                "segment_duration": custom_segment_duration,
-                "quality_preset": quality_preset,
-                "enable_thumbnails": enable_thumbnails,
-                "enable_metadata": enable_metadata,
-                "enable_preview": enable_preview
-            }
-            self.start_multi_video_processing(selected_videos, custom_config)
-    
-    def _render_upload_processing_settings(self, uploaded_files):
-        """Render processing settings for uploaded files."""
-        st.write("**Upload Processing Configuration**")
-        
-        # File processing order
-        processing_order = st.selectbox(
-            "Processing Order:",
-            options=["upload_order", "size_ascending", "size_descending", "name_alphabetical"],
-            index=0,
-            help="Order in which to process uploaded files"
-        )
-        
-        # S3 upload settings
-        s3_bucket = st.text_input(
-            "S3 Bucket (optional):",
-            placeholder="your-processing-bucket",
-            help="Bucket to upload files to before processing"
-        )
-        
-        if st.button("🚀 Start Upload Processing", type="primary"):
-            upload_config = {
-                "processing_order": processing_order,
-                "s3_bucket": s3_bucket
-            }
-            self.start_file_upload_processing(uploaded_files, upload_config)
     
     def start_multi_video_processing(self, selected_videos: List[Dict[str, Any]], custom_config: Optional[Dict[str, Any]] = None):
         """Start processing multiple videos with enhanced configuration."""
+        # Ensure service is updated with current configuration
+        self._ensure_service_updated()
+        
         if not selected_videos:
             st.error("No videos selected for processing")
             return
@@ -621,13 +607,16 @@ class ProcessingComponents:
             "video_count": len(selected_videos),
             "video_sources": video_sources,
             "status": "processing",
-            "vector_types": st.session_state.get('selected_vector_types', ['visual-text']),
+            "vector_types": st.session_state.get('selected_vector_types', ['visual-text', 'visual-image', 'audio']),
             "storage_patterns": st.session_state.get('selected_storage_patterns', ['direct_s3vector']),
             "segment_duration": custom_config.get("segment_duration", 5.0) if custom_config else st.session_state.get('segment_duration', 5.0),
             "processing_mode": custom_config.get("processing_strategy", "parallel") if custom_config else st.session_state.get('processing_mode', 'parallel'),
             "custom_config": custom_config,
             "started_at": time.time()
         }
+        
+        # Log the vector types being processed for debugging
+        st.info(f"🔍 Multi-video processing with vector types: {job_info['vector_types']}")
         
         # Initialize processing jobs if not exists
         if 'processing_jobs' not in st.session_state:

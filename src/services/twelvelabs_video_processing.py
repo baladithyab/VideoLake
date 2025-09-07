@@ -222,11 +222,31 @@ class TwelveLabsVideoProcessingService:
             raise ValidationError("Only one of video_s3_uri or video_base64 should be provided")
         
         if not output_s3_uri:
-            # Generate default output location using regular S3 bucket (not S3 Vector bucket)
-            # TwelveLabs output must go to a regular S3 bucket, not S3 Vector bucket
-            config_manager = get_unified_config_manager()
-            vector_bucket_name = config_manager.config.aws.s3_vectors_bucket
-            regular_bucket_name = f"{vector_bucket_name}-videos"  # Use the same regular bucket as input
+            # Generate default output location using the same S3 bucket as input
+            # This ensures consistent S3 credentials and avoids ValidationException
+            from src.utils.resource_registry import resource_registry
+            
+            # Priority 1: Use active S3 bucket from resource registry (same as input)
+            active_s3_bucket = resource_registry.get_active_resources().get('s3_bucket')
+            if active_s3_bucket:
+                regular_bucket_name = active_s3_bucket
+            else:
+                # Priority 2: Use any available S3 bucket from resource registry
+                s3_buckets = resource_registry.list_s3_buckets()
+                available_s3_buckets = [
+                    bucket for bucket in s3_buckets
+                    if bucket and bucket.get('status') == 'created' and bucket.get('name')
+                ]
+                
+                if available_s3_buckets:
+                    # Use the most recently created S3 bucket
+                    latest_s3_bucket = max(available_s3_buckets, key=lambda b: b.get('created_at', ''))
+                    regular_bucket_name = latest_s3_bucket['name']
+                else:
+                    # Priority 3: Configuration fallback
+                    config_manager = get_unified_config_manager()
+                    regular_bucket_name = config_manager.config.aws.s3_bucket or "s3vector-default"
+            
             timestamp = datetime.utcnow().strftime('%Y%m%dT%H%M%S')
             output_s3_uri = f"s3://{regular_bucket_name}/video-processing-results/{timestamp}/"
         
@@ -560,7 +580,8 @@ class TwelveLabsVideoProcessingService:
         start_sec: float = 0,
         length_sec: float = None,
         use_fixed_length_sec: float = None,
-        timeout_sec: int = None
+        timeout_sec: int = None,
+        **kwargs  # Accept additional parameters for compatibility
     ) -> VideoEmbeddingResult:
         """Process video synchronously with automatic polling.
         
@@ -593,6 +614,76 @@ class TwelveLabsVideoProcessingService:
         
         # Retrieve results
         return self.retrieve_results(completed_job.job_id)
+
+    def process_video_with_multiple_embeddings(
+        self,
+        video_s3_uri: str = None,
+        video_base64: str = None,
+        output_s3_uri: str = None,
+        embedding_options: List[str] = None,
+        start_sec: float = 0,
+        length_sec: float = None,
+        use_fixed_length_sec: float = None,
+        timeout_sec: int = None
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Process video with multiple embedding types in a single optimized job.
+        
+        This method leverages Bedrock Marengo 2.7's ability to generate multiple
+        embedding types (visual-text, visual-image, audio) in a single job,
+        significantly reducing processing time and cost.
+        
+        Args:
+            video_s3_uri: S3 URI of video file
+            video_base64: Base64 encoded video data
+            output_s3_uri: S3 URI for output results
+            embedding_options: Types of embeddings to generate (e.g., ["visual-text", "audio"])
+            start_sec: Start time in video (seconds)
+            length_sec: Length to process (seconds)
+            use_fixed_length_sec: Fixed segment duration
+            timeout_sec: Maximum wait time
+            
+        Returns:
+            Dictionary mapping embedding types to their respective embeddings
+            Format: {"visual-text": [...], "audio": [...]}
+        """
+        if not embedding_options:
+            embedding_options = ["visual-text", "audio"]  # Default to most common types
+        
+        logger.info(f"Processing video with multiple embeddings in single job: {embedding_options}")
+        
+        # Process video with all requested embedding types in one job
+        result = self.process_video_sync(
+            video_s3_uri=video_s3_uri,
+            video_base64=video_base64,
+            output_s3_uri=output_s3_uri,
+            embedding_options=embedding_options,
+            start_sec=start_sec,
+            length_sec=length_sec,
+            use_fixed_length_sec=use_fixed_length_sec,
+            timeout_sec=timeout_sec
+        )
+        
+        # Group embeddings by type
+        embeddings_by_type = {}
+        for embedding_option in embedding_options:
+            embeddings_by_type[embedding_option] = []
+        
+        # Process the embeddings and group by embeddingOption
+        for embedding in result.embeddings:
+            embedding_type = embedding.get('embeddingOption')
+            if embedding_type and embedding_type in embeddings_by_type:
+                embeddings_by_type[embedding_type].append(embedding)
+            elif not embedding_type:
+                # For embeddings without explicit type, distribute based on context
+                # This handles cases where the API doesn't return embeddingOption
+                if len(embedding_options) == 1:
+                    embeddings_by_type[embedding_options[0]].append(embedding)
+                else:
+                    # Default to first embedding type if no explicit type
+                    embeddings_by_type[embedding_options[0]].append(embedding)
+        
+        logger.info(f"Grouped embeddings by type: {[(k, len(v)) for k, v in embeddings_by_type.items()]}")
+        return embeddings_by_type
 
     def cleanup_job(self, job_id: str) -> None:
         """Remove job from active tracking.
@@ -648,10 +739,31 @@ class TwelveLabsVideoProcessingService:
             # Start async job with custom model input
             # We need to temporarily modify the start_video_processing call for text embeddings
             
-            # Generate default output location
-            config_manager = get_unified_config_manager()
-            vector_bucket_name = config_manager.config.aws.s3_vectors_bucket
-            regular_bucket_name = f"{vector_bucket_name}-videos"
+            # Generate default output location using the same S3 bucket as video processing
+            # This ensures consistent S3 credentials and avoids ValidationException
+            from src.utils.resource_registry import resource_registry
+            
+            # Priority 1: Use active S3 bucket from resource registry (same as input)
+            active_s3_bucket = resource_registry.get_active_resources().get('s3_bucket')
+            if active_s3_bucket:
+                regular_bucket_name = active_s3_bucket
+            else:
+                # Priority 2: Use any available S3 bucket from resource registry
+                s3_buckets = resource_registry.list_s3_buckets()
+                available_s3_buckets = [
+                    bucket for bucket in s3_buckets
+                    if bucket and bucket.get('status') == 'created' and bucket.get('name')
+                ]
+                
+                if available_s3_buckets:
+                    # Use the most recently created S3 bucket
+                    latest_s3_bucket = max(available_s3_buckets, key=lambda b: b.get('created_at', ''))
+                    regular_bucket_name = latest_s3_bucket['name']
+                else:
+                    # Priority 3: Configuration fallback
+                    config_manager = get_unified_config_manager()
+                    regular_bucket_name = config_manager.config.aws.s3_bucket or "s3vector-default"
+            
             timestamp = datetime.utcnow().strftime('%Y%m%dT%H%M%S')
             output_s3_uri = f"s3://{regular_bucket_name}/text-embedding-results/{timestamp}/"
             

@@ -66,9 +66,44 @@ def initialize_services():
                 # Store in session state for pages to access
                 st.session_state.service_manager = service_manager
                 st.session_state.coordinator = coordinator
-                st.session_state.services_initialized = True
                 
-                logger.info("Successfully initialized service manager and coordinator")
+                # Validate coordinator initialization
+                if coordinator is not None:
+                    st.session_state.services_initialized = True
+                    logger.info("Successfully initialized service manager and coordinator")
+                else:
+                    st.session_state.services_initialized = False
+                    logger.error("MultiVectorCoordinator initialization failed - coordinator is None")
+                    
+                    # Show detailed debugging information
+                    logger.error(f"Service manager type: {type(service_manager)}")
+                    logger.error(f"Service manager has multi_vector_coordinator attr: {hasattr(service_manager, 'multi_vector_coordinator')}")
+                    
+                    if hasattr(service_manager, 'multi_vector_coordinator'):
+                        logger.error(f"Coordinator value: {service_manager.multi_vector_coordinator}")
+                    
+                    # Check individual services
+                    logger.error(f"TwelveLabs service: {getattr(service_manager, 'twelvelabs_service', 'NOT_FOUND')}")
+                    logger.error(f"Search engine: {getattr(service_manager, 'search_engine', 'NOT_FOUND')}")
+                    logger.error(f"Storage manager: {getattr(service_manager, 'storage_manager', 'NOT_FOUND')}")
+                    logger.error(f"Bedrock service: {getattr(service_manager, 'bedrock_service', 'NOT_FOUND')}")
+                    
+                    # Try to get detailed error information
+                    try:
+                        # Force re-initialization of coordinator
+                        logger.info("Attempting coordinator re-initialization...")
+                        service_manager._initialize_multi_vector_coordinator()
+                        coordinator = service_manager.multi_vector_coordinator
+                        if coordinator is not None:
+                            st.session_state.coordinator = coordinator
+                            st.session_state.services_initialized = True
+                            logger.info("Successfully re-initialized coordinator")
+                        else:
+                            logger.error("Coordinator re-initialization also failed - still None")
+                    except Exception as coord_error:
+                        logger.error(f"Coordinator re-initialization error: {coord_error}")
+                        import traceback
+                        logger.error(f"Full traceback: {traceback.format_exc()}")
             else:
                 logger.warning("Service manager initialization returned None")
                 st.session_state.services_initialized = False
