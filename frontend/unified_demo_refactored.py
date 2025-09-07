@@ -50,6 +50,10 @@ from frontend.components.error_handling import (
     ErrorSeverity
 )
 
+# Import new page modules
+from frontend.pages.resource_management_page import render_resource_management_page
+from frontend.pages.media_processing_page import render_media_processing_page
+
 logger = get_logger(__name__)
 
 
@@ -61,23 +65,23 @@ class UnifiedS3VectorDemo:
         self.config_manager = get_config_manager()
         self.config = self.config_manager.config
         
-        # Define workflow sections and titles
-        self.workflow_sections = ["upload", "query", "results", "visualization", "analytics", "resources"]
+        # Define workflow sections and titles - reorganized with separate pages
+        self.workflow_sections = ["resources", "media_processing", "query", "results", "visualization", "analytics"]
         self.section_titles = {
-            "upload": "🎬 Upload & Processing",
+            "resources": "🔧 Resource Management",
+            "media_processing": "🎬 Media Processing",
             "query": "🔍 Query & Search",
             "results": "🎯 Results & Playback",
             "visualization": "📊 Embedding Visualization",
-            "analytics": "⚙️ Analytics & Management",
-            "resources": "🔧 Resource Management"
+            "analytics": "⚙️ Analytics & Management"
         }
         self.section_descriptions = {
-            "upload": "Select videos and configure multi-vector processing with Marengo 2.7",
+            "resources": "Manage AWS resources, resume work, create new resources, and cleanup",
+            "media_processing": "Select videos, configure processing, upload files, and manage ingestion settings",
             "query": "Intelligent semantic search with dual storage pattern comparison",
             "results": "Interactive video player with segment overlay and similarity scores",
             "visualization": "Explore embedding space with dimensionality reduction and query overlay",
-            "analytics": "Performance monitoring, cost tracking, and system management",
-            "resources": "Manage AWS resources, resume work, create new resources, and cleanup"
+            "analytics": "Performance monitoring, cost tracking, and system management"
         }
         
         # Initialize service manager and coordinator
@@ -136,21 +140,21 @@ class UnifiedS3VectorDemo:
     def check_prerequisites(self, section: str, session_state) -> dict:
         """Check prerequisites for a workflow section."""
         prerequisites = {
-            "upload": True,  # Always available
+            "resources": True,  # Always available
+            "media_processing": True,  # Always available
             "query": hasattr(session_state, 'processed_videos') and bool(session_state.processed_videos),
             "results": hasattr(session_state, 'search_results') and bool(session_state.search_results),
             "visualization": hasattr(session_state, 'search_results') and bool(session_state.search_results),
-            "analytics": hasattr(session_state, 'processing_jobs') and bool(session_state.processing_jobs),
-            "resources": True  # Always available
+            "analytics": hasattr(session_state, 'processing_jobs') and bool(session_state.processing_jobs)
         }
 
         return {
             "met": prerequisites.get(section, False),
             "required_sections": {
-                "query": ["upload"],
-                "results": ["upload", "query"],
-                "visualization": ["upload", "query"],
-                "analytics": ["upload"]
+                "query": ["media_processing"],
+                "results": ["media_processing", "query"],
+                "visualization": ["media_processing", "query"],
+                "analytics": ["media_processing"]
             }.get(section, [])
         }
     
@@ -185,7 +189,7 @@ class UnifiedS3VectorDemo:
         """Initialize Streamlit session state variables."""
         # Core workflow state
         if 'current_section' not in st.session_state:
-            st.session_state.current_section = 'upload'
+            st.session_state.current_section = 'resources'
         
         # Processing state
         if 'processing_jobs' not in st.session_state:
@@ -251,7 +255,8 @@ class UnifiedS3VectorDemo:
                 options=self.workflow_sections,
                 index=self.workflow_sections.index(st.session_state.current_section),
                 format_func=lambda x: self.section_titles.get(x, x) or x,
-                help="Navigate between workflow sections"
+                help="Navigate between workflow sections",
+                key="main_app_current_section_selectbox"  # UNIQUE KEY ADDED
             )
             
             st.session_state.current_section = current_section
@@ -306,9 +311,11 @@ class UnifiedS3VectorDemo:
         st.header(self.section_titles.get(current_section, current_section))
         st.markdown(self.section_descriptions.get(current_section, ""))
         
-        # Render section content
-        if current_section == "upload":
-            self.render_upload_processing_section()
+        # Render section content using new page structure
+        if current_section == "resources":
+            self.render_resource_management_section()
+        elif current_section == "media_processing":
+            self.render_media_processing_section()
         elif current_section == "query":
             self.render_query_search_section()
         elif current_section == "results":
@@ -317,122 +324,14 @@ class UnifiedS3VectorDemo:
             self.render_visualization_section()
         elif current_section == "analytics":
             self.render_analytics_section()
-        elif current_section == "resources":
-            self.render_resource_management_section()
 
         # Render section navigation
         self.render_section_navigation(current_section)
     
-    def render_upload_processing_section(self):
-        """Render the upload and processing section."""
-        with ErrorBoundary("Upload & Processing"):
-            # Quick resume option
-            st.subheader("🔄 Resume or Start Fresh")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                if st.button("🔄 Resume with Existing Resources", type="primary"):
-                    st.session_state.show_resume_dialog = True
-
-            with col2:
-                if st.button("🆕 Create New Resources"):
-                    st.session_state.show_creation_dialog = True
-
-            # Show dialogs if requested
-            if st.session_state.get('show_resume_dialog', False):
-                with st.expander("🔄 Resume with Existing Resources", expanded=True):
-                    from frontend.components.workflow_resource_manager import WorkflowResourceManager
-                    manager = WorkflowResourceManager()
-                    if manager.render_workflow_resume_section():
-                        st.session_state.show_resume_dialog = False
-                        st.rerun()
-
-            if st.session_state.get('show_creation_dialog', False):
-                with st.expander("🛠️ Create New Resources", expanded=True):
-                    from frontend.components.workflow_resource_manager import WorkflowResourceManager
-                    manager = WorkflowResourceManager()
-                    manager.render_resource_creation_wizard()
-                    if st.button("✅ Done Creating Resources"):
-                        st.session_state.show_creation_dialog = False
-                        st.rerun()
-
-            # Storage pattern selection
-            st.subheader("🏗️ Storage Pattern Selection")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.info("**Pattern 1: Direct S3Vector**")
-            st.write("• Query S3Vector indexes directly")
-            st.write("• Native S3Vector performance")
-            st.write("• Cost-effective vector storage")
-            
-            enable_direct = st.checkbox("Enable Direct S3Vector", value=True)
-        
-        with col2:
-            st.info("**Pattern 2: OpenSearch + S3Vector Hybrid**")
-            st.write("• OpenSearch with S3Vector backend")
-            st.write("• Hybrid search capabilities")
-            st.write("• Text + vector search fusion")
-            
-            enable_hybrid = st.checkbox("Enable OpenSearch Hybrid", value=True)
-        
-        # Update storage patterns
-        patterns = []
-        if enable_direct:
-            patterns.append("direct_s3vector")
-        if enable_hybrid:
-            patterns.append("opensearch_s3vector_hybrid")
-        
-        st.session_state.selected_storage_patterns = patterns
-        
-        # Vector configuration
-        st.subheader("🧠 Multi-Vector Configuration")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Vector type selection
-            selected_types = st.multiselect(
-                "Select Vector Types:",
-                options=self.config.ui.default_vector_types,
-                default=st.session_state.selected_vector_types,
-                help="Choose which Marengo 2.7 vector types to generate"
-            )
-            st.session_state.selected_vector_types = selected_types
-            
-            # Segment duration
-            segment_duration = st.slider(
-                "Segment Duration (seconds):",
-                min_value=2.0,
-                max_value=10.0,
-                value=st.session_state.segment_duration,
-                step=0.5
-            )
-            st.session_state.segment_duration = segment_duration
-        
-        with col2:
-            # Processing mode
-            processing_mode = st.selectbox(
-                "Processing Strategy:",
-                options=["parallel", "sequential", "adaptive"],
-                index=["parallel", "sequential", "adaptive"].index(st.session_state.processing_mode)
-            )
-            st.session_state.processing_mode = processing_mode
-            
-            # Cost estimation
-            if st.checkbox("Show Cost Estimation", value=True):
-                if self.processing_components:
-                    self.processing_components.show_cost_estimation()
-                else:
-                    st.info("💰 **Cost Estimation** - Available when backend services are connected")
-        
-        # Video input section
-        if self.processing_components:
-            self.processing_components.render_video_input_section()
-        else:
-            st.info("📹 **Video Upload** - Available when backend services are connected")
+    def render_media_processing_section(self):
+        """Render the media processing section using the new page."""
+        with ErrorBoundary("Media Processing"):
+            render_media_processing_page(self.service_manager, self.coordinator)
     
     def render_query_search_section(self):
         """Render the query and search section."""

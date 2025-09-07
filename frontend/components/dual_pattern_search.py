@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from frontend.components.service_locator import get_backend_service, execute_backend_search
-from frontend.components.error_handler import get_error_handler, with_loading
+from frontend.components.error_handling import get_error_handler, with_loading
 
 
 class SearchPattern(Enum):

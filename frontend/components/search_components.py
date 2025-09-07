@@ -22,7 +22,7 @@ class SearchComponents:
         self.service_manager = service_manager
         self.coordinator = coordinator
 
-    def render_search_interface(self, use_real_aws: bool = False) -> Dict[str, Any]:
+    def render_search_interface(self) -> Dict[str, Any]:
         """Render the search interface with modality selection and dual storage pattern support."""
         st.header("🔍 Multi-Vector Search")
 
@@ -37,14 +37,36 @@ class SearchComponents:
         st.subheader("🎯 Select Search Modality")
         modality_col1, modality_col2, modality_col3, modality_col4 = st.columns(4)
 
-        with modality_col1:
-            visual_text = st.checkbox("📝 Visual Text", value=True, help="Text content in videos (OCR, captions)")
-        with modality_col2:
-            visual_image = st.checkbox("🖼️ Visual Image", value=True, help="Visual content and objects")
-        with modality_col3:
-            audio = st.checkbox("🔊 Audio", value=False, help="Audio content and speech")
-        with modality_col4:
-            auto_detect = st.checkbox("🤖 Auto-detect", value=False, help="Automatically select best modality")
+        # Vector modality selection with dropdown
+        modality_options = {
+            "Visual Text Only": ["visual-text"],
+            "Visual Image Only": ["visual-image"],
+            "Audio Only": ["audio"],
+            "Visual Text + Image": ["visual-text", "visual-image"],
+            "Visual Text + Audio": ["visual-text", "audio"],
+            "Visual Image + Audio": ["visual-image", "audio"],
+            "All Modalities": ["visual-text", "visual-image", "audio"],
+            "Auto-detect Best": ["auto-detect"]
+        }
+        
+        selected_modality_key = st.selectbox(
+            "🧠 Select Vector Modalities:",
+            options=list(modality_options.keys()),
+            index=3,  # Default to "Visual Text + Image"
+            help="Choose which Marengo 2.7 vector types to use for search",
+            key="search_components_modality_selectbox"  # UNIQUE KEY ADDED
+        )
+        
+        selected_modalities = modality_options[selected_modality_key]
+        
+        # Set individual flags for backward compatibility
+        visual_text = "visual-text" in selected_modalities
+        visual_image = "visual-image" in selected_modalities
+        audio = "audio" in selected_modalities
+        auto_detect = "auto-detect" in selected_modalities
+        
+        # Show selected modalities
+        st.info(f"**Selected Modalities:** {', '.join(selected_modalities)}")
 
         # Build vector types list
         vector_types = []
@@ -223,14 +245,16 @@ class SearchComponents:
             st.error(f"Error generating performance comparison: {str(e)}")
 
     def execute_s3vector_search(self, query: str, analysis: Dict[str, Any], vector_types: List[str], num_results: int, threshold: float):
-        """Execute search on Direct S3Vector pattern only."""
+        """Execute search on Direct S3Vector pattern using real AWS resources."""
         start_time = time.time()
         
-        if not st.session_state.use_real_aws:
-            # Simulate S3Vector search
-            time.sleep(0.08)  # Fast S3Vector response
+        # Always use real AWS S3Vector search
+        st.info("🔧 **Real AWS S3Vector Search** - Using live S3Vector indexes")
+        
+        try:
+            # Execute real S3Vector search
+            results = self._execute_s3vector_search(query, analysis, vector_types, num_results, threshold)
             latency = (time.time() - start_time) * 1000
-            results = self.generate_demo_search_results(query, "s3vector", num_results)
             
             # Performance metrics
             col1, col2, col3 = st.columns(3)
@@ -239,7 +263,11 @@ class SearchComponents:
             with col2:
                 st.metric("Results Found", len(results))
             with col3:
-                st.metric("Avg Similarity", f"{sum(r['similarity'] for r in results) / len(results):.3f}")
+                if results:
+                    avg_sim = sum(r['similarity'] for r in results) / len(results)
+                    st.metric("Avg Similarity", f"{avg_sim:.3f}")
+                else:
+                    st.metric("Avg Similarity", "0.000")
             
             # Detailed results
             st.subheader("🎯 Search Results")
@@ -252,8 +280,8 @@ class SearchComponents:
                         st.write(f"**Index ARN**: {result['index_arn']}")
                     with col2:
                         st.write(f"**Similarity Score**: {result['similarity']:.3f}")
-                        st.write(f"**Distance**: {result['distance']:.3f}")
-                        st.write(f"**Metadata**: {result['metadata']}")
+                        st.write(f"**Distance**: {result.get('distance', 1.0 - result['similarity']):.3f}")
+                        st.write(f"**Metadata**: {result.get('metadata', {})}")
             
             # Store results
             st.session_state.search_results = {
@@ -262,18 +290,29 @@ class SearchComponents:
                 "analysis": analysis,
                 "pattern": "s3vector_only"
             }
-        else:
-            st.info("Real AWS S3Vector search would be executed here")
+            
+        except Exception as e:
+            st.error(f"S3Vector search failed: {e}")
+            # Fallback to demo data for visualization purposes
+            results = self.generate_demo_search_results(query, "s3vector", num_results)
+            st.session_state.search_results = {
+                "s3vector": results,
+                "query": query,
+                "analysis": analysis,
+                "pattern": "s3vector_only"
+            }
 
     def execute_opensearch_search(self, query: str, analysis: Dict[str, Any], vector_types: List[str], num_results: int, threshold: float):
-        """Execute search on OpenSearch Hybrid pattern only."""
+        """Execute search on OpenSearch Hybrid pattern using real AWS resources."""
         start_time = time.time()
         
-        if not st.session_state.use_real_aws:
-            # Simulate OpenSearch hybrid search
-            time.sleep(0.12)  # Hybrid search with text processing
+        # Always use real AWS OpenSearch hybrid search
+        st.info("🔧 **Real AWS OpenSearch Search** - Using live OpenSearch domains with S3Vector backend")
+        
+        try:
+            # Execute real OpenSearch hybrid search
+            results = self._execute_opensearch_search(query, analysis, vector_types, num_results, threshold)
             latency = (time.time() - start_time) * 1000
-            results = self.generate_demo_search_results(query, "opensearch", num_results)
             
             # Performance metrics
             col1, col2, col3 = st.columns(3)
@@ -282,17 +321,22 @@ class SearchComponents:
             with col2:
                 st.metric("Results Found", len(results))
             with col3:
-                st.metric("Hybrid Score", f"{sum(r.get('hybrid_score', 0.8) for r in results) / len(results):.3f}")
+                if results:
+                    avg_hybrid = sum(r.get('hybrid_score', r.get('similarity', 0.8)) for r in results) / len(results)
+                    st.metric("Avg Hybrid Score", f"{avg_hybrid:.3f}")
+                else:
+                    st.metric("Avg Hybrid Score", "0.000")
             
             # Detailed results with hybrid features
             st.subheader("🔍 Hybrid Search Results")
             for i, result in enumerate(results):
-                with st.expander(f"Result {i+1}: {result['segment_id']} (Hybrid Score: {result.get('hybrid_score', 0.8):.3f})"):
+                hybrid_score = result.get('hybrid_score', result.get('similarity', 0.8))
+                with st.expander(f"Result {i+1}: {result['segment_id']} (Hybrid Score: {hybrid_score:.3f})"):
                     col1, col2 = st.columns(2)
                     with col1:
                         st.write(f"**Vector Similarity**: {result['similarity']:.3f}")
                         st.write(f"**Text Match Score**: {result.get('text_score', 0.7):.3f}")
-                        st.write(f"**Combined Score**: {result.get('hybrid_score', 0.8):.3f}")
+                        st.write(f"**Combined Score**: {hybrid_score:.3f}")
                     with col2:
                         st.write(f"**Vector Type**: {result['vector_type']}")
                         st.write(f"**Text Matches**: {result.get('text_match', 'keyword matches')}")
@@ -305,8 +349,17 @@ class SearchComponents:
                 "analysis": analysis,
                 "pattern": "opensearch_only"
             }
-        else:
-            st.info("Real AWS OpenSearch hybrid search would be executed here")
+            
+        except Exception as e:
+            st.error(f"OpenSearch search failed: {e}")
+            # Fallback to demo data for visualization purposes
+            results = self.generate_demo_search_results(query, "opensearch", num_results)
+            st.session_state.search_results = {
+                "opensearch": results,
+                "query": query,
+                "analysis": analysis,
+                "pattern": "opensearch_only"
+            }
 
     def generate_demo_search_results(self, query: str, pattern: str, num_results: int) -> List[Dict[str, Any]]:
         """Generate demo search results for simulation."""
