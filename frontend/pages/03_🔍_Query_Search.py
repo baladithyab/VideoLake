@@ -32,50 +32,175 @@ st.set_page_config(
 
 def main():
     """Main function for the query and search page."""
+    # Initialize backend services if not already done
+    _initialize_backend_services()
+
     # Get service manager and coordinator from session state if available
     service_manager = st.session_state.get('service_manager')
     coordinator = st.session_state.get('coordinator')
-    
+
     render_query_search_page(service_manager, coordinator)
+
+def _initialize_backend_services():
+    """Initialize backend services for search functionality."""
+    try:
+        # Initialize enhanced storage components if not already done
+        if 'enhanced_storage_components' not in st.session_state:
+            from frontend.components.enhanced_storage_components import EnhancedStorageComponents
+            st.session_state.enhanced_storage_components = EnhancedStorageComponents()
+
+        # Get the storage manager
+        enhanced_storage_components = st.session_state.enhanced_storage_components
+        if hasattr(enhanced_storage_components, 'storage_manager') and enhanced_storage_components.storage_manager:
+            st.session_state.enhanced_storage_manager = enhanced_storage_components.storage_manager
+
+        # Initialize service locator
+        if 'service_locator' not in st.session_state:
+            from frontend.components.service_locator import init_services_in_session
+            init_services_in_session()
+
+        # Initialize Marengo 2.7 service (TwelveLabs) - this is the only embedding service we use
+        if 'twelvelabs_service' not in st.session_state:
+            try:
+                from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
+                st.session_state.twelvelabs_service = TwelveLabsVideoProcessingService()
+                st.success("✅ Marengo 2.7 service initialized successfully")
+            except Exception as e:
+                st.error(f"❌ Could not initialize Marengo 2.7 service: {e}")
+                st.warning("⚠️ Multi-modal search requires Marengo 2.7 service")
+
+    except Exception as e:
+        st.error(f"Failed to initialize backend services: {e}")
+        # Continue without backend services
 
 
 def render_query_search_page(service_manager=None, coordinator=None):
     """Render the query and search page."""
     st.title("🔍 Query & Search")
     st.markdown("**Intelligent semantic search with dual storage pattern comparison**")
-    
-    # Check prerequisites
-    if not st.session_state.get('processed_videos'):
-        st.warning("⚠️ **No processed videos available** - Please complete the Media Processing step first")
-        st.info("💡 Navigate to the Media Processing page to upload and process videos before searching.")
-        return
+
+    # Show backend service status
+    _show_backend_status()
+
+    # Check if we have any backend services available
+    enhanced_storage_manager = st.session_state.get('enhanced_storage_manager')
+    has_backend_services = enhanced_storage_manager is not None or service_manager is not None or coordinator is not None
 
     # Page description
     st.info("""
-    **Query & Search Features:**
-    - 🧠 Multi-vector search with Marengo 2.7 modalities
-    - 🎯 Intelligent query analysis and routing
-    - 🔄 Dual pattern search (Direct S3Vector + OpenSearch Hybrid)
-    - 📊 Performance comparison and metrics
-    - 🎛️ Advanced search options and filters
+    **Marengo 2.7 Multi-Modal Search:**
+    - 📝 **Visual-Text**: Text queries → Visual embeddings optimized for text search
+    - 🖼️ **Visual-Image**: Text queries → Visual embeddings optimized for image search
+    - 🔊 **Audio**: Text queries → Audio embeddings for audio content search
+    - 🔄 **Dual Backend**: Direct S3Vector + OpenSearch Hybrid patterns
+    - 📊 **Performance Metrics**: Real-time comparison and analytics
     """)
 
     # Use the search interface from search components with error handling
     with ErrorBoundary("Query & Search"):
-        if service_manager or coordinator:
+        if has_backend_services:
             # Initialize search components
             search_components = SearchComponents(service_manager, coordinator)
-            
+
             # Render search interface with unique keys
             search_results = render_enhanced_search_interface(search_components)
-            
-            # Store results in session state
+
+            # Store results in session state and show status
             if search_results:
                 st.session_state.search_results = search_results
-                
+
+                # Show search completion status
+                if search_results.get('backend_used'):
+                    results_count = len(search_results.get('results', []))
+                    processing_time = search_results.get('processing_time_ms', 0)
+                    st.success(f"✅ **Search Completed**: {results_count} results found in {processing_time:.1f}ms")
+
+                    if results_count == 0:
+                        st.warning("⚠️ **No Results Found** - Try adjusting your query or similarity threshold")
+                else:
+                    st.error("❌ **Search Failed** - Backend services are not available")
+            else:
+                st.error("❌ **Search Failed** - No results returned")
+
         else:
-            st.info("🔍 **Search Interface** - Available when backend services are connected")
-            render_demo_search_interface()
+            st.error("❌ **Backend Services Required** - Please ensure S3Vector and OpenSearch services are properly configured")
+            st.info("""
+            **Required Services:**
+            - TwelveLabs Marengo 2.7 service for embeddings
+            - S3Vector storage manager for vector search
+            - OpenSearch integration manager for hybrid search
+
+            **Setup Instructions:**
+            1. Configure AWS credentials
+            2. Initialize S3Vector buckets and indexes
+            3. Set up OpenSearch domains
+            4. Verify TwelveLabs API access
+            """)
+
+def _show_backend_status():
+    """Show the status of backend services and available resources."""
+    with st.expander("🔧 Backend Service Status", expanded=False):
+        enhanced_storage_manager = st.session_state.get('enhanced_storage_manager')
+
+        if enhanced_storage_manager:
+            st.success("✅ Enhanced Storage Manager: Connected")
+
+            # Show available backends based on manager properties
+            available_backends = []
+            if hasattr(enhanced_storage_manager, 's3vector_manager') and enhanced_storage_manager.s3vector_manager:
+                available_backends.append('s3vector')
+            if hasattr(enhanced_storage_manager, 'opensearch_pattern2_manager') and enhanced_storage_manager.opensearch_pattern2_manager:
+                available_backends.append('opensearch')
+
+            st.info(f"📊 Available backends: {', '.join(available_backends)}")
+
+            # Show resource details
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if 's3vector' in available_backends:
+                    st.write("**S3Vector Backend:**")
+                    try:
+                        # Get S3Vector bucket info from resource registry
+                        from src.utils.resource_registry import resource_registry
+                        vector_buckets = resource_registry.list_vector_buckets()
+                        active_buckets = [b for b in vector_buckets if b.get('status') == 'created']
+                        if active_buckets:
+                            st.write(f"- Bucket: {active_buckets[0].get('name')}")
+                            st.write(f"- Status: Active")
+                        else:
+                            st.write("- No active buckets found")
+                    except Exception as e:
+                        st.write(f"- Error getting bucket info: {e}")
+
+            with col2:
+                if 'opensearch' in available_backends:
+                    st.write("**OpenSearch Backend:**")
+                    try:
+                        # Get OpenSearch domain info from resource registry
+                        from src.utils.resource_registry import resource_registry
+                        opensearch_domains = resource_registry.list_opensearch_domains()
+                        active_domains = [d for d in opensearch_domains if d.get('status') == 'created']
+                        if active_domains:
+                            st.write(f"- Domain: {active_domains[0].get('name')}")
+                            st.write(f"- Status: Active")
+                        else:
+                            st.write("- No active domains found")
+                    except Exception as e:
+                        st.write(f"- Error getting domain info: {e}")
+
+        else:
+            st.warning("⚠️ Enhanced Storage Manager: Not connected")
+
+        # Show service locator status
+        service_locator = st.session_state.get('service_locator')
+        if service_locator:
+            available_services = service_locator.get_available_services()
+            st.info(f"🔧 Service Locator: {len(available_services)} services available")
+            if available_services:
+                st.write(f"Services: {', '.join(available_services)}")
+        else:
+            st.warning("⚠️ Service Locator: Not initialized")
 
 
 def render_enhanced_search_interface(search_components):
@@ -93,23 +218,18 @@ def render_enhanced_search_interface(search_components):
     # Modality selection (prominent)
     st.subheader("🎯 Select Search Modality")
 
-    # Vector modality selection with dropdown - FIXED: Added unique key
+    # Marengo 2.7 modality selection - simplified to core modalities
     modality_options = {
-        "Visual Text Only": ["visual-text"],
-        "Visual Image Only": ["visual-image"],
-        "Audio Only": ["audio"],
-        "Visual Text + Image": ["visual-text", "visual-image"],
-        "Visual Text + Audio": ["visual-text", "audio"],
-        "Visual Image + Audio": ["visual-image", "audio"],
-        "All Modalities": ["visual-text", "visual-image", "audio"],
-        "Auto-detect Best": ["auto-detect"]
+        "Visual-Text Search": ["visual-text"],
+        "Visual-Image Search": ["visual-image"],
+        "Audio Search": ["audio"]
     }
     
     selected_modality_key = st.selectbox(
-        "🧠 Select Vector Modalities:",
+        "🧠 Select Search Modality:",
         options=list(modality_options.keys()),
-        index=3,  # Default to "Visual Text + Image"
-        help="Choose which Marengo 2.7 vector types to use for search",
+        index=0,  # Default to "Visual-Text Search"
+        help="Choose which Marengo 2.7 embedding type to use for search",
         key="query_search_modality_selectbox"  # UNIQUE KEY ADDED
     )
     
@@ -155,18 +275,14 @@ def render_enhanced_search_interface(search_components):
             if "audio" in selected_modalities:
                 vector_types.append("audio")
 
-            # Auto-detect modality if enabled
-            if "auto-detect" in selected_modalities and query:
-                try:
-                    from src.services.advanced_query_analysis import SimpleQueryAnalyzer
-                    analyzer = SimpleQueryAnalyzer()
-                    analysis = analyzer.analyze_query(query, ["visual-text", "visual-image", "audio"])
-                    vector_types = analysis.recommended_vectors
-                    st.info(f"🤖 Auto-detected modalities: {', '.join(vector_types)} (Intent: {analysis.intent.value})")
-                except Exception as e:
-                    st.warning(f"Auto-detection failed: {e}")
-                    # Fallback to default selection
-                    vector_types = ["visual-text", "visual-image"] if not vector_types else vector_types
+            # Display selected modality info
+            st.info(f"🎯 **Selected Modality**: {selected_modality_key}")
+            if selected_modalities[0] == "visual-text":
+                st.info("📝 **Search Type**: Text query → Visual-Text embeddings (optimized for text-to-video search)")
+            elif selected_modalities[0] == "visual-image":
+                st.info("🖼️ **Search Type**: Text query → Visual-Image embeddings (optimized for image-to-video search)")
+            elif selected_modalities[0] == "audio":
+                st.info("🔊 **Search Type**: Text query → Audio embeddings (for audio content search)")
 
             # Analyze query
             analysis = search_components.analyze_search_query(query, vector_types)
@@ -199,35 +315,7 @@ def render_enhanced_search_interface(search_components):
     return search_results
 
 
-def render_demo_search_interface():
-    """Render demo search interface when backend services are not connected."""
-    st.write("**Production Search Features:**")
-    st.write("• Dual pattern search (Direct S3Vector + OpenSearch Hybrid)")
-    st.write("• Multi-vector query processing")
-    st.write("• Intelligent query routing")
-    st.write("• Performance metrics and comparison")
-    
-    # Demo search form
-    st.subheader("🔍 Demo Search Interface")
-    
-    demo_query = st.text_input(
-        "Enter search query (demo):",
-        placeholder="e.g., 'person walking', 'car driving'",
-        key="demo_search_query_input"  # UNIQUE KEY ADDED
-    )
-    
-    demo_modality = st.selectbox(
-        "Select modality (demo):",
-        options=["Visual Text + Image", "Visual Text Only", "Visual Image Only", "Audio Only"],
-        key="demo_search_modality_selectbox"  # UNIQUE KEY ADDED
-    )
-    
-    if st.button("🔍 Demo Search", key="demo_search_button"):
-        if demo_query:
-            st.success(f"Demo search executed for: '{demo_query}' using {demo_modality}")
-            st.info("💡 Connect backend services for real search functionality")
-        else:
-            st.warning("Please enter a search query")
+
 
 
 if __name__ == "__main__":

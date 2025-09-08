@@ -108,15 +108,15 @@ class IndexConfiguration:
         )
     
     def get_opensearch_index_name(self, environment: str = "prod") -> str:
-        """Generate OpenSearch index name using shared selector."""
+        """Generate OpenSearch index name using shared selector with S3Vector suffix."""
         if self.opensearch_index_name:
             return self.opensearch_index_name
-            
+
         selector = IndexSelector()
         return selector.generate_name(
             "video",
             environment=environment,
-            vector_type=f"{self.vector_type.value}-hybrid",
+            vector_type=f"{self.vector_type.value}-s3vector",
             version="v1"
         )
 
@@ -707,13 +707,18 @@ class EnhancedStorageIntegrationManager:
                     }
                     documents.append((document_id, document))
                 
+                # Create OpenSearch index with S3Vector engine if it doesn't exist
+                self._ensure_opensearch_s3vector_index_exists(
+                    domain_endpoint, index_name, index_config
+                )
+
                 # Index documents to OpenSearch
                 indexed_count = 0
                 for document_id, document in documents:
                     try:
                         import requests
                         import boto3
-                        
+
                         try:
                             from requests_aws4auth import AWS4Auth
                             # AWS authentication
@@ -732,7 +737,7 @@ class EnhancedStorageIntegrationManager:
                                 "aws4auth_not_available_using_fallback",
                                 level="WARNING"
                             )
-                        
+
                         url = f"https://{domain_endpoint}/{index_name}/_doc/{document_id}"
                         response = requests.put(
                             url,
@@ -1141,3 +1146,144 @@ class EnhancedStorageIntegrationManager:
             self.active_operations.clear()
         
         self.logger.log_operation("storage_integration_manager_shutdown_completed", level="INFO")
+
+    def _ensure_opensearch_s3vector_index_exists(
+        self,
+        domain_endpoint: str,
+        index_name: str,
+        index_config: IndexConfiguration
+    ) -> None:
+        """Ensure OpenSearch index exists with proper S3Vector engine configuration."""
+        try:
+            import requests
+            import boto3
+            from requests_aws4auth import AWS4Auth
+
+            # Set up authentication
+            credentials = boto3.Session().get_credentials()
+            awsauth = AWS4Auth(
+                credentials.access_key,
+                credentials.secret_key,
+                self.opensearch_pattern2_manager.region_name,
+                'es',
+                session_token=credentials.token
+            )
+
+            # Check if index exists
+            check_response = requests.head(
+                f"https://{domain_endpoint}/{index_name}",
+                auth=awsauth,
+                timeout=10
+            )
+
+            if check_response.status_code == 200:
+                # Index exists, verify it has S3Vector engine
+                mapping_response = requests.get(
+                    f"https://{domain_endpoint}/{index_name}/_mapping",
+                    auth=awsauth,
+                    timeout=10
+                )
+
+                if mapping_response.status_code == 200:
+                    mapping = mapping_response.json()
+                    index_mapping = mapping.get(index_name, {}).get('mappings', {}).get('properties', {})
+
+                    # Check if embedding field uses S3Vector engine
+                    embedding_field = index_mapping.get('embedding', {})
+                    method = embedding_field.get('method', {})
+                    engine = method.get('engine', 'unknown')
+
+                    if engine == 's3vector':
+                        self.logger.log_operation(
+                            f"opensearch_index_exists_with_s3vector",
+                            level="DEBUG",
+                            index_name=index_name
+                        )
+                        return  # Index exists and has S3Vector engine
+                    else:
+                        self.logger.log_operation(
+                            f"opensearch_index_exists_without_s3vector",
+                            level="WARNING",
+                            index_name=index_name,
+                            current_engine=engine
+                        )
+                        # Index exists but doesn't use S3Vector - DELETE and recreate it
+                        self.logger.log_operation(
+                            f"deleting_non_s3vector_index_for_recreation",
+                            level="INFO",
+                            index_name=index_name,
+                            current_engine=engine
+                        )
+
+                        # Delete the existing index
+                        delete_response = requests.delete(
+                            f"https://{domain_endpoint}/{index_name}",
+                            auth=awsauth,
+                            timeout=30
+                        )
+
+                        if delete_response.status_code in [200, 404]:
+                            self.logger.log_operation(
+                                f"deleted_non_s3vector_index",
+                                level="INFO",
+                                index_name=index_name
+                            )
+                        else:
+                            self.logger.log_operation(
+                                f"failed_to_delete_non_s3vector_index",
+                                level="ERROR",
+                                index_name=index_name,
+                                status_code=delete_response.status_code,
+                                response=delete_response.text
+                            )
+                            # Continue anyway to try creating the new index
+
+            # Index doesn't exist, create it with S3Vector engine
+            self.logger.log_operation(
+                f"creating_opensearch_s3vector_index",
+                level="INFO",
+                index_name=index_name
+            )
+
+            # Define additional fields for video segments
+            additional_fields = {
+                'segment_id': {'type': 'keyword'},
+                'video_id': {'type': 'keyword'},
+                'start_time': {'type': 'float'},
+                'end_time': {'type': 'float'},
+                'duration': {'type': 'float'},
+                'content': {'type': 'text'},
+                'title': {'type': 'text'},
+                'file_name': {'type': 'keyword'},
+                'timestamp': {'type': 'date'},
+                'metadata': {'type': 'object'}
+            }
+
+            # Create index using the OpenSearch integration manager (with proper S3Vector engine)
+            # Convert distance metric to S3Vector-compatible space_type
+            s3vector_space_type = "cosinesimil" if index_config.distance_metric == "cosine" else index_config.distance_metric
+
+            result = self.opensearch_manager.create_s3_vector_index(
+                opensearch_endpoint=domain_endpoint,
+                index_name=index_name,
+                vector_field_name='embedding',
+                vector_dimension=index_config.dimensions,
+                space_type=s3vector_space_type,
+                additional_fields=additional_fields
+            )
+
+            self.logger.log_operation(
+                f"opensearch_s3vector_index_created",
+                level="INFO",
+                index_name=index_name,
+                result=result
+            )
+
+        except Exception as e:
+            self.logger.log_operation(
+                f"failed_to_ensure_opensearch_s3vector_index",
+                level="ERROR",
+                index_name=index_name,
+                error=str(e)
+            )
+            # Don't raise exception - continue with indexing even if index creation fails

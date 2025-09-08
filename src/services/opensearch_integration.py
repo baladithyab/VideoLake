@@ -485,13 +485,13 @@ class OpenSearchIntegrationManager:
         index_name: str,
         vector_field_name: str,
         vector_dimension: int,
-        space_type: str = "cosine",
+        space_type: str = "cosinesimil",
         additional_fields: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
         Create OpenSearch index with S3 vector engine for vector fields.
-        
+
         Args:
             opensearch_endpoint: OpenSearch domain endpoint
             index_name: Name of the index to create
@@ -500,21 +500,20 @@ class OpenSearchIntegrationManager:
             space_type: Distance function ("cosine", "l2", "inner_product")
             additional_fields: Additional non-vector fields for the index
             **kwargs: Additional index configuration
-            
+
         Returns:
             Dict[str, Any]: Index creation result
         """
         try:
             # Import requests for direct OpenSearch API calls
             import requests
-            from requests.auth import HTTPBasicAuth
-            
-            # Build index mapping with S3 vector engine
+            from requests_aws4auth import AWS4Auth
+            import boto3
+
+            # Build index mapping with PROPER S3 vector engine configuration
             mapping = {
                 "settings": {
-                    "index": {
-                        "knn": True
-                    }
+                    "index.knn": True,
                 },
                 "mappings": {
                     "properties": {
@@ -523,27 +522,52 @@ class OpenSearchIntegrationManager:
                             "dimension": vector_dimension,
                             "space_type": space_type,
                             "method": {
-                                "engine": "s3vector"
+                                "engine": "s3vector"  # CRITICAL: S3Vector engine (no name/parameters allowed)
                             }
                         }
                     }
                 }
             }
-            
+
             # Add additional fields to mapping
             if additional_fields:
                 mapping["mappings"]["properties"].update(additional_fields)
-            
-            # Create index via OpenSearch REST API
+
+            # Create index via OpenSearch REST API with proper AWS authentication
             url = f"https://{opensearch_endpoint}/{index_name}"
-            
-            # Use AWS signature v4 authentication if no basic auth provided
-            response = requests.put(
-                url,
-                json=mapping,
-                headers={"Content-Type": "application/json"},
-                timeout=30
-            )
+
+            # Use AWS Signature V4 authentication
+            try:
+                credentials = boto3.Session().get_credentials()
+                awsauth = AWS4Auth(
+                    credentials.access_key,
+                    credentials.secret_key,
+                    self.region_name,
+                    'es',
+                    session_token=credentials.token
+                )
+
+                response = requests.put(
+                    url,
+                    json=mapping,
+                    auth=awsauth,
+                    headers={"Content-Type": "application/json"},
+                    timeout=30
+                )
+
+            except ImportError:
+                # Fallback to no auth if AWS4Auth not available
+                self.logger.log_operation(
+                    "aws4auth_not_available_using_fallback",
+                    level="WARNING"
+                )
+
+                response = requests.put(
+                    url,
+                    json=mapping,
+                    headers={"Content-Type": "application/json"},
+                    timeout=30
+                )
             
             if response.status_code not in [200, 201]:
                 raise OpenSearchIntegrationError(
@@ -664,13 +688,44 @@ class OpenSearchIntegrationManager:
                     }
                 }
                 
-                url = f"https://{opensearch_endpoint}/{index_name}/_search"
-                response = requests.post(
-                    url,
-                    json=search_body,
-                    headers={"Content-Type": "application/json"},
-                    timeout=30
-                )
+                # Make authenticated request to OpenSearch
+                try:
+                    from requests_aws4auth import AWS4Auth
+                    import boto3
+
+                    # Get AWS credentials for authentication
+                    credentials = boto3.Session().get_credentials()
+                    awsauth = AWS4Auth(
+                        credentials.access_key,
+                        credentials.secret_key,
+                        self.region_name,
+                        'es',
+                        session_token=credentials.token
+                    )
+
+                    url = f"https://{opensearch_endpoint}/{index_name}/_search"
+                    response = requests.post(
+                        url,
+                        json=search_body,
+                        auth=awsauth,
+                        headers={"Content-Type": "application/json"},
+                        timeout=30
+                    )
+
+                except ImportError:
+                    # Fallback to no auth if AWS4Auth not available
+                    self.logger.log_operation(
+                        "aws4auth_not_available_using_fallback",
+                        level="WARNING"
+                    )
+
+                    url = f"https://{opensearch_endpoint}/{index_name}/_search"
+                    response = requests.post(
+                        url,
+                        json=search_body,
+                        headers={"Content-Type": "application/json"},
+                        timeout=30
+                    )
                 
                 if response.status_code != 200:
                     raise OpenSearchIntegrationError(

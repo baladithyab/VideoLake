@@ -39,12 +39,16 @@ def render_results_playback_page():
     """Render the results and playback page."""
     st.title("🎯 Results & Playback")
     st.markdown("**Interactive video player with segment overlay and similarity scores**")
-    
+
     # Check prerequisites
-    if not st.session_state.get('search_results'):
+    search_results = st.session_state.get('search_results')
+    if not search_results:
         st.warning("⚠️ **No search results available** - Please complete a search first")
         st.info("💡 Navigate to the Query & Search page to perform a search before viewing results.")
         return
+
+    # Show search summary
+    _show_search_summary(search_results)
 
     # Page description
     st.info("""
@@ -60,62 +64,161 @@ def render_results_playback_page():
     with ErrorBoundary("Results & Playback"):
         try:
             results_components = ResultsComponents()
-            
+
             # Display search results
-            search_results = st.session_state.get('search_results', {})
             results_components.display_search_results(search_results)
 
             # Video player section
-            render_video_player_section(results_components)
+            render_video_player_section(results_components, search_results)
 
             # Segment overlay section
-            render_segment_overlay_section(results_components)
+            render_segment_overlay_section(results_components, search_results)
 
             # Performance metrics
             render_performance_metrics_section(results_components, search_results)
 
             # Export functionality
             render_results_export_section(results_components, search_results)
-            
+
         except Exception as e:
             st.error(f"⚠️ Error initializing results components: {e}")
-            render_fallback_results_interface()
+            render_fallback_results_interface(search_results)
+
+def _show_search_summary(search_results: Dict[str, Any]):
+    """Show a summary of the search results."""
+    with st.expander("🔍 Search Summary", expanded=True):
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            query = search_results.get('query', 'Unknown query')
+            st.metric("Query", query)
+
+        with col2:
+            # Count total results across all patterns
+            total_results = 0
+            if 'results' in search_results:
+                total_results = len(search_results['results'])
+            elif 's3vector' in search_results:
+                total_results += len(search_results.get('s3vector', []))
+            if 'opensearch' in search_results:
+                total_results += len(search_results.get('opensearch', []))
+
+            st.metric("Total Results", total_results)
+
+        with col3:
+            vector_types = search_results.get('vector_types', [])
+            st.metric("Vector Types", ', '.join(vector_types) if vector_types else 'Unknown')
+
+        # Show backend information
+        if search_results.get('backend_used'):
+            backends_used = search_results.get('backends_used', ['Unknown'])
+            st.success(f"✅ Real backend search completed using: {', '.join(backends_used)}")
+        else:
+            st.info("ℹ️ Demo data displayed (backend services not available)")
 
 
-def render_video_player_section(results_components):
+def render_video_player_section(results_components, search_results: Dict[str, Any]):
     """Render the video player section."""
     st.subheader("🎬 Video Player")
-    
+
+    # Get all results for selection
+    all_results = []
+    if 'results' in search_results:
+        all_results = search_results['results']
+    else:
+        # Handle dual pattern results
+        if 's3vector' in search_results:
+            for result in search_results['s3vector']:
+                result['source'] = 'S3Vector'
+                all_results.append(result)
+        if 'opensearch' in search_results:
+            for result in search_results['opensearch']:
+                result['source'] = 'OpenSearch'
+                all_results.append(result)
+
+    if not all_results:
+        st.warning("No results available for playback")
+        return
+
     # Video player controls
     col1, col2, col3 = st.columns(3)
-    
+
     with col1:
-        selected_result = st.selectbox(
+        # Create result options with similarity scores
+        result_options = []
+        for i, result in enumerate(all_results):
+            segment_id = result.get('segment_id', f'Result {i+1}')
+            similarity = result.get('similarity', 0.0)
+            source = result.get('source', 'Unknown')
+            result_options.append(f"{segment_id} (Sim: {similarity:.3f}, {source})")
+
+        selected_index = st.selectbox(
             "Select result to play:",
-            options=["Result 1", "Result 2", "Result 3"],
-            key="results_video_player_selectbox"  # UNIQUE KEY ADDED
+            options=range(len(result_options)),
+            format_func=lambda x: result_options[x],
+            key="results_video_player_selectbox"
         )
-    
+
+        selected_result = all_results[selected_index] if selected_index < len(all_results) else None
+
     with col2:
         playback_speed = st.selectbox(
             "Playback speed:",
             options=["0.5x", "1.0x", "1.5x", "2.0x"],
             index=1,
-            key="results_playback_speed_selectbox"  # UNIQUE KEY ADDED
+            key="results_playback_speed_selectbox"
         )
-    
+
     with col3:
         show_overlay = st.checkbox(
             "Show segment overlay",
             value=True,
-            key="results_show_overlay_checkbox"  # UNIQUE KEY ADDED
+            key="results_show_overlay_checkbox"
         )
-    
+
     # Video player placeholder
-    results_components.render_video_player_placeholder()
+    if selected_result:
+        st.info("🎬 **Video Player** - Will display selected video segment with similarity overlay")
+
+        # Show video metadata if available
+        metadata = selected_result.get('metadata', {})
+        video_id = metadata.get('video_id', 'Unknown')
+        if video_id != 'Unknown':
+            st.write(f"**Video ID**: {video_id}")
+    else:
+        st.warning("No result selected")
+
+    # Segment information
+    if selected_result:
+        with st.expander("📊 Segment Information", expanded=True):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.write(f"**Segment ID**: {selected_result.get('segment_id', 'Unknown')}")
+                st.write(f"**Similarity Score**: {selected_result.get('similarity', 0.0):.3f}")
+                st.write(f"**Vector Type**: {selected_result.get('vector_type', 'Unknown')}")
+                st.write(f"**Source**: {selected_result.get('source', 'Unknown')}")
+
+            with col2:
+                start_time = selected_result.get('start_time', 0.0)
+                end_time = selected_result.get('end_time', 0.0)
+                st.write(f"**Start Time**: {start_time:.1f}s")
+                st.write(f"**End Time**: {end_time:.1f}s")
+                st.write(f"**Duration**: {end_time - start_time:.1f}s")
+
+                # Show additional scores if available
+                if 'hybrid_score' in selected_result:
+                    st.write(f"**Hybrid Score**: {selected_result['hybrid_score']:.3f}")
+                if 'text_score' in selected_result:
+                    st.write(f"**Text Score**: {selected_result['text_score']:.3f}")
+
+            # Show metadata
+            if selected_result.get('metadata'):
+                st.write("**Metadata**:")
+                st.json(selected_result['metadata'])
 
 
-def render_segment_overlay_section(results_components):
+def render_segment_overlay_section(results_components, search_results: Dict[str, Any]):
     """Render the segment overlay section."""
     st.subheader("📍 Segment Overlay")
     

@@ -1,79 +1,113 @@
 {
   "version": 1,
-  "updated_at": "2025-09-08T14:42:02.235702+00:00",
+  "updated_at": "2025-09-08T19:38:21.383370+00:00",
   "active": {
     "index_arn": null,
-    "vector_bucket": "s3v-1757319563-vector-bucket",
-    "s3_bucket": "s3v-1757319563-data-bucket",
+    "vector_bucket": "s3v-1757355893-vector-bucket",
+    "s3_bucket": "s3v-1757355893-data-bucket",
     "opensearch_collection": null,
-    "opensearch_domain": "s3v-1757319563-domain"
+    "opensearch_domain": "s3v-1757355893-domain"
   },
   "vector_buckets": [
     {
-      "name": "s3v-1757319563-vector-bucket",
+      "name": "s3v-1757355893-vector-bucket",
       "region": "us-east-1",
       "encryption": "SSE-S3",
       "kms_key_arn": null,
-      "source": "session_1757319559",
+      "source": "session_1757355889",
       "status": "created",
-      "created_at": "2025-09-08T08:19:24.252390+00:00"
+      "created_at": "2025-09-08T18:24:54.464263+00:00"
     }
   ],
   "s3_buckets": [
     {
-      "name": "s3v-1757319563-data-bucket",
+      "name": "s3v-1757355893-data-bucket",
       "region": "us-east-1",
-      "source": "session_1757319559",
+      "source": "session_1757355889",
       "status": "created",
-      "created_at": "2025-09-08T08:19:23.978003+00:00"
+      "created_at": "2025-09-08T18:24:54.189271+00:00"
     }
   ],
   "indexes": [
     {
-      "bucket": "s3v-1757319563-vector-bucket",
+      "bucket": "s3v-1757355893-vector-bucket",
       "name": "prod-video-visual-text-v1",
-      "arn": "arn:aws:s3vectors:us-east-1:386931836011:bucket/s3v-1757319563-vector-bucket/index/prod-video-visual-text-v1",
+      "arn": "arn:aws:s3vectors:us-east-1:386931836011:bucket/s3v-1757355893-vector-bucket/index/prod-video-visual-text-v1",
       "dimensions": 1024,
       "distance_metric": "cosine",
       "source": "service",
       "status": "created",
-      "created_at": "2025-09-08T08:45:31.268277+00:00"
+      "created_at": "2025-09-08T18:45:59.694437+00:00"
     },
     {
-      "bucket": "s3v-1757319563-vector-bucket",
+      "bucket": "s3v-1757355893-vector-bucket",
       "name": "prod-video-visual-image-v1",
-      "arn": "arn:aws:s3vectors:us-east-1:386931836011:bucket/s3v-1757319563-vector-bucket/index/prod-video-visual-image-v1",
+      "arn": "arn:aws:s3vectors:us-east-1:386931836011:bucket/s3v-1757355893-vector-bucket/index/prod-video-visual-image-v1",
       "dimensions": 1024,
       "distance_metric": "cosine",
       "source": "service",
       "status": "created",
-      "created_at": "2025-09-08T08:45:33.220434+00:00"
+      "created_at": "2025-09-08T18:46:01.627104+00:00"
     },
     {
-      "bucket": "s3v-1757319563-vector-bucket",
+      "bucket": "s3v-1757355893-vector-bucket",
       "name": "prod-video-audio-v1",
-      "arn": "arn:aws:s3vectors:us-east-1:386931836011:bucket/s3v-1757319563-vector-bucket/index/prod-video-audio-v1",
+      "arn": "arn:aws:s3vectors:us-east-1:386931836011:bucket/s3v-1757355893-vector-bucket/index/prod-video-audio-v1",
       "dimensions": 1024,
       "distance_metric": "cosine",
       "source": "service",
       "status": "created",
-      "created_at": "2025-09-08T08:45:35.164433+00:00"
+      "created_at": "2025-09-08T18:46:03.575729+00:00"
     }
   ],
   "opensearch_collections": [],
   "opensearch_domains": [
     {
-      "name": "s3v-1757319563-domain",
-      "arn": "arn:aws:es:us-east-1:386931836011:domain/s3v-1757319563-domain",
+      "name": "s3v-1757355893-domain",
+      "arn": "arn:aws:es:us-east-1:386931836011:domain/s3v-1757355893-domain",
       "region": "us-east-1",
       "engine_version": "OpenSearch_2.19",
       "s3_vectors_enabled": false,
-      "source": "session_1757319559",
+      "source": "session_1757355889",
       "status": "created",
-      "created_at": "2025-09-08T08:35:45.429780+00:00"
+      "created_at": "2025-09-08T18:41:15.442319+00:00"
     }
   ],
   "opensearch_pipelines": [],
-  "opensearch_indexes": [],
+  "opensearch_indexes": [
+    {
+      "name": "prod-video-visual-text-s3vector-v1",
+      "endpoint": "search-s3v-1757355893-domain-oczafql6dfsiur4ziu3ihd3wmq.us-east-1.es.amazonaws.com",
+      "vector_field": "embedding",
+      "dimensions": 1024,
+      "space_type": "cosinesimil",
+      "engine_type": "s3vector",
+      "source": "engine_pattern",
+      "status": "created",
+      "created_at": "2025-09-08T18:46:07.132921+00:00"
+    },
+    {
+      "name": "prod-video-visual-image-s3vector-v1",
+      "endpoint": "search-s3v-1757355893-domain-oczafql6dfsiur4ziu3ihd3wmq.us-east-1.es.amazonaws.com",
+      "vector_field": "embedding",
+      "dimensions": 1024,
+      "space_type": "cosinesimil",
+      "engine_type": "s3vector",
+      "source": "engine_pattern",
+      "status": "created",
+      "created_at": "2025-09-08T18:47:20.361440+00:00"
+    },
+    {
+      "name": "prod-video-audio-s3vector-v1",
+      "endpoint": "search-s3v-1757355893-domain-oczafql6dfsiur4ziu3ihd3wmq.us-east-1.es.amazonaws.com",
+      "vector_field": "embedding",
+      "dimensions": 1024,
+      "space_type": "cosinesimil",
+      "engine_type": "s3vector",
+      "source": "engine_pattern",
+      "status": "created",
+      "created_at": "2025-09-08T18:48:29.656785+00:00"
+    }
+  ],
   "iam_roles": []
 }

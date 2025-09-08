@@ -501,13 +501,7 @@ class OpenSearchS3VectorPattern2Manager:
                             "dimension": config.vector_dimension,
                             "space_type": config.space_type,
                             "method": {
-                                "name": "hnsw",
-                                "engine": "s3vector",  # CRITICAL: Use S3 Vector engine
-                                "parameters": {
-                                    "s3_vector_index_arn": config.s3_vector_index_arn,
-                                    "ef_construction": config.ef_construction,
-                                    "m": config.m
-                                }
+                                "engine": "s3vector"  # CRITICAL: Use S3 Vector engine (no name/parameters for s3vector)
                             }
                         }
                     }
