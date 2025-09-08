@@ -32,7 +32,7 @@ from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.services.embedding_storage_integration import EmbeddingStorageIntegration
 from src.services.similarity_search_engine import SimilaritySearchEngine, SimilarityQuery, IndexType
-from src.services.unified_video_processing_service import UnifiedVideoProcessingService
+from src.services.comprehensive_video_processing_service import ComprehensiveVideoProcessingService
 from src.utils.logging_config import get_structured_logger
 from src.utils.timing_tracker import TimingTracker
 from src.exceptions import VectorEmbeddingError, ValidationError
@@ -331,16 +331,16 @@ def test_video_processing_pipeline() -> Dict[str, Any]:
     
     try:
         # Initialize unified video service
-        from src.services.video_processing_base import ProcessingConfig, VectorType, StoragePattern
+        from src.services.comprehensive_video_processing_service import ProcessingConfig, VectorType, StoragePattern, ProcessingMode
         
         config = ProcessingConfig(
             vector_types=[VectorType.VISUAL_TEXT, VectorType.VISUAL_IMAGE],
             storage_patterns=[StoragePattern.DIRECT_S3VECTOR],
             segment_duration_sec=5.0,
-            processing_mode="sequential"
+            processing_mode=ProcessingMode.BEDROCK_PRIMARY
         )
         
-        unified_service = UnifiedVideoProcessingService(config)
+        unified_service = ComprehensiveVideoProcessingService(config)
         
         # Test with sample video
         sample_video = SAMPLE_VIDEOS[0]  # Use shorter video for demo

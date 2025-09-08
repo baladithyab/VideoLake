@@ -1243,6 +1243,105 @@ class S3VectorStorageManager:
                         error_code="INVALID_METADATA_TYPE",
                         error_details={"index": i, "type": type(metadata).__name__}
                     )
+    def put_vectors_with_lazy_index_creation(self,
+                                           bucket_name: str,
+                                           index_name: str,
+                                           vectors_data: List[Dict[str, Any]],
+                                           dimensions: Optional[int] = None,
+                                           distance_metric: str = "cosine",
+                                           data_type: str = "float32") -> Dict[str, Any]:
+        """
+        Store vectors with on-demand index creation if needed.
+        
+        This method will create the index automatically if it doesn't exist,
+        using the dimensions from the first vector if not specified.
+        
+        Args:
+            bucket_name: Name of the vector bucket
+            index_name: Name of the vector index
+            vectors_data: List of vector dictionaries
+            dimensions: Vector dimensions (auto-detected from first vector if not provided)
+            distance_metric: Distance metric for index creation
+            data_type: Data type for index creation
+            
+        Returns:
+            Dict containing storage response and metadata
+        """
+        structured_logger.log_function_entry(
+            "put_vectors_with_lazy_index_creation",
+            bucket_name=bucket_name,
+            index_name=index_name,
+            vector_count=len(vectors_data)
+        )
+        
+        logger.info(f"Storing {len(vectors_data)} vectors with lazy index creation: {bucket_name}/{index_name}")
+        
+        # Auto-detect dimensions from first vector if not provided
+        if not dimensions and vectors_data:
+            first_vector_data = vectors_data[0].get('data', {}).get('float32', [])
+            if first_vector_data:
+                dimensions = len(first_vector_data)
+                logger.info(f"Auto-detected vector dimensions: {dimensions}")
+        
+        if not dimensions:
+            raise ValidationError(
+                "Cannot determine vector dimensions - provide dimensions or ensure vectors have data",
+                error_code="MISSING_DIMENSIONS"
+            )
+        
+        # Construct index ARN for operations
+        try:
+            from src.config.unified_config_manager import get_unified_config_manager
+            config_manager = get_unified_config_manager()
+            region = config_manager.config.aws.region
+            
+            import boto3
+            sts_client = boto3.client('sts', region_name=region)
+            account_id = sts_client.get_caller_identity()['Account']
+            index_arn = f"arn:aws:s3vectors:{region}:{account_id}:bucket/{bucket_name}/index/{index_name}"
+            
+        except Exception as e:
+            logger.error(f"Failed to construct index ARN: {e}")
+            raise VectorStorageError(f"Failed to construct index ARN: {str(e)}", error_code="ARN_CONSTRUCTION_FAILED")
+        
+        # Try to put vectors first (this will succeed if index exists)
+        try:
+            return self.put_vectors(index_arn, vectors_data)
+            
+        except VectorStorageError as e:
+            if e.error_code == "INDEX_NOT_FOUND":
+                logger.info(f"Index not found, creating on-demand: {bucket_name}/{index_name}")
+                
+                # Create the index on-demand
+                try:
+                    create_result = self.create_vector_index(
+                        bucket_name=bucket_name,
+                        index_name=index_name,
+                        dimensions=dimensions,
+                        distance_metric=distance_metric,
+                        data_type=data_type
+                    )
+                    
+                    logger.info(f"Successfully created index on-demand: {bucket_name}/{index_name}")
+                    
+                    # Now try to put vectors again
+                    return self.put_vectors(index_arn, vectors_data)
+                    
+                except Exception as create_error:
+                    logger.error(f"Failed to create index on-demand: {create_error}")
+                    raise VectorStorageError(
+                        f"Failed to create index on-demand: {str(create_error)}",
+                        error_code="ON_DEMAND_INDEX_CREATION_FAILED",
+                        error_details={
+                            "bucket_name": bucket_name,
+                            "index_name": index_name,
+                            "dimensions": dimensions
+                        }
+                    ) from create_error
+            else:
+                # Re-raise other storage errors
+                raise
+    
     
     def put_vectors(self,
                    index_arn: str,

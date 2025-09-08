@@ -54,9 +54,9 @@ class TestUnifiedDemoIntegration:
         """Test that backend services don't import Streamlit."""
         backend_services = [
             "src.services.advanced_query_analysis",
-            "src.services.simple_visualization", 
+            "src.services.semantic_mapping_visualization",
             "src.services.simple_video_player",
-            "src.services.enhanced_video_pipeline"
+            "src.services.comprehensive_video_processing_service"
         ]
         
         for service_module in backend_services:
@@ -100,29 +100,40 @@ class TestUnifiedDemoIntegration:
             pytest.fail(f"Query analysis workflow failed: {e}")
     
     def test_visualization_data_preparation(self):
-        """Test visualization data preparation."""
+        """Test visualization data preparation (simplified)."""
         try:
-            from src.services.simple_visualization import SimpleVisualization, generate_demo_embeddings
+            from src.services.semantic_mapping_visualization import SemanticMappingVisualizer, EmbeddingPoint
+            import numpy as np
             
-            viz_service = SimpleVisualization()
+            viz_service = SemanticMappingVisualizer()
             
             # Generate test embeddings
-            query_points, result_points = generate_demo_embeddings(
-                query=self.test_data["sample_query"],
-                vector_type="visual-text",
-                n_results=10
+            query_embedding = EmbeddingPoint(
+                id="test-query",
+                embedding=np.random.rand(1024),
+                metadata={"type": "query"},
+                point_type="query"
             )
             
-            # Test visualization data preparation
-            viz_data = viz_service.prepare_visualization_data(
-                query_embeddings=query_points,
-                result_embeddings=result_points,
-                method="PCA"
+            result_embeddings = [
+                EmbeddingPoint(
+                    id=f"test-result-{i}",
+                    embedding=np.random.rand(1024),
+                    metadata={"type": "result"},
+                    point_type="result",
+                    similarity_score=0.8 + i * 0.1
+                )
+                for i in range(5)
+            ]
+            
+            # Test visualization creation
+            fig = viz_service.create_embedding_visualization(
+                query_embeddings=[query_embedding],
+                result_embeddings=result_embeddings,
+                title="Test Visualization"
             )
             
-            assert "figure" in viz_data, "Visualization figure not generated"
-            assert "statistics" in viz_data, "Visualization statistics not generated"
-            assert viz_data["method"] == "PCA", "Method not preserved"
+            assert fig is not None, "Visualization figure not generated"
             
             print("✅ Visualization data preparation test passed")
             
@@ -375,9 +386,9 @@ class TestRealAWSIntegration:
     def test_s3vector_service_integration(self):
         """Test S3Vector service integration."""
         try:
-            from src.services.s3_vector_storage import S3VectorStorageService
+            from src.services.s3_vector_storage import S3VectorStorageManager
             
-            service = S3VectorStorageService()
+            service = S3VectorStorageManager()
             
             # Test service initialization
             assert service is not None, "S3Vector service not initialized"

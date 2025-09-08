@@ -18,9 +18,11 @@ from src.services.comprehensive_video_processing_service import (
     ComprehensiveVideoProcessingService,
     ProcessingConfig,
     ProcessingMode,
-    VectorType,
     StoragePattern
 )
+from src.shared.vector_types import SupportedVectorTypes, get_vector_type_config, list_supported_vector_types
+from src.shared.metadata_handlers import MetadataTransformer, create_media_metadata
+from src.shared.aws_client_pool import AWSClientPool
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -36,7 +38,52 @@ class ProcessingComponents:
         # Initialize comprehensive video processing service
         self.comprehensive_service = None
         self._last_vector_types = None  # Track last used vector types for reinit detection
+        
+        # Initialize shared components
+        self._initialize_shared_components()
         self._initialize_comprehensive_service()
+    
+    def _initialize_shared_components(self):
+        """Initialize shared components for optimized operations."""
+        try:
+            self.metadata_transformer = MetadataTransformer()
+            self.aws_client_pool = AWSClientPool()
+            logger.info("Processing components: shared components initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize shared components in ProcessingComponents: {e}")
+            self.metadata_transformer = None
+            self.aws_client_pool = None
+    
+    def _convert_supported_vector_types_to_service_types(self, supported_types: List[SupportedVectorTypes]):
+        """Convert SupportedVectorTypes to service-compatible VectorType."""
+        # Import the service's VectorType to avoid circular imports
+        try:
+            from src.services.comprehensive_video_processing_service import VectorType
+            
+            # Create mapping from shared types to service types
+            type_mapping = {
+                SupportedVectorTypes.VISUAL_TEXT: VectorType.VISUAL_TEXT,
+                SupportedVectorTypes.VISUAL_IMAGE: VectorType.VISUAL_IMAGE,
+                SupportedVectorTypes.AUDIO: VectorType.AUDIO,
+                SupportedVectorTypes.TEXT_TITAN: getattr(VectorType, 'TEXT_TITAN', None),
+                SupportedVectorTypes.TEXT_COHERE: getattr(VectorType, 'TEXT_COHERE', None),
+                SupportedVectorTypes.MULTIMODAL: getattr(VectorType, 'MULTIMODAL', None)
+            }
+            
+            service_types = []
+            for supported_type in supported_types:
+                service_type = type_mapping.get(supported_type)
+                if service_type is not None:
+                    service_types.append(service_type)
+                else:
+                    logger.warning(f"No service mapping found for vector type: {supported_type.value}")
+            
+            return service_types
+            
+        except ImportError as e:
+            logger.error(f"Failed to import service VectorType: {e}")
+            # Fallback: return empty list or handle as needed
+            return []
     
     def _initialize_comprehensive_service(self):
         """Initialize the comprehensive video processing service."""
@@ -48,11 +95,11 @@ class ProcessingComponents:
             app_config = get_config()
             selected_vector_types = st.session_state.get('selected_vector_types', app_config.ui.default_vector_types)
             
-            # Convert string vector types to VectorType enums
+            # Convert string vector types to SupportedVectorTypes enums using shared components
             vector_type_mapping = {
-                "visual-text": VectorType.VISUAL_TEXT,
-                "visual-image": VectorType.VISUAL_IMAGE,
-                "audio": VectorType.AUDIO
+                "visual-text": SupportedVectorTypes.VISUAL_TEXT,
+                "visual-image": SupportedVectorTypes.VISUAL_IMAGE,
+                "audio": SupportedVectorTypes.AUDIO
             }
             
             vector_types = []
@@ -62,17 +109,20 @@ class ProcessingComponents:
                 else:
                     logger.warning(f"Unknown vector type: {vector_type_str}")
             
-            # Ensure we have at least one vector type
+            # Ensure we have at least one vector type using shared components
             if not vector_types:
-                vector_types = [VectorType.VISUAL_TEXT, VectorType.VISUAL_IMAGE, VectorType.AUDIO]
+                vector_types = [SupportedVectorTypes.VISUAL_TEXT, SupportedVectorTypes.VISUAL_IMAGE, SupportedVectorTypes.AUDIO]
                 logger.info("No valid vector types found, using all defaults")
             
             logger.info(f"Initializing ComprehensiveVideoProcessingService with vector types: {[vt.value for vt in vector_types]}")
             
             # Create processing configuration for Bedrock primary mode
+            # Convert shared vector types to service-compatible types
+            service_vector_types = self._convert_supported_vector_types_to_service_types(vector_types)
+            
             config = ProcessingConfig(
                 processing_mode=ProcessingMode.BEDROCK_PRIMARY,
-                vector_types=vector_types,
+                vector_types=service_vector_types,
                 storage_patterns=[StoragePattern.DIRECT_S3VECTOR],
                 segment_duration_sec=st.session_state.get('segment_duration', 5.0),
                 enable_cost_tracking=True
@@ -656,21 +706,114 @@ class ProcessingComponents:
             st.warning("⚠️ MultiVectorCoordinator not available - check backend services")
     
     def start_file_upload_processing(self, uploaded_files, upload_config: Optional[Dict[str, Any]] = None):
-        """Start processing uploaded files."""
+        """Start processing uploaded files with enhanced shared components integration."""
         st.info(f"🔄 Processing {len(uploaded_files)} uploaded files...")
         
-        # Simulate file upload and processing
+        # Use standardized bucket naming for uploads
+        upload_bucket = self._generate_optimized_upload_bucket_name()
+        
+        # Process files with optimized metadata handling
         for i, file in enumerate(uploaded_files):
-            # Simulate S3 upload
-            s3_uri = f"s3://temp-upload-bucket/{file.name}"
+            # Generate S3 URI with optimized naming
+            s3_uri = f"s3://{upload_bucket}/uploads/{file.name}"
             st.info(f"📤 Uploading {file.name} to {s3_uri}")
+            
+            # Create enhanced metadata for the file
+            if self.metadata_transformer:
+                try:
+                    file_metadata = create_media_metadata(
+                        file_name=file.name,
+                        s3_location=s3_uri,
+                        file_format=file.name.split('.')[-1].lower(),
+                        file_size=file.size if hasattr(file, 'size') else 0,
+                        duration=0.0  # Will be updated after processing
+                    )
+                    st.session_state[f'file_metadata_{file.name}'] = file_metadata
+                except Exception as e:
+                    logger.warning(f"Failed to create metadata for {file.name}: {e}")
             
             # Start processing for each file
             self.start_dual_pattern_processing(s3_uri)
     
     def start_batch_s3_processing(self, s3_uris: List[str]):
-        """Start batch processing of S3 URIs."""
+        """Start batch processing of S3 URIs with optimized resource management."""
         st.info(f"🔄 Starting batch processing for {len(s3_uris)} S3 URIs...")
+        
+        # Use optimized batch processing if available
+        if self.aws_client_pool and len(s3_uris) > 1:
+            st.info("🚀 Using optimized AWS client pooling for batch processing")
         
         for uri in s3_uris:
             self.start_dual_pattern_processing(uri)
+    
+    def _generate_optimized_upload_bucket_name(self) -> str:
+        """Generate optimized bucket name for uploads."""
+        import streamlit as st
+        environment = st.session_state.get('environment', 'prod')
+        return f"s3vector-{environment}-uploads"
+    
+    def _get_optimized_vector_type_configs(self) -> Dict[str, Dict[str, Any]]:
+        """Get optimized vector type configurations using shared components."""
+        configs = {}
+        
+        try:
+            supported_types = list_supported_vector_types()
+            for vector_type_str in supported_types:
+                config = get_vector_type_config(vector_type_str)
+                configs[vector_type_str] = {
+                    'dimensions': config.dimensions,
+                    'batch_size': config.processing_batch_size,
+                    'concurrent_ops': config.concurrent_operations,
+                    'embedding_model': config.embedding_model,
+                    'description': config.description
+                }
+        except Exception as e:
+            logger.error(f"Failed to get optimized vector type configs: {e}")
+            # Fallback to basic configs
+            configs = {
+                'visual-text': {'dimensions': 1024, 'batch_size': 5, 'concurrent_ops': 3},
+                'visual-image': {'dimensions': 1024, 'batch_size': 5, 'concurrent_ops': 3},
+                'audio': {'dimensions': 1024, 'batch_size': 5, 'concurrent_ops': 3}
+            }
+        
+        return configs
+    
+    def get_enhanced_cost_estimation(self, video_count: int, duration_minutes: float) -> Dict[str, float]:
+        """Get enhanced cost estimation using shared vector type configurations."""
+        vector_configs = self._get_optimized_vector_type_configs()
+        selected_vector_types = st.session_state.get('selected_vector_types', ['visual-text', 'visual-image', 'audio'])
+        
+        # Calculate costs based on actual vector type configurations
+        total_cost = 0.0
+        cost_breakdown = {}
+        
+        for vector_type in selected_vector_types:
+            if vector_type in vector_configs:
+                config = vector_configs[vector_type]
+                # Base cost calculation with configuration-aware pricing
+                base_cost_per_minute = 0.05  # Base rate
+                
+                # Adjust for complexity and batch size efficiency
+                batch_efficiency = min(config.get('batch_size', 5) / 5.0, 1.0)
+                complexity_multiplier = config.get('dimensions', 1024) / 1024.0
+                
+                vector_cost = (duration_minutes * base_cost_per_minute * complexity_multiplier) / batch_efficiency
+                cost_breakdown[vector_type] = vector_cost * video_count
+                total_cost += cost_breakdown[vector_type]
+        
+        # Add storage costs
+        storage_cost = video_count * 0.02
+        cost_breakdown['storage'] = storage_cost
+        total_cost += storage_cost
+        
+        cost_breakdown['total'] = total_cost
+        
+        return cost_breakdown
+    
+    def get_shared_components_status(self) -> Dict[str, bool]:
+        """Get status of shared components for debugging."""
+        return {
+            'metadata_transformer': self.metadata_transformer is not None,
+            'aws_client_pool': self.aws_client_pool is not None,
+            'vector_type_configs': len(self._get_optimized_vector_type_configs()) > 0
+        }

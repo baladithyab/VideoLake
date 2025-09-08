@@ -140,8 +140,8 @@ def create_opensearch_domain_with_s3_vectors(
     self,
     domain_name: str,
     s3_vector_bucket_arn: str,
-    instance_type: str = "m6g.large.search",
-    instance_count: int = 2,
+    instance_type: str = "or1.medium.search",  # OR1 instances required for S3 Vectors
+    instance_count: int = 1,
     kms_key_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
@@ -171,10 +171,12 @@ def create_opensearch_domain_with_s3_vectors(
             'Iops': 3000
         },
         
-        # S3 Vector engine configuration
-        'S3VectorEngine': {
-            'Enabled': True,
-            'S3VectorBucketArn': s3_vector_bucket_arn
+        # S3 Vector engine configuration (correct AWS API format)
+        'AIMLOptions': {
+            'S3VectorsEngine': {
+                'Enabled': True
+                # Note: S3VectorBucketArn is not supported in create_domain API
+            }
         },
         
         # Security configuration
@@ -195,7 +197,7 @@ def create_opensearch_domain_with_s3_vectors(
     # Add KMS encryption if specified
     if kms_key_id:
         domain_config['EncryptionAtRestOptions']['KmsKeyId'] = kms_key_id
-        domain_config['S3VectorEngine']['KmsKeyId'] = kms_key_id
+        # Note: KmsKeyId for S3VectorsEngine is not supported in create_domain API
     
     # Step 2: Create the domain using CORRECT client
     try:
@@ -360,9 +362,11 @@ class EnginePatternIntegration:
         return self.opensearch_client.create_domain(
             DomainName=domain_name,
             EngineVersion='OpenSearch_2.19',
-            S3VectorEngine={
-                'Enabled': True,
-                'S3VectorBucketArn': s3_vector_bucket_arn
+            AIMLOptions={
+                'S3VectorsEngine': {
+                    'Enabled': True
+                    # Note: S3VectorBucketArn not supported in create_domain API
+                }
             }
         )
 ```
@@ -468,8 +472,8 @@ sequenceDiagram
 ### Pattern 2 Optimization Guidelines
 
 1. **Instance Selection**
-   - Use OpenSearch Optimized instances (m6g, r6g, c6g families)
-   - Minimum: m6g.large.search for production workloads
+   - Use OpenSearch Optimized OR1 instances (required for S3 Vectors engine)
+   - Minimum: or1.medium.search for production workloads
    - Scale horizontally for high query volumes
 
 2. **S3 Vector Configuration**

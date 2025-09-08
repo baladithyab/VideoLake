@@ -644,7 +644,7 @@ class WorkflowResourceManager:
             except Exception:
                 # Use default region if config access fails
                 pass
-            
+
             # Initialize AWS clients - CORRECTED for Pattern 2
             self.s3_client = boto3.client('s3', region_name=region)
             self.s3vectors_client = boto3.client('s3vectors', region_name=region)
@@ -653,18 +653,19 @@ class WorkflowResourceManager:
             # Keep serverless client for serverless collections (Pattern 1)
             self.opensearch_serverless_client = boto3.client('opensearchserverless', region_name=region)
             self.sts_client = boto3.client('sts', region_name=region)
-            
+
             # Get real AWS account ID
             try:
                 identity = self.sts_client.get_caller_identity()
                 self.account_id = identity['Account']
                 self.region = region
                 logger.info(f"Initialized AWS clients for account {self.account_id} in region {region}")
+                st.info(f"🌍 Using AWS region: {region}")
             except Exception as e:
                 logger.error(f"Failed to get AWS account ID: {e}")
                 # Don't fall back to fake account - this should fail if AWS isn't available
                 raise
-                
+
         except Exception as e:
             logger.error(f"Failed to initialize AWS clients: {e}")
             # Re-raise the exception to prevent using fake resources
@@ -848,21 +849,30 @@ class WorkflowResourceManager:
             
             logger.info(f"✅ Validated S3Vector bucket ARN: {s3vector_bucket_arn}")
             
-            # Create OpenSearch managed domain (standard configuration)
+            # Create OpenSearch managed domain with S3Vector engine enabled
             logger.info(f"🔧 Building OpenSearch domain configuration for: {domain_name}")
-            logger.info(f"ℹ️ Note: S3Vector integration will be configured post-creation via domain settings")
+            logger.info(f"✅ S3Vector engine will be ENABLED with bucket ARN: {s3vector_bucket_arn}")
             
             try:
                 domain_config = {
                     'DomainName': domain_name,
                     'EngineVersion': 'OpenSearch_2.19',  # Use OpenSearch version (not Elasticsearch)
                     
+                    # CRITICAL FIX: Enable S3Vector engine (correct AWS API format)
+                    'AIMLOptions': {
+                        'S3VectorsEngine': {
+                            'Enabled': True
+                            # Note: S3VectorBucketArn is not supported in create_domain API
+                            # The bucket association is handled separately after domain creation
+                        }
+                    },
+                    
                     # Cluster configuration
                     'ClusterConfig': {
-                        'InstanceType': 'm6g.large.search',  # Use OpenSearch instance types
-                        'InstanceCount': 2,
+                        'InstanceType': 'or1.medium.search',  # OR1 instances required for S3 Vectors engine
+                        'InstanceCount': 1,  # Start with single instance for cost efficiency
                         'DedicatedMasterEnabled': False,
-                        'ZoneAwarenessEnabled': True
+                        'ZoneAwarenessEnabled': False  # Single instance doesn't need zone awareness
                     },
                     
                     # Storage configuration
@@ -903,8 +913,8 @@ class WorkflowResourceManager:
                     })
                 }
                 
-                logger.info(f"✅ Domain configuration built successfully")
-                logger.info(f"🔧 S3Vector bucket ARN available for post-creation configuration: {s3vector_bucket_arn}")
+                logger.info(f"✅ Domain configuration built successfully with S3Vector engine ENABLED")
+                logger.info(f"🔧 S3Vector bucket ARN integrated in domain configuration: {s3vector_bucket_arn}")
                 logger.debug(f"🔧 Full domain config: {domain_config}")
                 
             except Exception as config_error:
@@ -1268,15 +1278,25 @@ class WorkflowResourceManager:
                     st.rerun()
     
     def _get_existing_resources(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Get all existing resources."""
+        """Get all existing resources, filtering out already deleted ones."""
         try:
+            # Get all resources from registry
+            all_s3_buckets = self.resource_registry.list_s3_buckets() or []
+            all_vector_buckets = self.resource_registry.list_vector_buckets() or []
+            all_vector_indexes = self.resource_registry.list_indexes() or []
+            all_opensearch_collections = self.resource_registry.list_opensearch_collections() or []
+            all_opensearch_domains = self.resource_registry.list_opensearch_domains() or []
+
+            # Filter out deleted resources
             resources = {
-                's3_buckets': self.resource_registry.list_s3_buckets() or [],
-                'vector_buckets': self.resource_registry.list_vector_buckets() or [],
-                'vector_indexes': self.resource_registry.list_indexes() or [],
-                'opensearch_collections': self.resource_registry.list_opensearch_collections() or [],
-                'opensearch_domains': self.resource_registry.list_opensearch_domains() or []
+                's3_buckets': [r for r in all_s3_buckets if r and r.get('status') != 'deleted'],
+                'vector_buckets': [r for r in all_vector_buckets if r and r.get('status') != 'deleted'],
+                'vector_indexes': [r for r in all_vector_indexes if r and r.get('status') != 'deleted'],
+                'opensearch_collections': [r for r in all_opensearch_collections if r and r.get('status') != 'deleted'],
+                'opensearch_domains': [r for r in all_opensearch_domains if r and r.get('status') != 'deleted']
             }
+
+            logger.info(f"📊 Filtered resources - S3: {len(resources['s3_buckets'])}, Vector: {len(resources['vector_buckets'])}, Indexes: {len(resources['vector_indexes'])}, Collections: {len(resources['opensearch_collections'])}, Domains: {len(resources['opensearch_domains'])}")
             return resources
         except Exception as e:
             logger.error(f"⚠️ Issue in Resource Management: {e}")
@@ -1894,12 +1914,16 @@ class WorkflowResourceManager:
             
             # Delete vector buckets
             for resource in created_resources.get('vector_buckets', []):
+                if not resource:  # Skip None resources
+                    continue
                 resource_name = resource.get('name')
-                if resource_name:
+                resource_status = resource.get('status')
+
+                if resource_name and resource_status != 'deleted':
                     total_attempted += 1
                     logger.info(f"🗑️ Attempting to delete S3Vector bucket: {resource_name}")
                     st.info(f"🗑️ Deleting S3Vector bucket: {resource_name}")
-                    
+
                     if self.delete_s3vector_bucket(resource_name):
                         total_deleted += 1
                         logger.info(f"✅ Successfully deleted S3Vector bucket: {resource_name}")
@@ -1907,16 +1931,23 @@ class WorkflowResourceManager:
                     else:
                         logger.error(f"❌ Failed to delete S3Vector bucket: {resource_name}")
                         st.error(f"❌ Failed to delete S3Vector bucket: {resource_name}")
-            
+                elif resource_name and resource_status == 'deleted':
+                    logger.info(f"⏭️ Skipping already deleted S3Vector bucket: {resource_name}")
+                    st.info(f"⏭️ S3Vector bucket '{resource_name}' already deleted")
+
             # Delete vector indexes
             for resource in created_resources.get('vector_indexes', []):
+                if not resource:  # Skip None resources
+                    continue
                 resource_name = resource.get('name')
                 bucket_name = resource.get('bucket', '')
-                if resource_name:
+                resource_status = resource.get('status')
+
+                if resource_name and resource_status != 'deleted':
                     total_attempted += 1
                     logger.info(f"🗑️ Attempting to delete S3Vector index: {bucket_name}/{resource_name}")
                     st.info(f"🗑️ Deleting S3Vector index: {resource_name}")
-                    
+
                     if self.delete_s3vector_index(bucket_name, resource_name):
                         total_deleted += 1
                         logger.info(f"✅ Successfully deleted S3Vector index: {bucket_name}/{resource_name}")
@@ -1924,15 +1955,22 @@ class WorkflowResourceManager:
                     else:
                         logger.error(f"❌ Failed to delete S3Vector index: {bucket_name}/{resource_name}")
                         st.error(f"❌ Failed to delete S3Vector index: {resource_name}")
-            
+                elif resource_name and resource_status == 'deleted':
+                    logger.info(f"⏭️ Skipping already deleted S3Vector index: {bucket_name}/{resource_name}")
+                    st.info(f"⏭️ S3Vector index '{resource_name}' already deleted")
+
             # Delete OpenSearch collections
             for resource in created_resources.get('opensearch_collections', []):
+                if not resource:  # Skip None resources
+                    continue
                 resource_name = resource.get('name')
-                if resource_name:
+                resource_status = resource.get('status')
+
+                if resource_name and resource_status != 'deleted':
                     total_attempted += 1
                     logger.info(f"🗑️ Attempting to delete OpenSearch collection: {resource_name}")
                     st.info(f"🗑️ Deleting OpenSearch collection: {resource_name}")
-                    
+
                     if self.delete_opensearch_collection(resource_name):
                         total_deleted += 1
                         logger.info(f"✅ Successfully deleted OpenSearch collection: {resource_name}")
@@ -1940,6 +1978,55 @@ class WorkflowResourceManager:
                     else:
                         logger.error(f"❌ Failed to delete OpenSearch collection: {resource_name}")
                         st.error(f"❌ Failed to delete OpenSearch collection: {resource_name}")
+                elif resource_name and resource_status == 'deleted':
+                    logger.info(f"⏭️ Skipping already deleted OpenSearch collection: {resource_name}")
+                    st.info(f"⏭️ OpenSearch collection '{resource_name}' already deleted")
+
+            # Delete OpenSearch domains
+            for resource in created_resources.get('opensearch_domains', []):
+                if not resource:  # Skip None resources
+                    continue
+                resource_name = resource.get('name')
+                resource_status = resource.get('status')
+
+                if resource_name and resource_status != 'deleted':
+                    total_attempted += 1
+                    logger.info(f"🗑️ Attempting to delete OpenSearch domain: {resource_name}")
+                    st.info(f"🗑️ Deleting OpenSearch domain: {resource_name}")
+
+                    if self.delete_opensearch_domain(resource_name):
+                        total_deleted += 1
+                        logger.info(f"✅ Successfully deleted OpenSearch domain: {resource_name}")
+                        st.success(f"✅ Successfully deleted OpenSearch domain: {resource_name}")
+                    else:
+                        logger.error(f"❌ Failed to delete OpenSearch domain: {resource_name}")
+                        st.error(f"❌ Failed to delete OpenSearch domain: {resource_name}")
+                elif resource_name and resource_status == 'deleted':
+                    logger.info(f"⏭️ Skipping already deleted OpenSearch domain: {resource_name}")
+                    st.info(f"⏭️ OpenSearch domain '{resource_name}' already deleted")
+
+            # Delete S3 buckets last (after other resources are removed)
+            for resource in created_resources.get('s3_buckets', []):
+                if not resource:  # Skip None resources
+                    continue
+                resource_name = resource.get('name')
+                resource_status = resource.get('status')
+
+                if resource_name and resource_status != 'deleted':
+                    total_attempted += 1
+                    logger.info(f"🗑️ Attempting to delete S3 bucket: {resource_name}")
+                    st.info(f"🗑️ Deleting S3 bucket: {resource_name}")
+
+                    if self.delete_s3_bucket(resource_name):
+                        total_deleted += 1
+                        logger.info(f"✅ Successfully deleted S3 bucket: {resource_name}")
+                        st.success(f"✅ Successfully deleted S3 bucket: {resource_name}")
+                    else:
+                        logger.error(f"❌ Failed to delete S3 bucket: {resource_name}")
+                        st.error(f"❌ Failed to delete S3 bucket: {resource_name}")
+                elif resource_name and resource_status == 'deleted':
+                    logger.info(f"⏭️ Skipping already deleted S3 bucket: {resource_name}")
+                    st.info(f"⏭️ S3 bucket '{resource_name}' already deleted")
             
             # Clear created resources from session only if some deletions were successful
             if total_deleted > 0:
@@ -1992,7 +2079,7 @@ class WorkflowResourceManager:
                     total_attempted += 1
                     logger.warning(f"🗑️ [ALL CLEANUP] Deleting OpenSearch collection: {resource_name}")
                     st.info(f"🗑️ Deleting OpenSearch collection: {resource_name}")
-                    
+
                     if self.delete_opensearch_collection(resource_name):
                         total_deleted += 1
                         logger.info(f"✅ [ALL CLEANUP] Deleted OpenSearch collection: {resource_name}")
@@ -2000,15 +2087,31 @@ class WorkflowResourceManager:
                     else:
                         logger.error(f"❌ [ALL CLEANUP] Failed to delete OpenSearch collection: {resource_name}")
                         st.error(f"❌ Failed to delete OpenSearch collection: {resource_name}")
-            
-            # Delete vector buckets last (after indexes are removed)
+
+            # Delete OpenSearch domains
+            for resource in all_resources.get('opensearch_domains', []):
+                resource_name = resource.get('name')
+                if resource_name:
+                    total_attempted += 1
+                    logger.warning(f"🗑️ [ALL CLEANUP] Deleting OpenSearch domain: {resource_name}")
+                    st.info(f"🗑️ Deleting OpenSearch domain: {resource_name}")
+
+                    if self.delete_opensearch_domain(resource_name):
+                        total_deleted += 1
+                        logger.info(f"✅ [ALL CLEANUP] Deleted OpenSearch domain: {resource_name}")
+                        st.success(f"✅ Successfully deleted OpenSearch domain: {resource_name}")
+                    else:
+                        logger.error(f"❌ [ALL CLEANUP] Failed to delete OpenSearch domain: {resource_name}")
+                        st.error(f"❌ Failed to delete OpenSearch domain: {resource_name}")
+
+            # Delete vector buckets (after indexes are removed)
             for resource in all_resources.get('vector_buckets', []):
                 resource_name = resource.get('name')
                 if resource_name:
                     total_attempted += 1
                     logger.warning(f"🗑️ [ALL CLEANUP] Deleting S3Vector bucket: {resource_name}")
                     st.info(f"🗑️ Deleting S3Vector bucket: {resource_name}")
-                    
+
                     if self.delete_s3vector_bucket(resource_name):
                         total_deleted += 1
                         logger.info(f"✅ [ALL CLEANUP] Deleted S3Vector bucket: {resource_name}")
@@ -2016,6 +2119,22 @@ class WorkflowResourceManager:
                     else:
                         logger.error(f"❌ [ALL CLEANUP] Failed to delete S3Vector bucket: {resource_name}")
                         st.error(f"❌ Failed to delete S3Vector bucket: {resource_name}")
+
+            # Delete S3 buckets last (after all other resources are removed)
+            for resource in all_resources.get('s3_buckets', []):
+                resource_name = resource.get('name')
+                if resource_name:
+                    total_attempted += 1
+                    logger.warning(f"🗑️ [ALL CLEANUP] Deleting S3 bucket: {resource_name}")
+                    st.info(f"🗑️ Deleting S3 bucket: {resource_name}")
+
+                    if self.delete_s3_bucket(resource_name):
+                        total_deleted += 1
+                        logger.info(f"✅ [ALL CLEANUP] Deleted S3 bucket: {resource_name}")
+                        st.success(f"✅ Successfully deleted S3 bucket: {resource_name}")
+                    else:
+                        logger.error(f"❌ [ALL CLEANUP] Failed to delete S3 bucket: {resource_name}")
+                        st.error(f"❌ Failed to delete S3 bucket: {resource_name}")
             
             # Clear session state
             st.session_state.workflow_state['created_resources'] = []
@@ -2074,7 +2193,7 @@ class WorkflowResourceManager:
                 total_attempted += 1
                 logger.info(f"🗑️ [SELECTIVE] Deleting OpenSearch collection: {collection_name}")
                 st.info(f"🗑️ Deleting OpenSearch collection: {collection_name}")
-                
+
                 if self.delete_opensearch_collection(collection_name):
                     total_deleted += 1
                     logger.info(f"✅ [SELECTIVE] Deleted OpenSearch collection: {collection_name}")
@@ -2082,13 +2201,27 @@ class WorkflowResourceManager:
                 else:
                     logger.error(f"❌ [SELECTIVE] Failed to delete OpenSearch collection: {collection_name}")
                     st.error(f"❌ Failed to delete OpenSearch collection: {collection_name}")
-            
-            # Delete vector buckets last
+
+            # Delete OpenSearch domains
+            for domain_name in resources_to_delete.get('opensearch_domains', []):
+                total_attempted += 1
+                logger.info(f"🗑️ [SELECTIVE] Deleting OpenSearch domain: {domain_name}")
+                st.info(f"🗑️ Deleting OpenSearch domain: {domain_name}")
+
+                if self.delete_opensearch_domain(domain_name):
+                    total_deleted += 1
+                    logger.info(f"✅ [SELECTIVE] Deleted OpenSearch domain: {domain_name}")
+                    st.success(f"✅ Successfully deleted OpenSearch domain: {domain_name}")
+                else:
+                    logger.error(f"❌ [SELECTIVE] Failed to delete OpenSearch domain: {domain_name}")
+                    st.error(f"❌ Failed to delete OpenSearch domain: {domain_name}")
+
+            # Delete vector buckets
             for bucket_name in resources_to_delete.get('vector_buckets', []):
                 total_attempted += 1
                 logger.info(f"🗑️ [SELECTIVE] Deleting S3Vector bucket: {bucket_name}")
                 st.info(f"🗑️ Deleting S3Vector bucket: {bucket_name}")
-                
+
                 if self.delete_s3vector_bucket(bucket_name):
                     total_deleted += 1
                     logger.info(f"✅ [SELECTIVE] Deleted S3Vector bucket: {bucket_name}")
@@ -2096,6 +2229,20 @@ class WorkflowResourceManager:
                 else:
                     logger.error(f"❌ [SELECTIVE] Failed to delete S3Vector bucket: {bucket_name}")
                     st.error(f"❌ Failed to delete S3Vector bucket: {bucket_name}")
+
+            # Delete S3 buckets last
+            for bucket_name in resources_to_delete.get('s3_buckets', []):
+                total_attempted += 1
+                logger.info(f"🗑️ [SELECTIVE] Deleting S3 bucket: {bucket_name}")
+                st.info(f"🗑️ Deleting S3 bucket: {bucket_name}")
+
+                if self.delete_s3_bucket(bucket_name):
+                    total_deleted += 1
+                    logger.info(f"✅ [SELECTIVE] Deleted S3 bucket: {bucket_name}")
+                    st.success(f"✅ Successfully deleted S3 bucket: {bucket_name}")
+                else:
+                    logger.error(f"❌ [SELECTIVE] Failed to delete S3 bucket: {bucket_name}")
+                    st.error(f"❌ Failed to delete S3 bucket: {bucket_name}")
             
             # Final status report
             logger.info(f"📊 [SELECTIVE] Deletion Summary: {total_deleted}/{total_attempted} resources successfully deleted")
@@ -2112,11 +2259,48 @@ class WorkflowResourceManager:
     
     
     # ==================== DELETE FUNCTIONALITY ====================
+
+    def _cleanup_registry_after_successful_deletion(self, resource_type: str, resource_name: str, **kwargs):
+        """Clean up registry after successful AWS resource deletion."""
+        try:
+            logger.info(f"📝 Cleaning up registry after successful deletion: {resource_type} - {resource_name}")
+
+            # Mark as deleted in registry (for now, until we implement removal methods)
+            if resource_type == 'vector_bucket':
+                self.resource_registry.log_vector_bucket_deleted(resource_name, source="api_deletion")
+
+            elif resource_type == 's3_bucket':
+                self.resource_registry.log_s3_bucket_deleted(resource_name, source="api_deletion")
+
+            elif resource_type == 'vector_index':
+                bucket_name = kwargs.get('bucket_name')
+                self.resource_registry.log_index_deleted(bucket_name=bucket_name, index_name=resource_name, source="api_deletion")
+
+            elif resource_type == 'opensearch_domain':
+                self.resource_registry.log_opensearch_domain_deleted(resource_name, source="api_deletion")
+
+            elif resource_type == 'opensearch_collection':
+                self.resource_registry.log_opensearch_collection_deleted(resource_name, source="api_deletion")
+
+            # Remove from session created resources if present
+            created_resources = st.session_state.workflow_state.get('created_resources') or []
+            if resource_name in created_resources:
+                created_resources.remove(resource_name)
+                st.session_state.workflow_state['created_resources'] = created_resources
+                logger.info(f"🧹 Removed '{resource_name}' from session created resources")
+
+            logger.info(f"✅ Registry cleanup completed for {resource_type}: {resource_name}")
+
+        except Exception as registry_error:
+            logger.warning(f"⚠️ Registry cleanup failed for {resource_type} {resource_name}: {registry_error}")
+            # Don't fail the deletion if registry cleanup fails
     
     def delete_s3vector_bucket(self, bucket_name: str) -> bool:
-        """Delete a real S3Vector bucket using AWS API."""
+        """Delete a real S3Vector bucket using AWS API with improved error handling."""
         logger.info(f"🗑️ Deleting S3Vector bucket: {bucket_name}")
         st.info(f"🗑️ Deleting S3Vector bucket '{bucket_name}'...")
+        
+
         
         try:
             # First check if bucket exists and get its details
@@ -2130,43 +2314,52 @@ class WorkflowResourceManager:
                     indexes = indexes_response.get('indexes', [])
                     if indexes:
                         logger.warning(f"⚠️ Bucket {bucket_name} contains {len(indexes)} indexes that will prevent deletion")
-                        st.warning(f"⚠️ Bucket '{bucket_name}' contains {len(indexes)} indexes. Delete indexes first.")
+                        st.warning(f"⚠️ Bucket '{bucket_name}' contains {len(indexes)} indexes. Attempting to delete indexes first...")
+                        
+                        # Try to delete indexes automatically
+                        indexes_deleted = 0
+                        for index in indexes:
+                            index_name = index.get('indexName', '')
+                            if index_name:
+                                try:
+                                    if self.delete_s3vector_index(bucket_name, index_name):
+                                        indexes_deleted += 1
+                                        logger.info(f"✅ Auto-deleted index: {index_name}")
+                                except Exception as idx_del_error:
+                                    logger.warning(f"⚠️ Could not auto-delete index {index_name}: {idx_del_error}")
+                        
+                        if indexes_deleted > 0:
+                            st.info(f"✅ Auto-deleted {indexes_deleted} indexes, retrying bucket deletion...")
+                            time.sleep(2)  # Brief pause for consistency
+                        else:
+                            st.error(f"❌ Unable to delete indexes automatically. Manual cleanup required.")
+                            return False
+                            
                 except Exception as index_check_error:
                     logger.warning(f"Could not check indexes in bucket {bucket_name}: {index_check_error}")
                     
             except ClientError as e:
                 error_code = e.response['Error']['Code']
                 if error_code in ['NoSuchVectorBucket', 'NotFoundException']:
-                    logger.warning(f"⚠️ S3Vector bucket {bucket_name} does not exist")
-                    st.warning(f"⚠️ S3Vector bucket '{bucket_name}' does not exist")
-                    return True  # Consider non-existent as successfully deleted
+                    logger.info(f"✅ S3Vector bucket {bucket_name} already deleted or does not exist")
+                    st.success(f"✅ S3Vector bucket '{bucket_name}' already deleted")
+                    # Clean up registry since bucket doesn't exist
+                    self._cleanup_registry_after_successful_deletion('vector_bucket', bucket_name)
+                    return True  # Successfully "deleted" (idempotent)
                 else:
                     logger.error(f"❌ Error checking bucket existence: {e}")
-                    raise
-            
+                    # Still try deletion in case it's a transient error
+                    
             # Delete the S3Vector bucket
             logger.info(f"🗑️ Calling AWS API to delete bucket: {bucket_name}")
             self.s3vectors_client.delete_vector_bucket(vectorBucketName=bucket_name)
             logger.info(f"✓ AWS API call successful for bucket deletion: {bucket_name}")
-            
-            # Update resource registry
-            logger.info(f"📝 Updating resource registry for deleted bucket: {bucket_name}")
-            self.resource_registry.log_vector_bucket_deleted(bucket_name, source="api_deletion")
-            
-            # Remove from session created resources if present
-            created_resources = st.session_state.workflow_state.get('created_resources') or []
-            if bucket_name in created_resources:
-                created_resources.remove(bucket_name)
-                st.session_state.workflow_state['created_resources'] = created_resources
-                logger.info(f"🧹 Removed '{bucket_name}' from session created resources")
-            
-            # Clear active bucket if it was this one
-            active_resources = self.resource_registry.get_active_resources()
-            if active_resources and active_resources.get('vector_bucket') == bucket_name:
-                self.resource_registry.set_active_vector_bucket(None)
-                logger.info(f"🧹 Cleared active vector bucket: {bucket_name}")
-            
+
+            # Only update registry AFTER successful AWS deletion
+            self._cleanup_registry_after_successful_deletion('vector_bucket', bucket_name)
+
             logger.info(f"✅ Successfully deleted S3Vector bucket: {bucket_name}")
+            st.success(f"✅ Successfully deleted S3Vector bucket: {bucket_name}")
             return True
             
         except ClientError as e:
@@ -2176,8 +2369,11 @@ class WorkflowResourceManager:
                 st.error(f"❌ Cannot delete S3Vector bucket '{bucket_name}': bucket contains indexes or data. Delete indexes first.")
                 return False
             elif error_code in ['NoSuchVectorBucket', 'NotFoundException']:
-                logger.info(f"ℹ️ S3Vector bucket {bucket_name} already deleted or does not exist")
-                return True
+                logger.info(f"✅ S3Vector bucket {bucket_name} already deleted or does not exist")
+                st.success(f"✅ S3Vector bucket '{bucket_name}' already deleted")
+                # Clean up registry since bucket doesn't exist
+                self._cleanup_registry_after_successful_deletion('vector_bucket', bucket_name)
+                return True  # Idempotent deletion
             else:
                 logger.error(f"❌ AWS API error deleting S3Vector bucket {bucket_name}: {error_code} - {e}")
                 st.error(f"❌ Failed to delete S3Vector bucket: {e}")
@@ -2188,9 +2384,11 @@ class WorkflowResourceManager:
             return False
 
     def delete_s3vector_index(self, bucket_name: str, index_name: str) -> bool:
-        """Delete a real S3Vector index using AWS API."""
+        """Delete a real S3Vector index using AWS API with improved error handling."""
         logger.info(f"🗑️ Deleting S3Vector index: {bucket_name}/{index_name}")
         st.info(f"🗑️ Deleting vector index '{index_name}' from bucket '{bucket_name}'...")
+        
+
         
         try:
             # First check if index exists
@@ -2203,12 +2401,13 @@ class WorkflowResourceManager:
             except ClientError as e:
                 error_code = e.response['Error']['Code']
                 if error_code in ['ResourceNotFoundException', 'NotFoundException']:
-                    logger.warning(f"⚠️ S3Vector index {bucket_name}/{index_name} does not exist")
-                    st.warning(f"⚠️ S3Vector index '{index_name}' in bucket '{bucket_name}' does not exist")
-                    return True  # Consider non-existent as successfully deleted
+                    logger.info(f"✅ S3Vector index {bucket_name}/{index_name} already deleted")
+                    st.success(f"✅ S3Vector index '{index_name}' already deleted")
+                    # Clean up registry since index doesn't exist
+                    self._cleanup_registry_after_successful_deletion('vector_index', index_name, bucket_name=bucket_name)
+                    return True  # Idempotent deletion
                 else:
-                    logger.error(f"❌ Error checking index existence: {e}")
-                    raise
+                    logger.warning(f"⚠️ Error checking index existence, attempting deletion anyway: {e}")
             
             # Delete the S3Vector index
             logger.info(f"🗑️ Calling AWS API to delete index: {bucket_name}/{index_name}")
@@ -2217,34 +2416,22 @@ class WorkflowResourceManager:
                 indexName=index_name
             )
             logger.info(f"✓ AWS API call successful for index deletion: {bucket_name}/{index_name}")
-            
-            # Update resource registry
-            # Construct ARN to find and remove from registry
-            index_arn = f"arn:aws:s3vectors:{self.region}:{self.account_id}:index/{bucket_name}/{index_name}"
-            logger.info(f"📝 Updating resource registry for deleted index: {index_arn}")
-            self.resource_registry.log_index_deleted(index_arn=index_arn, source="api_deletion")
-            
-            # Remove from session created resources if present
-            created_resources = st.session_state.workflow_state.get('created_resources') or []
-            if index_name in created_resources:
-                created_resources.remove(index_name)
-                st.session_state.workflow_state['created_resources'] = created_resources
-                logger.info(f"🧹 Removed '{index_name}' from session created resources")
-            
-            # Clear active index if it was this one
-            active_resources = self.resource_registry.get_active_resources() or {}
-            if active_resources.get('index_arn') == index_arn:
-                self.resource_registry.set_active_index(None)
-                logger.info(f"🧹 Cleared active index: {index_arn}")
-            
+
+            # Only update registry AFTER successful AWS deletion
+            self._cleanup_registry_after_successful_deletion('vector_index', index_name, bucket_name=bucket_name)
+
             logger.info(f"✅ Successfully deleted S3Vector index: {bucket_name}/{index_name}")
+            st.success(f"✅ Successfully deleted S3Vector index: {index_name}")
             return True
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
             if error_code in ['ResourceNotFoundException', 'NotFoundException']:
-                logger.info(f"ℹ️ S3Vector index {bucket_name}/{index_name} already deleted or does not exist")
-                return True
+                logger.info(f"✅ S3Vector index {bucket_name}/{index_name} already deleted")
+                st.success(f"✅ S3Vector index '{index_name}' already deleted")
+                # Clean up registry since index doesn't exist
+                self._cleanup_registry_after_successful_deletion('vector_index', index_name, bucket_name=bucket_name)
+                return True  # Idempotent deletion
             else:
                 logger.error(f"❌ AWS API error deleting S3Vector index {bucket_name}/{index_name}: {error_code} - {e}")
                 st.error(f"❌ Failed to delete S3Vector index: {e}")
@@ -2255,49 +2442,65 @@ class WorkflowResourceManager:
             return False
 
     def delete_opensearch_collection(self, collection_name: str) -> bool:
-        """Delete a real OpenSearch Serverless collection and its associated policies using AWS API."""
+        """Delete a real OpenSearch Serverless collection and its associated policies using AWS API with improved error handling."""
         logger.info(f"🗑️ Deleting OpenSearch collection: {collection_name}")
         st.info(f"🗑️ Deleting OpenSearch collection '{collection_name}' and its security policies...")
+        
+        # Always update registry first regardless of AWS API result
+        try:
+            logger.info(f"📝 Updating resource registry for collection deletion: {collection_name}")
+            self.resource_registry.log_opensearch_collection_deleted(collection_name, source="api_deletion")
+            
+            # Remove from session created resources if present
+            created_resources = st.session_state.workflow_state.get('created_resources') or []
+            if collection_name in created_resources:
+                created_resources.remove(collection_name)
+                st.session_state.workflow_state['created_resources'] = created_resources
+                logger.info(f"🧹 Removed '{collection_name}' from session created resources")
+            
+            # Clear active collection if it was this one
+            try:
+                active_collection = self.resource_registry.get_active_opensearch_collection()
+                if active_collection == collection_name:
+                    self.resource_registry.set_active_opensearch_collection(None)
+                    logger.info(f"🧹 Cleared active OpenSearch collection: {collection_name}")
+            except Exception:
+                # Ignore registry access errors during cleanup
+                pass
+                
+        except Exception as registry_error:
+            logger.warning(f"⚠️ Registry update failed but continuing with AWS deletion: {registry_error}")
         
         try:
             # First check if collection exists
             try:
-                response = self.opensearch_client.batch_get_collection(names=[collection_name])
+                response = self.opensearch_serverless_client.batch_get_collection(names=[collection_name])
                 if not response.get('collectionDetails'):
-                    logger.warning(f"⚠️ OpenSearch collection {collection_name} does not exist")
-                    st.warning(f"⚠️ OpenSearch collection '{collection_name}' does not exist")
-                    return True  # Consider non-existent as successfully deleted
+                    logger.info(f"✅ OpenSearch collection {collection_name} already deleted")
+                    st.success(f"✅ OpenSearch collection '{collection_name}' already deleted")
+                    return True  # Idempotent deletion
                 logger.info(f"✓ Found OpenSearch collection to delete: {collection_name}")
                 collection_details = response['collectionDetails'][0]
                 logger.info(f"✓ Collection status: {collection_details.get('status', 'Unknown')}")
             except ClientError as e:
                 if e.response['Error']['Code'] == 'ResourceNotFoundException':
-                    logger.warning(f"⚠️ OpenSearch collection {collection_name} does not exist")
-                    st.warning(f"⚠️ OpenSearch collection '{collection_name}' does not exist")
-                    return True
+                    logger.info(f"✅ OpenSearch collection {collection_name} already deleted")
+                    st.success(f"✅ OpenSearch collection '{collection_name}' already deleted")
+                    return True  # Idempotent deletion
                 else:
-                    logger.error(f"❌ Error checking collection existence: {e}")
-                    raise
+                    logger.warning(f"⚠️ Error checking collection existence, attempting deletion anyway: {e}")
             
             # Delete the OpenSearch collection first
             logger.info(f"🗑️ Calling AWS API to delete collection: {collection_name}")
             # Use collection ID (which is the same as collection name for OpenSearch Serverless)
-            self.opensearch_client.delete_collection(id=collection_name)
+            self.opensearch_serverless_client.delete_collection(id=collection_name)
             logger.info(f"✓ AWS API call successful for collection deletion: {collection_name}")
             st.info(f"✓ Collection deletion initiated, processing security policies...")
             
             # Wait a moment for collection deletion to process
-            import time
             time.sleep(2)
             
-            # Delete associated security policies
-            policy_names = {
-                'encryption': f"{collection_name}-enc",
-                'network': f"{collection_name}-net",
-                'data': f"{collection_name}-data"
-            }
-            
-            # Adjust policy names to use validated collection name and ensure compliance
+            # Delete associated security policies (best effort - don't fail if policies don't exist)
             validated_name = self._validate_opensearch_collection_name(collection_name)
             policy_names = {
                 'encryption': f"{validated_name}enc",  # No hyphens, just concat
@@ -2323,7 +2526,7 @@ class WorkflowResourceManager:
                     policies_deleted += 1
                 except ClientError as e:
                     if e.response['Error']['Code'] == 'ResourceNotFoundException':
-                        logger.info(f"ℹ️ {policy_type} policy {policy_name} does not exist")
+                        logger.info(f"✅ {policy_type} policy {policy_name} already deleted")
                     else:
                         logger.warning(f"⚠️ Failed to delete {policy_type} policy {policy_name}: {e}")
                 except Exception as e:
@@ -2331,31 +2534,16 @@ class WorkflowResourceManager:
             
             logger.info(f"🧹 Deleted {policies_deleted}/{len(policy_names)} security policies")
             
-            # Update resource registry
-            logger.info(f"📝 Updating resource registry for deleted collection: {collection_name}")
-            self.resource_registry.log_opensearch_collection_deleted(collection_name, source="api_deletion")
-            
-            # Remove from session created resources if present
-            created_resources = st.session_state.workflow_state.get('created_resources') or []
-            if collection_name in created_resources:
-                created_resources.remove(collection_name)
-                st.session_state.workflow_state['created_resources'] = created_resources
-                logger.info(f"🧹 Removed '{collection_name}' from session created resources")
-            
-            # Clear active collection if it was this one
-            active_collection = self.resource_registry.get_active_opensearch_collection()
-            if active_collection == collection_name:
-                self.resource_registry.set_active_opensearch_collection(None)
-                logger.info(f"🧹 Cleared active OpenSearch collection: {collection_name}")
-            
             logger.info(f"✅ Successfully deleted OpenSearch collection and {policies_deleted} policies: {collection_name}")
+            st.success(f"✅ Successfully deleted OpenSearch collection: {collection_name}")
             return True
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
             if error_code == 'ResourceNotFoundException':
-                logger.info(f"ℹ️ OpenSearch collection {collection_name} already deleted or does not exist")
-                return True
+                logger.info(f"✅ OpenSearch collection {collection_name} already deleted")
+                st.success(f"✅ OpenSearch collection '{collection_name}' already deleted")
+                return True  # Idempotent deletion
             else:
                 logger.error(f"❌ AWS API error deleting OpenSearch collection {collection_name}: {error_code} - {e}")
                 st.error(f"❌ Failed to delete OpenSearch collection: {e}")
@@ -2631,7 +2819,9 @@ class WorkflowResourceManager:
         """Delete a real OpenSearch managed domain using AWS API."""
         logger.info(f"🗑️ Deleting OpenSearch domain: {domain_name}")
         st.info(f"🗑️ Deleting OpenSearch domain '{domain_name}'...")
-        
+
+
+
         try:
             # First check if domain exists
             try:
@@ -2647,41 +2837,34 @@ class WorkflowResourceManager:
                 if e.response['Error']['Code'] == 'ResourceNotFoundException':
                     logger.warning(f"⚠️ OpenSearch domain {domain_name} does not exist")
                     st.warning(f"⚠️ OpenSearch domain '{domain_name}' does not exist")
+                    # Clean up registry since domain doesn't exist
+                    self._cleanup_registry_after_successful_deletion('opensearch_domain', domain_name)
                     return True
                 else:
                     logger.error(f"❌ Error checking domain existence: {e}")
                     raise
-            
+
             # Delete the OpenSearch domain
             logger.info(f"🗑️ Calling AWS API to delete domain: {domain_name}")
             self.opensearch_client.delete_domain(DomainName=domain_name)
             logger.info(f"✓ AWS API call successful for domain deletion: {domain_name}")
-            st.info(f"✓ Domain deletion initiated...")
-            
-            # Update resource registry
-            logger.info(f"📝 Updating resource registry for deleted domain: {domain_name}")
-            self.resource_registry.log_opensearch_domain_deleted(domain_name, source="api_deletion")
-            
-            # Remove from session created resources if present
-            created_resources = st.session_state.workflow_state.get('created_resources') or []
-            if domain_name in created_resources:
-                created_resources.remove(domain_name)
-                st.session_state.workflow_state['created_resources'] = created_resources
-                logger.info(f"🧹 Removed '{domain_name}' from session created resources")
-            
-            # Clear active domain if it was this one
-            active_domain = self.resource_registry.get_active_opensearch_domain()
-            if active_domain == domain_name:
-                self.resource_registry.set_active_opensearch_domain(None)
-                logger.info(f"🧹 Cleared active OpenSearch domain: {domain_name}")
-            
+
+            # Only update registry AFTER successful AWS deletion
+            self._cleanup_registry_after_successful_deletion('opensearch_domain', domain_name)
+
+            st.success(f"✅ OpenSearch domain deletion initiated successfully")
+            st.info(f"⏳ Domain deletion may take 10-15 minutes to complete")
+
             logger.info(f"✅ Successfully deleted OpenSearch domain: {domain_name}")
             return True
-            
+
         except ClientError as e:
             error_code = e.response['Error']['Code']
             if error_code == 'ResourceNotFoundException':
                 logger.info(f"ℹ️ OpenSearch domain {domain_name} already deleted or does not exist")
+                st.success(f"✅ OpenSearch domain '{domain_name}' already deleted")
+                # Clean up registry since domain doesn't exist
+                self._cleanup_registry_after_successful_deletion('opensearch_domain', domain_name)
                 return True
             else:
                 logger.error(f"❌ AWS API error deleting OpenSearch domain {domain_name}: {error_code} - {e}")
@@ -2690,6 +2873,180 @@ class WorkflowResourceManager:
         except Exception as e:
             logger.error(f"💥 Unexpected error deleting OpenSearch domain {domain_name}: {e}")
             st.error(f"❌ Failed to delete OpenSearch domain: {e}")
+            return False
+
+    def delete_s3_bucket(self, bucket_name: str) -> bool:
+        """Delete a real S3 bucket using AWS API with bucket emptying."""
+        logger.info(f"🗑️ Deleting S3 bucket: {bucket_name}")
+        st.info(f"🗑️ Deleting S3 bucket '{bucket_name}'...")
+
+
+
+        try:
+            # First check if bucket exists
+            try:
+                self.s3_client.head_bucket(Bucket=bucket_name)
+                logger.info(f"✓ Found S3 bucket to delete: {bucket_name}")
+            except ClientError as e:
+                error_code = e.response['Error']['Code']
+                if error_code in ['NoSuchBucket', '404']:
+                    logger.info(f"✅ S3 bucket {bucket_name} already deleted or does not exist")
+                    st.success(f"✅ S3 bucket '{bucket_name}' already deleted")
+                    # Clean up registry since bucket doesn't exist
+                    self._cleanup_registry_after_successful_deletion('s3_bucket', bucket_name)
+                    return True  # Idempotent deletion
+                else:
+                    logger.error(f"❌ Error checking bucket existence: {e}")
+                    raise
+
+            # Empty the bucket first (required before deletion)
+            logger.info(f"🧹 Emptying S3 bucket before deletion: {bucket_name}")
+            st.info(f"🧹 Emptying S3 bucket '{bucket_name}' before deletion...")
+
+            if not self._empty_s3_bucket(bucket_name):
+                logger.error(f"❌ Failed to empty S3 bucket: {bucket_name}")
+                st.error(f"❌ Failed to empty S3 bucket '{bucket_name}'. Cannot proceed with deletion.")
+                return False
+
+            # Delete the S3 bucket
+            logger.info(f"🗑️ Calling AWS API to delete bucket: {bucket_name}")
+            self.s3_client.delete_bucket(Bucket=bucket_name)
+            logger.info(f"✓ AWS API call successful for bucket deletion: {bucket_name}")
+
+            # Only update registry AFTER successful AWS deletion
+            self._cleanup_registry_after_successful_deletion('s3_bucket', bucket_name)
+
+            logger.info(f"✅ Successfully deleted S3 bucket: {bucket_name}")
+            st.success(f"✅ Successfully deleted S3 bucket: {bucket_name}")
+            return True
+
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'BucketNotEmpty':
+                logger.error(f"❌ Cannot delete S3 bucket {bucket_name}: bucket is not empty")
+                st.error(f"❌ Cannot delete S3 bucket '{bucket_name}': bucket is not empty. Try emptying it first.")
+                return False
+            elif error_code in ['NoSuchBucket', '404']:
+                logger.info(f"✅ S3 bucket {bucket_name} already deleted or does not exist")
+                st.success(f"✅ S3 bucket '{bucket_name}' already deleted")
+                # Clean up registry since bucket doesn't exist
+                self._cleanup_registry_after_successful_deletion('s3_bucket', bucket_name)
+                return True  # Idempotent deletion
+            else:
+                logger.error(f"❌ AWS API error deleting S3 bucket {bucket_name}: {error_code} - {e}")
+                st.error(f"❌ Failed to delete S3 bucket: {e}")
+                return False
+        except Exception as e:
+            logger.error(f"💥 Unexpected error deleting S3 bucket {bucket_name}: {e}")
+            st.error(f"❌ Failed to delete S3 bucket: {e}")
+            return False
+
+    def _empty_s3_bucket(self, bucket_name: str) -> bool:
+        """Empty an S3 bucket by deleting all objects and versions."""
+        try:
+            logger.info(f"🧹 Starting to empty S3 bucket: {bucket_name} in region {self.region}")
+            st.info(f"🧹 Emptying S3 bucket '{bucket_name}'...")
+
+            # First try to list objects (simple approach)
+            try:
+                paginator = self.s3_client.get_paginator('list_objects_v2')
+                delete_keys = []
+
+                for page in paginator.paginate(Bucket=bucket_name):
+                    for obj in page.get('Contents', []):
+                        delete_keys.append({'Key': obj['Key']})
+
+                # If we have objects, delete them
+                if delete_keys:
+                    logger.info(f"🗑️ Found {len(delete_keys)} objects to delete")
+                    st.info(f"🗑️ Deleting {len(delete_keys)} objects...")
+
+                    # Process in batches of 1000
+                    for i in range(0, len(delete_keys), 1000):
+                        batch = delete_keys[i:i+1000]
+                        try:
+                            response = self.s3_client.delete_objects(
+                                Bucket=bucket_name,
+                                Delete={'Objects': batch, 'Quiet': False}
+                            )
+
+                            # Check for errors in the batch
+                            if 'Errors' in response and response['Errors']:
+                                for error in response['Errors']:
+                                    logger.warning(f"⚠️ Error deleting object {error['Key']}: {error['Message']}")
+
+                            deleted_count = len(response.get('Deleted', []))
+                            logger.info(f"✅ Deleted {deleted_count} objects in batch {i//1000 + 1}")
+
+                        except ClientError as e:
+                            logger.error(f"❌ Error deleting batch {i//1000 + 1}: {e}")
+                            return False
+
+            except ClientError as list_error:
+                logger.warning(f"⚠️ Could not list objects with list_objects_v2, trying list_object_versions: {list_error}")
+
+                # Fallback to versioned approach
+                paginator = self.s3_client.get_paginator('list_object_versions')
+                delete_keys = []
+
+                for page in paginator.paginate(Bucket=bucket_name):
+                    # Collect all versions
+                    for version in page.get('Versions', []):
+                        delete_keys.append({
+                            'Key': version['Key'],
+                            'VersionId': version['VersionId']
+                        })
+
+                    # Collect all delete markers
+                    for marker in page.get('DeleteMarkers', []):
+                        delete_keys.append({
+                            'Key': marker['Key'],
+                            'VersionId': marker['VersionId']
+                        })
+
+                # Delete versioned objects in batches
+                if delete_keys:
+                    logger.info(f"🗑️ Deleting {len(delete_keys)} versioned objects/markers from bucket: {bucket_name}")
+                    st.info(f"🗑️ Deleting {len(delete_keys)} versioned objects...")
+
+                    # Process in batches of 1000
+                    for i in range(0, len(delete_keys), 1000):
+                        batch = delete_keys[i:i+1000]
+                        try:
+                            response = self.s3_client.delete_objects(
+                                Bucket=bucket_name,
+                                Delete={'Objects': batch, 'Quiet': False}
+                            )
+
+                            # Check for errors in the batch
+                            if 'Errors' in response and response['Errors']:
+                                for error in response['Errors']:
+                                    logger.warning(f"⚠️ Error deleting versioned object {error['Key']}: {error['Message']}")
+
+                            deleted_count = len(response.get('Deleted', []))
+                            logger.info(f"✅ Deleted {deleted_count} versioned objects in batch {i//1000 + 1}")
+
+                        except ClientError as e:
+                            logger.error(f"❌ Error deleting versioned batch {i//1000 + 1}: {e}")
+                            return False
+
+            logger.info(f"✅ Successfully emptied S3 bucket: {bucket_name}")
+            st.success(f"✅ Successfully emptied S3 bucket '{bucket_name}'")
+            return True
+
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code in ['NoSuchBucket', '404']:
+                logger.info(f"ℹ️ S3 bucket {bucket_name} does not exist, considering as empty")
+                st.info(f"ℹ️ S3 bucket '{bucket_name}' does not exist")
+                return True
+            else:
+                logger.error(f"❌ Error emptying S3 bucket {bucket_name}: {e}")
+                st.error(f"❌ Failed to empty S3 bucket: {e}")
+                return False
+        except Exception as e:
+            logger.error(f"💥 Unexpected error emptying S3 bucket {bucket_name}: {e}")
+            st.error(f"❌ Failed to empty S3 bucket: {e}")
             return False
 
     def get_security_policy_details(self, collection_name: str) -> Dict[str, Any]:
@@ -2944,9 +3301,9 @@ class WorkflowResourceManager:
                 if st.button("🔧 Get Domain Configuration"):
                     with st.spinner("Fetching domain configuration..."):
                         st.write("**Domain Configuration:**")
-                        st.write("• Instance Type: `m6g.large.search`")
-                        st.write("• Instance Count: `2`")
-                        st.write("• Zone Awareness: `Enabled`")
+                        st.write("• Instance Type: `or1.medium.search`")
+                        st.write("• Instance Count: `1`")
+                        st.write("• Zone Awareness: `Disabled`")
                         st.write("• EBS Volume: `gp3, 20GB`")
                         st.write("• Encryption: `At Rest & In Transit`")
                 

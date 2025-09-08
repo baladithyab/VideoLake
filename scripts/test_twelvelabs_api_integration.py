@@ -82,22 +82,22 @@ def test_enhanced_pipeline_integration():
     print("\n🎬 Testing Enhanced Video Pipeline Integration...")
     
     try:
-        from src.services.unified_video_processing_service import UnifiedVideoProcessingService
+        from src.services.comprehensive_video_processing_service import ComprehensiveVideoProcessingService
         TWELVELABS_API_AVAILABLE = True  # Assume available for this test
         
         print(f"✅ TwelveLabs API available: {TWELVELABS_API_AVAILABLE}")
         
         # Initialize pipeline
-        pipeline = UnifiedVideoProcessingService()
+        pipeline = ComprehensiveVideoProcessingService()
         
         print(f"✅ Pipeline initialized")
-        print(f"   TwelveLabs service: {bool(pipeline.twelvelabs_service)}")
-        print(f"   TwelveLabs API service: {bool(pipeline.twelvelabs_api_service)}")
+        print(f"   Bedrock service: {bool(pipeline.bedrock_service)}")
+        print(f"   TwelveLabs API service: {bool(pipeline.twelvelabs_api)}")
         print(f"   S3Vector service: {bool(pipeline.storage_manager)}")
         
         # Test method availability
-        has_api_method = hasattr(pipeline, 'process_video_with_twelvelabs_api')
-        print(f"   API processing method: {has_api_method}")
+        has_api_method = hasattr(pipeline, 'process_video_from_url')
+        print(f"   Video processing method: {has_api_method}")
         
         return True
         

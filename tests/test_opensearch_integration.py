@@ -135,7 +135,7 @@ class TestOpenSearchIntegrationManager:
         domain_config = {
             'DomainName': 'test-domain',
             'EngineVersion': 'OpenSearch_2.19',
-            'ClusterConfig': {'InstanceType': 'm6g.large.search.optimized'},
+            'ClusterConfig': {'InstanceType': 'or1.medium.search'},
             'Processing': False,
             'ARN': 'arn:aws:es:us-east-1:123456789012:domain/test-domain'
         }
@@ -320,7 +320,7 @@ class TestOpenSearchIntegrationManager:
         # Test valid domain configuration
         valid_config = {
             'EngineVersion': 'OpenSearch_2.19',
-            'ClusterConfig': {'InstanceType': 'm6g.large.optimized'}
+            'ClusterConfig': {'InstanceType': 'or1.medium.search'}
         }
         
         # Should not raise exception
@@ -329,7 +329,7 @@ class TestOpenSearchIntegrationManager:
         # Test invalid version
         invalid_config = {
             'EngineVersion': 'OpenSearch_2.15',
-            'ClusterConfig': {'InstanceType': 'm6g.large.optimized'}
+            'ClusterConfig': {'InstanceType': 'or1.medium.search'}
         }
         
         with pytest.raises(OpenSearchIntegrationError, match="S3 vectors requires OpenSearch 2.19"):
@@ -524,7 +524,7 @@ class TestOpenSearchIntegrationReal:
         realistic_domain_config = {
             'EngineVersion': 'OpenSearch_2.19',
             'ClusterConfig': {
-                'InstanceType': 'm6g.large.search'  # Standard instance, not optimized
+                'InstanceType': 'or1.medium.search'  # OR1 instance for S3 Vectors
             },
             'Processing': False
         }
@@ -536,7 +536,7 @@ class TestOpenSearchIntegrationReal:
         old_version_config = {
             'EngineVersion': 'OpenSearch_2.15',
             'ClusterConfig': {
-                'InstanceType': 'm6g.large.search'
+                'InstanceType': 'or1.medium.search'
             }
         }
         

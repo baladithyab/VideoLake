@@ -91,8 +91,8 @@ class ServiceLocator:
             logger.warning(f"Could not initialize S3 vector storage: {str(e)}")
             
         try:
-            from src.services.unified_video_processing_service import UnifiedVideoProcessingService
-            video_storage = UnifiedVideoProcessingService()
+            from src.services.comprehensive_video_processing_service import ComprehensiveVideoProcessingService
+            video_storage = ComprehensiveVideoProcessingService()
             self.register_service('video_storage', video_storage)
         except Exception as e:
             logger.warning(f"Could not initialize video storage: {str(e)}")

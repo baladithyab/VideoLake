@@ -104,14 +104,14 @@ def test_backend_service_logging():
     except Exception as e:
         print(f"❌ S3Vector storage manager test failed: {e}")
     
-    # Test unified video processing service logging
+    # Test comprehensive video processing service logging
     try:
-        from src.services.unified_video_processing_service import UnifiedVideoProcessingService
-        print("🎬 Testing unified video processing service...")
-        video_service = UnifiedVideoProcessingService()
-        print("✅ Unified video processing service initialized")
+        from src.services.comprehensive_video_processing_service import ComprehensiveVideoProcessingService
+        print("🎬 Testing comprehensive video processing service...")
+        video_service = ComprehensiveVideoProcessingService()
+        print("✅ Comprehensive video processing service initialized")
     except Exception as e:
-        print(f"❌ Unified video processing service test failed: {e}")
+        print(f"❌ Comprehensive video processing service test failed: {e}")
     
     print("✅ Backend service logging tests completed")
     return True
@@ -342,8 +342,8 @@ def generate_logging_report():
         ],
         "visibility_coverage": {
             "backend_services": {
-                "unified_video_processing_service.py": "✅ Complete flow logging",
-                "s3_vector_storage.py": "✅ AWS API call logging", 
+                "comprehensive_video_processing_service.py": "✅ Complete flow logging",
+                "s3_vector_storage.py": "✅ AWS API call logging",
                 "opensearch_integration.py": "✅ Integration pattern logging",
                 "similarity_search_engine.py": "✅ Search operation logging",
                 "aws_clients.py": "✅ Client creation and configuration",
@@ -427,20 +427,20 @@ def main():
         print("\n📄 Sample log output format:")
         sample_log = {
             "timestamp": "2024-12-05T06:45:23.456Z",
-            "level": "INFO", 
-            "logger": "src.services.unified_video_processing_service",
+            "level": "INFO",
+            "logger": "src.services.comprehensive_video_processing_service",
             "message": "Operation: video_processing_start",
-            "module": "unified_video_processing_service",
-            "function": "process_video",
+            "module": "comprehensive_video_processing_service",
+            "function": "process_video_from_url",
             "line": 142,
             "thread_id": 12345,
             "thread_name": "MainThread",
             "operation": "video_processing_start",
-            "component": "unified_video_processing_service",
+            "component": "comprehensive_video_processing_service",
             "video_operation": "process_video_start",
             "job_id": "job_20241205_064523_abc123",
             "video_s3_uri": "s3://production-bucket/sample.mp4",
-            "processing_mode": "parallel",
+            "processing_mode": "bedrock_primary",
             "vector_types": 3,
             "storage_patterns": 1
         }

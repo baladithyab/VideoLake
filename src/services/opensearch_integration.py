@@ -1042,14 +1042,14 @@ s3-vectors-pipeline:
                 f"S3 vectors requires OpenSearch 2.19 or later, found: {engine_version}"
             )
         
-        # Check instance types (should be Optimized instances)
+        # Check instance types (should be OR1 instances for S3 Vectors engine)
         instance_type = domain_config.get('ClusterConfig', {}).get('InstanceType', '')
-        if not any(opt in instance_type for opt in ['.optimized', '.opt']):
+        if not instance_type.startswith('or1.'):
             self.logger.log_operation(
-                "suboptimal_instance_type_warning",
+                "incorrect_instance_type_warning",
                 level="WARNING",
                 instance_type=instance_type,
-                recommendation="Use OpenSearch Optimized instances for best S3 vectors performance"
+                recommendation="Use OR1 instance types (or1.medium.search, or1.large.search, etc.) for S3 Vectors engine"
             )
 
     def _wait_for_domain_update(self, domain_name: str, timeout_minutes: int = 30) -> None:

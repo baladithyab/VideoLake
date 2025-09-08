@@ -36,7 +36,7 @@ from src.services.interfaces.search_service_interface import (
 )
 from src.services.interfaces.service_registry import get_global_service, ServiceNames
 from src.services.embedding_storage_integration import EmbeddingStorageIntegration
-from src.services.unified_video_processing_service import UnifiedVideoProcessingService
+from src.services.comprehensive_video_processing_service import ComprehensiveVideoProcessingService
 from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
@@ -198,7 +198,7 @@ class SimilaritySearchEngine(ISearchService):
                  twelvelabs_service: Optional[TwelveLabsVideoProcessingService] = None,
                  s3_vector_manager: Optional[S3VectorStorageManager] = None,
                  text_storage: Optional[EmbeddingStorageIntegration] = None,
-                 video_storage: Optional[UnifiedVideoProcessingService] = None):
+                 video_storage: Optional[ComprehensiveVideoProcessingService] = None):
         """
         Initialize the similarity search engine.
         
@@ -206,14 +206,14 @@ class SimilaritySearchEngine(ISearchService):
             bedrock_service: Bedrock embedding service (for Titan text embeddings)
             twelvelabs_service: TwelveLabs service (for Marengo embeddings)
             s3_vector_manager: S3 Vector storage manager
-            text_storage: Text embedding storage service  
+            text_storage: Text embedding storage service
             video_storage: Video embedding storage service
         """
         self.bedrock_service = bedrock_service or BedrockEmbeddingService()
         self.twelvelabs_service = twelvelabs_service or TwelveLabsVideoProcessingService()
         self.s3_vector_manager = s3_vector_manager or S3VectorStorageManager()
         self.text_storage = text_storage or EmbeddingStorageIntegration()
-        self.video_storage = video_storage or UnifiedVideoProcessingService()
+        self.video_storage = video_storage or ComprehensiveVideoProcessingService()
         
         # Performance tracking with thread safety
         self._stats_lock = Lock()

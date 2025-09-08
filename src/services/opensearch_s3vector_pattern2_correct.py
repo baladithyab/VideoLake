@@ -39,8 +39,8 @@ class S3VectorDomainConfig:
     """Configuration for OpenSearch domain with S3 Vector engine."""
     domain_name: str
     s3_vector_bucket_arn: str
-    instance_type: str = "m6g.large.search"
-    instance_count: int = 2
+    instance_type: str = "or1.medium.search"  # OR1 instances required for S3 Vectors engine
+    instance_count: int = 1  # Start with single instance for cost efficiency
     engine_version: str = "OpenSearch_2.19"
     kms_key_id: Optional[str] = None
     vpc_options: Optional[Dict[str, Any]] = None
@@ -342,10 +342,13 @@ class OpenSearchS3VectorPattern2Manager:
                     'Iops': 3000
                 },
                 
-                # CRITICAL: S3 Vector engine configuration
-                'S3VectorEngine': {
-                    'Enabled': True,
-                    'S3VectorBucketArn': config.s3_vector_bucket_arn
+                # CRITICAL: S3 Vector engine configuration (correct AWS API format)
+                'AIMLOptions': {
+                    'S3VectorsEngine': {
+                        'Enabled': True
+                        # Note: S3VectorBucketArn is not supported in create_domain API
+                        # The bucket association is handled separately after domain creation
+                    }
                 },
                 
                 # Security configuration

@@ -12,9 +12,9 @@ from typing import List, Dict, Any, Optional
 
 # Import backend service
 try:
-    from src.services.simple_visualization import SimpleVisualization, EmbeddingPoint
+    from src.services.semantic_mapping_visualization import SemanticMappingVisualizer, EmbeddingPoint
 except ImportError:
-    SimpleVisualization = None
+    SemanticMappingVisualizer = None
     EmbeddingPoint = None
 
 
@@ -23,8 +23,8 @@ class VisualizationUI:
     
     def __init__(self):
         """Initialize visualization UI."""
-        if SimpleVisualization:
-            self.viz_service = SimpleVisualization()
+        if SemanticMappingVisualizer:
+            self.viz_service = SemanticMappingVisualizer()
         else:
             self.viz_service = None
     
@@ -66,25 +66,20 @@ class VisualizationUI:
         with col2:
             st.write(f"**Points:** {len(query_embeddings)} queries, {len(result_embeddings)} results")
         
-        # Get visualization data from backend service
+        # Get visualization from backend service
         try:
-            viz_data = self.viz_service.prepare_visualization_data(
+            fig = self.viz_service.create_embedding_visualization(
                 query_embeddings=query_embeddings,
                 result_embeddings=result_embeddings,
-                method=method
+                title=f"Embedding Space ({method})"
             )
             
-            if "error" in viz_data:
-                st.error(f"Visualization error: {viz_data['error']}")
-                return
-            
             # Display plot
-            if "figure" in viz_data:
-                st.plotly_chart(viz_data["figure"], use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
             
-            # Display statistics
-            if "statistics" in viz_data:
-                self._render_embedding_stats(viz_data["statistics"])
+            # Display basic statistics
+            total_points = len(query_embeddings) + len(result_embeddings)
+            st.write(f"**Total points:** {total_points}")
             
         except Exception as e:
             st.error(f"Visualization failed: {e}")
@@ -106,10 +101,23 @@ class VisualizationUI:
             return
         
         try:
+            # Create a dummy query point for comparison
+            import numpy as np
+            if not EmbeddingPoint:
+                st.error("EmbeddingPoint class not available")
+                return
+                
+            query_point = EmbeddingPoint(
+                id="query",
+                embedding=np.random.rand(1024),
+                metadata={},
+                point_type="query"
+            )
+            
             # Create comparison plot using backend service
             fig = self.viz_service.create_multi_vector_comparison(
                 embeddings_by_type=embeddings_by_type,
-                method=method
+                query_point=query_point
             )
             
             st.plotly_chart(fig, use_container_width=True)
@@ -254,23 +262,19 @@ class VisualizationUI:
         # Create demo plot
         if self.viz_service:
             try:
-                viz_data = self.viz_service.prepare_visualization_data(
+                # Use semantic mapping visualizer's create_embedding_visualization method
+                fig = self.viz_service.create_embedding_visualization(
                     query_embeddings=query_embeddings,
                     result_embeddings=result_embeddings,
-                    method=method
+                    title=f"Demo Embedding Space ({method})"
                 )
                 
-                if "error" in viz_data:
-                    st.error(f"Visualization error: {viz_data['error']}")
-                    return
-                
                 # Display plot
-                if "figure" in viz_data:
-                    st.plotly_chart(viz_data["figure"], use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True)
                 
-                # Display statistics
-                if "statistics" in viz_data:
-                    self._render_embedding_stats(viz_data["statistics"])
+                # Display basic statistics
+                total_points = len(query_embeddings) + len(result_embeddings)
+                st.write(f"**Total points:** {total_points}")
                     
             except Exception as e:
                 st.error(f"Demo visualization failed: {e}")
@@ -437,8 +441,35 @@ def generate_demo_embeddings_for_ui(
 ) -> tuple:
     """Generate demo embeddings for UI testing."""
     try:
-        from src.services.simple_visualization import generate_demo_embeddings
-        return generate_demo_embeddings(query, vector_type, n_results)
+        from src.services.semantic_mapping_visualization import SemanticMappingVisualizer
+        # Note: generate_demo_embeddings functionality moved to semantic_mapping_visualization
+        # Create demo embeddings using the semantic mapping visualizer
+        import numpy as np
+        
+        if not EmbeddingPoint:
+            # Fallback when EmbeddingPoint is not available
+            return generate_demo_embeddings_for_ui(query, vector_type, n_results)
+        
+        demo_embeddings = []
+        for i in range(n_results):
+            # Generate random embeddings for demo purposes
+            embedding = np.random.rand(1024).astype(np.float32)  # Standard 1024-dimensional embeddings
+            point = EmbeddingPoint(
+                id=f"demo_{i}_{vector_type}",
+                embedding=embedding,
+                metadata={
+                    "content": f"Demo content {i+1} for query: {query}",
+                    "vector_type": vector_type,
+                    "source": "demo_generator"
+                },
+                point_type="result",
+                similarity_score=np.random.uniform(0.6, 0.9),
+                vector_type=vector_type
+            )
+            demo_embeddings.append(point)
+        
+        # Return as tuple: (query_embeddings, result_embeddings)
+        return [], demo_embeddings
     except ImportError:
         # Fallback for when backend service is not available
         import numpy as np

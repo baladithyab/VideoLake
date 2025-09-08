@@ -225,11 +225,13 @@ class TestOpenSearchDomainFunctionality(unittest.TestCase):
         call_args = self.mock_opensearch_client.create_domain.call_args
         domain_config = call_args.kwargs
         
-        # Check that S3VectorEngine is properly configured
-        self.assertIn('S3VectorEngine', domain_config)
-        s3vector_config = domain_config['S3VectorEngine']
+        # Check that S3VectorsEngine is properly configured under AIMLOptions
+        self.assertIn('AIMLOptions', domain_config)
+        aiml_options = domain_config['AIMLOptions']
+        self.assertIn('S3VectorsEngine', aiml_options)
+        s3vector_config = aiml_options['S3VectorsEngine']
         self.assertTrue(s3vector_config['Enabled'])
-        self.assertEqual(s3vector_config['S3VectorBucketArn'], test_bucket_arn)
+        # Note: S3VectorBucketArn is not supported in create_domain API
         
         # Check other required configuration
         self.assertEqual(domain_config['DomainName'], 'test-domain')

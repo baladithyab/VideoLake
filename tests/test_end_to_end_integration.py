@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 
 from src.services.similarity_search_engine import SimilaritySearchEngine, SimilarityQuery, IndexType
 from src.services.embedding_storage_integration import EmbeddingStorageIntegration
-from src.services.unified_video_processing_service import UnifiedVideoProcessingService
+from src.services.comprehensive_video_processing_service import ComprehensiveVideoProcessingService
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
@@ -39,10 +39,10 @@ class TestEndToEndPipeline:
         text_storage.bedrock_service = bedrock_service
         text_storage.storage_manager = s3_manager
         
-        video_storage = UnifiedVideoProcessingService()
+        video_storage = ComprehensiveVideoProcessingService()
         # Inject mocked services
         video_storage.storage_manager = s3_manager
-        video_storage.twelvelabs_service = twelvelabs_service
+        video_storage.twelvelabs_api = twelvelabs_service
         
         search_engine = SimilaritySearchEngine(
             bedrock_service=bedrock_service,

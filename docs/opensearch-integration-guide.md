@@ -497,8 +497,8 @@ engine_cost_analysis = integration_manager.monitor_integration_costs(
     time_period_days=30,
     vector_storage_gb=100.0,
     query_count_monthly=50000,
-    domain_instance_hours=24*30,  # m6g.large running 24/7
-    domain_instance_type="m6g.large"
+    domain_instance_hours=24*30,  # or1.medium running 24/7
+    domain_instance_type="or1.medium"
 )
 
 print("\nEngine Pattern Cost Analysis:")
@@ -787,8 +787,8 @@ OpenSearchDomain:
     DomainName: s3vector-engine-domain
     EngineVersion: OpenSearch_2.19  # Minimum version for S3 vectors
     ClusterConfig:
-      InstanceType: m6g.large.search  # Optimized instances recommended
-      InstanceCount: 2
+      InstanceType: or1.medium.search  # OR1 instances required for S3 Vectors engine
+      InstanceCount: 1
       DedicatedMasterEnabled: false
     EBSOptions:
       EBSEnabled: true
@@ -928,8 +928,8 @@ export_optimization = {
 # Engine pattern performance optimization
 engine_optimization = {
     'opensearch_domain': {
-        'instance_type': 'm6g.large.search',  # Optimized instances
-        'instance_count': 2,                  # Multi-node for availability
+        'instance_type': 'or1.medium.search',  # OR1 instances required for S3 Vectors
+        'instance_count': 1,                  # Single node for cost efficiency
         'ebs_volume_type': 'gp3',            # High-performance storage
         'ebs_iops': 3000,                    # Provision IOPS for consistency
         'dedicated_master': False,           # Not needed for small domains
@@ -1129,7 +1129,7 @@ def troubleshoot_engine_setup(integration_manager, domain_name):
             issues.append({
                 'issue': 'Suboptimal instance type for S3 vectors',
                 'current': instance_type,
-                'recommended': 'm6g.large.search or similar optimized instance',
+                'recommended': 'or1.medium.search or other OR1 instance types',
                 'solution': 'Modify domain to use optimized instances'
             })
         
