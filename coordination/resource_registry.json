@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2025-09-08T19:38:21.383370+00:00",
+  "updated_at": "2025-09-18T17:53:52.542780+00:00",
   "active": {
     "index_arn": null,
     "vector_bucket": "s3v-1757355893-vector-bucket",
