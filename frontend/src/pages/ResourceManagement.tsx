@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { resourcesAPI } from '../api/client';
-import { RefreshCw, Plus, Trash2, Database, HardDrive } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, Database, HardDrive, Loader2 } from 'lucide-react';
 
 export default function ResourceManagement() {
   const queryClient = useQueryClient();
@@ -35,6 +36,7 @@ export default function ResourceManagement() {
       queryClient.invalidateQueries({ queryKey: ['resource-registry'] });
       setShowCreateBucket(false);
       setBucketName('');
+      toast.success('Vector bucket created successfully');
     },
   });
 
@@ -45,6 +47,7 @@ export default function ResourceManagement() {
       queryClient.invalidateQueries({ queryKey: ['resource-registry'] });
       setShowCreateIndex(false);
       setIndexName('');
+      toast.success('Vector index created successfully');
     },
   });
 
@@ -52,6 +55,7 @@ export default function ResourceManagement() {
     mutationFn: () => resourcesAPI.scan(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['resource-registry'] });
+      toast.success('Resources scanned successfully');
     },
   });
 
@@ -75,24 +79,39 @@ export default function ResourceManagement() {
       </div>
 
       {/* Resource Summary */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Database className="h-6 w-6 text-gray-400" />
+      {registryLoading ? (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-5">
+                <div className="animate-pulse">
+                  <div className="h-6 w-6 bg-gray-200 rounded mb-2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+                  <div className="h-6 bg-gray-200 rounded w-12"></div>
+                </div>
               </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Vector Buckets</dt>
-                  <dd className="text-lg font-medium text-gray-900">
-                    {registry?.summary?.vector_buckets || 0}
-                  </dd>
-                </dl>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <Database className="h-6 w-6 text-gray-400" />
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">Vector Buckets</dt>
+                    <dd className="text-lg font-medium text-gray-900">
+                      {registry?.summary?.vector_buckets || 0}
+                    </dd>
+                  </dl>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
         <div className="bg-white overflow-hidden shadow rounded-lg">
           <div className="p-5">
@@ -130,24 +149,25 @@ export default function ResourceManagement() {
           </div>
         </div>
 
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <HardDrive className="h-6 w-6 text-gray-400" />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">OpenSearch Collections</dt>
-                  <dd className="text-lg font-medium text-gray-900">
-                    {registry?.summary?.opensearch_collections || 0}
-                  </dd>
-                </dl>
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <HardDrive className="h-6 w-6 text-gray-400" />
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">OpenSearch Collections</dt>
+                    <dd className="text-lg font-medium text-gray-900">
+                      {registry?.summary?.opensearch_collections || 0}
+                    </dd>
+                  </dl>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Active Resources */}
       <div className="bg-white shadow rounded-lg">

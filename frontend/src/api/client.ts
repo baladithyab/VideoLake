@@ -1,4 +1,5 @@
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -24,6 +25,16 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error('API Error:', error);
+
+    // Extract error message
+    const message = error.response?.data?.detail ||
+                   error.response?.data?.message ||
+                   error.message ||
+                   'An unexpected error occurred';
+
+    // Show toast notification
+    toast.error(message);
+
     return Promise.reject(error);
   }
 );

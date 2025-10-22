@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { searchAPI } from '../api/client';
-import { Search } from 'lucide-react';
+import { Search, Play } from 'lucide-react';
 
 export default function QuerySearch() {
+  const navigate = useNavigate();
   const [queryText, setQueryText] = useState('');
   const [vectorTypes, setVectorTypes] = useState(['visual-text', 'visual-image', 'audio']);
   const [results, setResults] = useState<any>(null);
@@ -13,6 +15,8 @@ export default function QuerySearch() {
       searchAPI.multiVector(data),
     onSuccess: (response) => {
       setResults(response.data);
+      // Store results in localStorage for ResultsPlayback page
+      localStorage.setItem('searchResults', JSON.stringify(response.data));
     },
   });
 
@@ -82,10 +86,19 @@ export default function QuerySearch() {
       {/* Results */}
       {results && (
         <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Search Results</h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Search Results</h3>
+            <button
+              onClick={() => navigate('/results')}
+              className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              <Play className="-ml-1 mr-2 h-4 w-4" />
+              View in Player
+            </button>
+          </div>
           <div className="space-y-3">
             {results.results?.map((result: any, index: number) => (
-              <div key={index} className="border border-gray-200 rounded-md p-4">
+              <div key={index} className="border border-gray-200 rounded-md p-4 hover:border-indigo-300 transition-colors">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <p className="text-sm font-medium text-gray-900">Result {index + 1}</p>
@@ -93,7 +106,7 @@ export default function QuerySearch() {
                     <p className="text-sm text-gray-500">Type: {result.vector_type}</p>
                     {result.metadata && (
                       <div className="mt-2 text-xs text-gray-400">
-                        <pre>{JSON.stringify(result.metadata, null, 2)}</pre>
+                        <pre className="whitespace-pre-wrap">{JSON.stringify(result.metadata, null, 2)}</pre>
                       </div>
                     )}
                   </div>
@@ -101,8 +114,16 @@ export default function QuerySearch() {
               </div>
             ))}
           </div>
-          <div className="mt-4 text-sm text-gray-500">
-            Query time: {results.query_time_ms}ms | Total results: {results.total_results}
+          <div className="mt-4 flex justify-between items-center">
+            <div className="text-sm text-gray-500">
+              Query time: {results.query_time_ms}ms | Total results: {results.total_results}
+            </div>
+            <button
+              onClick={() => navigate('/results')}
+              className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+            >
+              Open in Video Player →
+            </button>
           </div>
         </div>
       )}
