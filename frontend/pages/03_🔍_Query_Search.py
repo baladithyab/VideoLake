@@ -19,7 +19,7 @@ project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from frontend.components.search_components import SearchComponents
+from frontend.components.marengo_search_components import render_marengo_search_interface
 from frontend.components.error_handling import ErrorBoundary
 
 # Page configuration
@@ -77,14 +77,10 @@ def _initialize_backend_services():
 def render_query_search_page(service_manager=None, coordinator=None):
     """Render the query and search page."""
     st.title("🔍 Query & Search")
-    st.markdown("**Intelligent semantic search with dual storage pattern comparison**")
+    st.markdown("**Marengo 2.7 Multi-Modal Search - Unified Embedding Space**")
 
     # Show backend service status
     _show_backend_status()
-
-    # Check if we have any backend services available
-    enhanced_storage_manager = st.session_state.get('enhanced_storage_manager')
-    has_backend_services = enhanced_storage_manager is not None or service_manager is not None or coordinator is not None
 
     # Page description
     st.info("""
@@ -92,31 +88,13 @@ def render_query_search_page(service_manager=None, coordinator=None):
     - 📝 **Visual-Text**: Text queries → Visual embeddings optimized for text search
     - 🖼️ **Visual-Image**: Text queries → Visual embeddings optimized for image search
     - 🔊 **Audio**: Text queries → Audio embeddings for audio content search
-    - 🔄 **Dual Backend**: Direct S3Vector + OpenSearch Hybrid patterns
-    - 📊 **Performance Metrics**: Real-time comparison and analytics
+    - 🎯 **Unified Model**: Single Marengo 2.7 model for consistent embedding space
+    - 📊 **Performance Metrics**: Real-time search analytics
     """)
 
-    # Use the search interface from search components with error handling
+    # Use the simplified Marengo search interface
     with ErrorBoundary("Query & Search"):
-        if has_backend_services:
-            # Initialize search components
-            search_components = SearchComponents(service_manager, coordinator)
-
-            # Render search interface with unique keys
-            search_results = render_enhanced_search_interface(search_components)
-
-            # Store results in session state and show status
-            if search_results:
-                st.session_state.search_results = search_results
-
-                # Show search completion status
-                if search_results.get('backend_used'):
-                    results_count = len(search_results.get('results', []))
-                    processing_time = search_results.get('processing_time_ms', 0)
-                    st.success(f"✅ **Search Completed**: {results_count} results found in {processing_time:.1f}ms")
-
-                    if results_count == 0:
-                        st.warning("⚠️ **No Results Found** - Try adjusting your query or similarity threshold")
+        render_marengo_search_interface()
                 else:
                     st.error("❌ **Search Failed** - Backend services are not available")
             else:

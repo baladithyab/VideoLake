@@ -180,31 +180,22 @@ class ResourceRegistry:
 
     def log_vector_bucket_deleted(
         self,
-        bucket_name: str,
-        source: str = "ui"
+        bucket_name: str
     ) -> None:
         """
-        Mark a vector bucket as deleted in the registry. If a creation record exists,
-        update its status to 'deleted' and add deleted_at. Otherwise, append a minimal
-        deletion record. If the deleted bucket matches active.vector_bucket, clear it.
+        Remove a vector bucket from the registry completely.
+        If the deleted bucket matches active.vector_bucket, clear it.
         """
         with self._lock:
             data = self._read()
             vb_list = data.setdefault("vector_buckets", [])
-            found = False
-            for rec in reversed(vb_list):
-                if rec.get("name") == bucket_name:
-                    rec["status"] = "deleted"
-                    rec["deleted_at"] = _utc_now_iso()
-                    found = True
-                    break
-            if not found:
-                vb_list.append({
-                    "name": bucket_name,
-                    "status": "deleted",
-                    "source": source,
-                    "deleted_at": _utc_now_iso(),
-                })
+
+            # Remove all entries with this bucket name
+            data["vector_buckets"] = [
+                rec for rec in vb_list
+                if rec.get("name") != bucket_name
+            ]
+
             # Clear active selection if matches
             active = data.setdefault("active", {})
             if active.get("vector_bucket") == bucket_name:
@@ -213,30 +204,22 @@ class ResourceRegistry:
 
     def log_s3_bucket_deleted(
         self,
-        bucket_name: str,
-        source: str = "ui"
+        bucket_name: str
     ) -> None:
         """
-        Mark a regular S3 bucket as deleted in the registry. If an existing record is present,
-        update it; otherwise append a deletion record. Clear active.s3_bucket if it matches.
+        Remove a regular S3 bucket from the registry completely.
+        Clear active.s3_bucket if it matches.
         """
         with self._lock:
             data = self._read()
             s3_list = data.setdefault("s3_buckets", [])
-            found = False
-            for rec in reversed(s3_list):
-                if rec.get("name") == bucket_name:
-                    rec["status"] = "deleted"
-                    rec["deleted_at"] = _utc_now_iso()
-                    found = True
-                    break
-            if not found:
-                s3_list.append({
-                    "name": bucket_name,
-                    "status": "deleted",
-                    "source": source,
-                    "deleted_at": _utc_now_iso(),
-                })
+
+            # Remove all entries with this bucket name
+            data["s3_buckets"] = [
+                rec for rec in s3_list
+                if rec.get("name") != bucket_name
+            ]
+
             active = data.setdefault("active", {})
             if active.get("s3_bucket") == bucket_name:
                 active["s3_bucket"] = None
@@ -271,35 +254,27 @@ class ResourceRegistry:
         *,
         index_arn: Optional[str] = None,
         bucket_name: Optional[str] = None,
-        index_name: Optional[str] = None,
-        source: str = "ui"
+        index_name: Optional[str] = None
     ) -> None:
+        """
+        Remove an index from the registry completely.
+        Can match by ARN or by bucket_name + index_name.
+        """
         with self._lock:
             data = self._read()
             idx_list: List[Dict[str, Any]] = data.setdefault("indexes", [])
-            # Try to find existing
-            found = False
-            for rec in idx_list:
-                if index_arn and rec.get("arn") == index_arn:
-                    rec["status"] = "deleted"
-                    rec["deleted_at"] = _utc_now_iso()
-                    found = True
-                    break
-                if bucket_name and index_name and rec.get("bucket") == bucket_name and rec.get("name") == index_name:
-                    rec["status"] = "deleted"
-                    rec["deleted_at"] = _utc_now_iso()
-                    found = True
-                    break
-            if not found:
-                # Append a deletion record if not present
-                idx_list.append({
-                    "bucket": bucket_name,
-                    "name": index_name,
-                    "arn": index_arn,
-                    "status": "deleted",
-                    "source": source,
-                    "deleted_at": _utc_now_iso(),
-                })
+
+            # Remove matching entries
+            data["indexes"] = [
+                rec for rec in idx_list
+                if not (
+                    (index_arn and rec.get("arn") == index_arn) or
+                    (bucket_name and index_name and
+                     rec.get("bucket") == bucket_name and
+                     rec.get("name") == index_name)
+                )
+            ]
+
             self._write(data)
 
     # Convenience filters
@@ -449,27 +424,19 @@ class ResourceRegistry:
     
     def log_opensearch_collection_deleted(
         self,
-        collection_name: str,
-        source: str = "opensearch_integration"
+        collection_name: str
     ) -> None:
-        """Mark OpenSearch Serverless collection as deleted."""
+        """Remove OpenSearch Serverless collection from the registry completely."""
         with self._lock:
             data = self._read()
             collections = data.setdefault("opensearch_collections", [])
-            found = False
-            for rec in reversed(collections):
-                if rec.get("name") == collection_name:
-                    rec["status"] = "deleted"
-                    rec["deleted_at"] = _utc_now_iso()
-                    found = True
-                    break
-            if not found:
-                collections.append({
-                    "name": collection_name,
-                    "status": "deleted",
-                    "source": source,
-                    "deleted_at": _utc_now_iso(),
-                })
+
+            # Remove all entries with this collection name
+            data["opensearch_collections"] = [
+                rec for rec in collections
+                if rec.get("name") != collection_name
+            ]
+
             # Clear active selection if matches
             active = data.setdefault("active", {})
             if active.get("opensearch_collection") == collection_name:
@@ -478,27 +445,19 @@ class ResourceRegistry:
 
     def log_opensearch_domain_deleted(
         self,
-        domain_name: str,
-        source: str = "opensearch_integration"
+        domain_name: str
     ) -> None:
-        """Mark OpenSearch domain as deleted."""
+        """Remove OpenSearch domain from the registry completely."""
         with self._lock:
             data = self._read()
             domains = data.setdefault("opensearch_domains", [])
-            found = False
-            for rec in reversed(domains):
-                if rec.get("name") == domain_name:
-                    rec["status"] = "deleted"
-                    rec["deleted_at"] = _utc_now_iso()
-                    found = True
-                    break
-            if not found:
-                domains.append({
-                    "name": domain_name,
-                    "status": "deleted",
-                    "source": source,
-                    "deleted_at": _utc_now_iso(),
-                })
+
+            # Remove all entries with this domain name
+            data["opensearch_domains"] = [
+                rec for rec in domains
+                if rec.get("name") != domain_name
+            ]
+
             # Clear active selection if matches
             active = data.setdefault("active", {})
             if active.get("opensearch_domain") == domain_name:
@@ -507,27 +466,19 @@ class ResourceRegistry:
 
     def log_opensearch_pipeline_deleted(
         self,
-        pipeline_name: str,
-        source: str = "opensearch_integration"
+        pipeline_name: str
     ) -> None:
-        """Mark OpenSearch Ingestion pipeline as deleted."""
+        """Remove OpenSearch Ingestion pipeline from the registry completely."""
         with self._lock:
             data = self._read()
             pipelines = data.setdefault("opensearch_pipelines", [])
-            found = False
-            for rec in reversed(pipelines):
-                if rec.get("name") == pipeline_name:
-                    rec["status"] = "deleted"
-                    rec["deleted_at"] = _utc_now_iso()
-                    found = True
-                    break
-            if not found:
-                pipelines.append({
-                    "name": pipeline_name,
-                    "status": "deleted",
-                    "source": source,
-                    "deleted_at": _utc_now_iso(),
-                })
+
+            # Remove all entries with this pipeline name
+            data["opensearch_pipelines"] = [
+                rec for rec in pipelines
+                if rec.get("name") != pipeline_name
+            ]
+
             self._write(data)
 
     # OpenSearch resource listing methods

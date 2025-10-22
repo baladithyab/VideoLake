@@ -23,7 +23,7 @@ from dataclasses import dataclass
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.services.multi_vector_coordinator import MultiVectorCoordinator, MultiVectorConfig, ProcessingMode
+from src.services.multi_vector_coordinator import MultiVectorCoordinator, MultiVectorConfig
 from src.services.streamlit_integration_utils import StreamlitServiceManager, StreamlitIntegrationConfig
 from src.services.similarity_search_engine import SimilaritySearchEngine, SimilarityQuery
 from src.exceptions import VectorStorageError
@@ -271,7 +271,6 @@ class TestScalabilityBenchmarks:
                         
                         config = MultiVectorConfig(
                             max_concurrent_jobs=16,
-                            processing_mode=ProcessingMode.PARALLEL,
                             batch_size=10
                         )
                         
@@ -383,8 +382,7 @@ class TestResourceUtilizationBenchmarks:
                     with patch('src.services.multi_vector_coordinator.BedrockEmbeddingService'):
                         
                         config = MultiVectorConfig(
-                            max_concurrent_jobs=psutil.cpu_count(),
-                            processing_mode=ProcessingMode.PARALLEL
+                            max_concurrent_jobs=psutil.cpu_count()
                         )
                         
                         coordinator = MultiVectorCoordinator(config=config)

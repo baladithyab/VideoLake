@@ -34,8 +34,7 @@ from .multi_vector_coordinator import (
     MultiVectorConfig,
     MultiVectorResult,
     SearchRequest,
-    VectorType,
-    ProcessingMode
+    VectorType
 )
 from .streamlit_integration_utils import (
     StreamlitServiceManager,
@@ -80,7 +79,6 @@ __all__ = [
     'MultiVectorResult',
     'SearchRequest',
     'VectorType',
-    'ProcessingMode',
     
     # Streamlit Integration
     'StreamlitServiceManager',

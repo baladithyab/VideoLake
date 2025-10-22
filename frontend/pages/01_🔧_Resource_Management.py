@@ -18,7 +18,7 @@ project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from frontend.components.workflow_resource_manager import render_workflow_resource_manager
+from frontend.components.simplified_resource_manager import render_simplified_resource_manager
 from frontend.components.error_handling import ErrorBoundary
 
 # Page configuration
@@ -43,9 +43,9 @@ def main():
     - 📊 Resource status monitoring
     """)
     
-    # Use workflow resource manager component directly
+    # Use simplified resource manager component
     try:
-        render_workflow_resource_manager()
+        render_simplified_resource_manager()
     except Exception as e:
         # Only catch actual errors, not RerunException
         from frontend.components.error_handling import _is_rerun_exception

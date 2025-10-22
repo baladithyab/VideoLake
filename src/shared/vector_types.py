@@ -17,13 +17,19 @@ logger = get_logger(__name__)
 
 
 class SupportedVectorTypes(Enum):
-    """Enumeration of all supported vector types in the system."""
+    """Enumeration of all supported vector types in the system.
+
+    NOTE: Simplified to focus on Marengo 2.7 model for all modalities.
+    This ensures consistent embedding space across text, image, video, and audio.
+    """
     VISUAL_TEXT = "visual-text"
-    VISUAL_IMAGE = "visual-image" 
+    VISUAL_IMAGE = "visual-image"
     AUDIO = "audio"
-    TEXT_TITAN = "text-titan"
-    TEXT_COHERE = "text-cohere"
-    MULTIMODAL = "multimodal"
+
+    # Legacy vector types - commented out to focus on Marengo
+    # TEXT_TITAN = "text-titan"
+    # TEXT_COHERE = "text-cohere"
+    # MULTIMODAL = "multimodal"
 
 
 @dataclass
@@ -159,40 +165,43 @@ class VectorTypeRegistry:
             concurrent_operations=3
         ))
         
-        # Text-Titan vectors (from Amazon Bedrock)
-        self.register_config(VectorTypeConfig(
-            vector_type=SupportedVectorTypes.TEXT_TITAN,
-            dimensions=1536,
-            default_metric="cosine",
-            embedding_model="amazon.titan-embed-text-v2:0",
-            description="Text embeddings from Amazon Titan",
-            max_batch_size=100,
-            processing_batch_size=20,
-            concurrent_operations=5
-        ))
-        
-        # Text-Cohere vectors (from Amazon Bedrock)
-        self.register_config(VectorTypeConfig(
-            vector_type=SupportedVectorTypes.TEXT_COHERE,
-            dimensions=1024,
-            default_metric="cosine",
-            embedding_model="cohere.embed-multilingual-v3",
-            description="Text embeddings from Cohere",
-            max_batch_size=96,
-            processing_batch_size=50,
-            concurrent_operations=3
-        ))
-        
-        # Multimodal vectors (from Amazon Titan)
-        self.register_config(VectorTypeConfig(
-            vector_type=SupportedVectorTypes.MULTIMODAL,
-            dimensions=1024,
-            default_metric="cosine",
-            embedding_model="amazon.titan-embed-image-v1",
-            description="Multimodal embeddings from Amazon Titan",
-            processing_batch_size=10,
-            concurrent_operations=3
-        ))
+        # Legacy vector types - commented out to focus on Marengo 2.7
+        # These can be re-enabled if needed for specific use cases
+
+        # # Text-Titan vectors (from Amazon Bedrock)
+        # self.register_config(VectorTypeConfig(
+        #     vector_type=SupportedVectorTypes.TEXT_TITAN,
+        #     dimensions=1536,
+        #     default_metric="cosine",
+        #     embedding_model="amazon.titan-embed-text-v2:0",
+        #     description="Text embeddings from Amazon Titan",
+        #     max_batch_size=100,
+        #     processing_batch_size=20,
+        #     concurrent_operations=5
+        # ))
+
+        # # Text-Cohere vectors (from Amazon Bedrock)
+        # self.register_config(VectorTypeConfig(
+        #     vector_type=SupportedVectorTypes.TEXT_COHERE,
+        #     dimensions=1024,
+        #     default_metric="cosine",
+        #     embedding_model="cohere.embed-multilingual-v3",
+        #     description="Text embeddings from Cohere",
+        #     max_batch_size=96,
+        #     processing_batch_size=50,
+        #     concurrent_operations=3
+        # ))
+
+        # # Multimodal vectors (from Amazon Titan)
+        # self.register_config(VectorTypeConfig(
+        #     vector_type=SupportedVectorTypes.MULTIMODAL,
+        #     dimensions=1024,
+        #     default_metric="cosine",
+        #     embedding_model="amazon.titan-embed-image-v1",
+        #     description="Multimodal embeddings from Amazon Titan",
+        #     processing_batch_size=10,
+        #     concurrent_operations=3
+        # ))
     
     def register_config(self, config: VectorTypeConfig) -> None:
         """Register a vector type configuration."""

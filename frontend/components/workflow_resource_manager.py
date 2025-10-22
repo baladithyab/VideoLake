@@ -2815,12 +2815,12 @@ class WorkflowResourceManager:
             logger.error(f"Unexpected error getting OpenSearch domain details for {domain_name}: {e}")
             return {'error': str(e), 'exists': False}
 
-    def delete_opensearch_domain(self, domain_name: str) -> bool:
-        """Delete a real OpenSearch managed domain using AWS API."""
+    def delete_opensearch_domain(self, domain_name: str, wait_for_deletion: bool = True) -> bool:
+        """Delete a real OpenSearch managed domain using AWS API and optionally wait for deletion to complete."""
+        import time
+
         logger.info(f"🗑️ Deleting OpenSearch domain: {domain_name}")
         st.info(f"🗑️ Deleting OpenSearch domain '{domain_name}'...")
-
-
 
         try:
             # First check if domain exists
@@ -2849,11 +2849,62 @@ class WorkflowResourceManager:
             self.opensearch_client.delete_domain(DomainName=domain_name)
             logger.info(f"✓ AWS API call successful for domain deletion: {domain_name}")
 
+            # Wait for deletion to complete if requested
+            if wait_for_deletion:
+                st.info(f"⏳ Waiting for domain deletion to complete (this may take several minutes)...")
+                max_wait_time = 600  # 10 minutes
+                start_time = time.time()
+
+                # Create progress tracking
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
+                while time.time() - start_time < max_wait_time:
+                    try:
+                        response = self.opensearch_client.describe_domain(DomainName=domain_name)
+                        domain_status = response.get('DomainStatus', {})
+
+                        # Check if domain is being deleted
+                        if domain_status.get('Deleted', False):
+                            progress_bar.progress(1.0)
+                            status_text.text("✅ Domain deleted successfully")
+                            logger.info(f"✅ Domain {domain_name} deleted successfully")
+                            break
+
+                        # Check processing status
+                        processing = domain_status.get('Processing', False)
+                        if processing:
+                            elapsed = int(time.time() - start_time)
+                            progress = min(elapsed / max_wait_time, 0.95)
+                            progress_bar.progress(progress)
+                            status_text.text(f"⏳ Still deleting... ({elapsed}s elapsed)")
+                            logger.info(f"⏳ Still deleting domain {domain_name}... ({elapsed}s elapsed)")
+
+                        time.sleep(30)  # Check every 30 seconds
+
+                    except self.opensearch_client.exceptions.ResourceNotFoundException:
+                        # Domain no longer exists - deletion complete
+                        progress_bar.progress(1.0)
+                        status_text.text("✅ Domain deleted successfully")
+                        logger.info(f"✅ Domain {domain_name} deleted successfully (ResourceNotFoundException)")
+                        break
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error checking domain status: {e}")
+                        time.sleep(30)
+
+                # Check if we timed out
+                if time.time() - start_time >= max_wait_time:
+                    st.warning(f"⚠️ Timeout waiting for domain deletion (waited {max_wait_time}s)")
+                    st.info(f"ℹ️ Domain deletion initiated but may still be in progress")
+                    logger.warning(f"⚠️ Timeout waiting for domain {domain_name} deletion")
+                else:
+                    st.success(f"✅ Domain {domain_name} deleted successfully")
+            else:
+                st.success(f"✅ OpenSearch domain deletion initiated successfully")
+                st.info(f"⏳ Domain deletion may take 10-15 minutes to complete")
+
             # Only update registry AFTER successful AWS deletion
             self._cleanup_registry_after_successful_deletion('opensearch_domain', domain_name)
-
-            st.success(f"✅ OpenSearch domain deletion initiated successfully")
-            st.info(f"⏳ Domain deletion may take 10-15 minutes to complete")
 
             logger.info(f"✅ Successfully deleted OpenSearch domain: {domain_name}")
             return True

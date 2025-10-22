@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+"""
+Media Processing Page - Streamlit Multi-page App
+
+Clean, organized interface for video processing with minimal redundancy.
+"""
+
+import streamlit as st
+from typing import Dict, Any, Optional
+from pathlib import Path
+import sys
+import boto3
+import json
+from datetime import datetime
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from frontend.components.processing_components import ProcessingComponents
+from frontend.components.error_handling import ErrorBoundary
+from frontend.components.sample_video_data import sample_video_manager
+from frontend.components.enhanced_storage_components import EnhancedStorageComponents
+from src.config.app_config import get_config
+from src.shared.vector_types import list_supported_vector_types, get_vector_type_config
+from src.shared.metadata_handlers import MetadataFormat
+from src.utils.resource_registry import resource_registry
+
+# Page configuration
+st.set_page_config(
+    page_title="Media Processing - S3Vector",
+    page_icon="🎬",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+def main():
+    """Main function for the media processing page."""
+    # Get service manager and coordinator from session state
+    service_manager = st.session_state.get('service_manager')
+    coordinator = st.session_state.get('coordinator')
+
+    # Enhanced service status in sidebar with shared components info
+    with st.sidebar:
+        st.subheader("🔧 Service Status")
+        if service_manager and coordinator:
+            st.success("✅ Services Connected")
+        else:
+            st.error("❌ Services Unavailable")
+            if st.button("🔄 Retry Initialization"):
+                initialize_services()
+
+        # Resource Registry Status
+        st.subheader("📋 Resource Registry")
+        try:
+            # Get resource summary
+            registry_data = resource_registry.get_registry()
+            active_resources = resource_registry.get_active_resources()
+
+            # Show resource counts
+            vector_buckets = resource_registry.list_vector_buckets()
+            active_vector_buckets = [b for b in vector_buckets if b.get('status') == 'created']
+
+            opensearch_domains = resource_registry.list_opensearch_domains()
+            active_opensearch_domains = [d for d in opensearch_domains if d.get('status') == 'created']
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("S3Vector Buckets", len(active_vector_buckets))
+                st.metric("Vector Indexes", len(resource_registry.list_indexes()))
+            with col2:
+                st.metric("OpenSearch Domains", len(active_opensearch_domains))
+                st.metric("OpenSearch Collections", len(resource_registry.list_opensearch_collections()))
+
+            # Show active resources
+            st.write("**🎯 Active Resources:**")
+            if active_resources.get('vector_bucket'):
+                st.success(f"📦 Vector Bucket: {active_resources['vector_bucket']}")
+            else:
+                st.info("📦 No active vector bucket")
+
+            if active_resources.get('opensearch_domain'):
+                st.success(f"🔍 OpenSearch: {active_resources['opensearch_domain']}")
+            else:
+                st.info("🔍 No active OpenSearch domain")
+
+            # Resource registry actions
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔄 Refresh Registry", help="Refresh resource registry data"):
+                    st.rerun()
+            with col2:
+                if st.button("📊 Registry Details", help="Show detailed registry information"):
+                    st.session_state.show_registry_details = True
+
+            # Show detailed registry information if requested
+            if st.session_state.get('show_registry_details', False):
+                with st.expander("📋 Detailed Registry Info", expanded=True):
+                    # Available S3Vector Buckets
+                    if active_vector_buckets:
+                        st.write("**S3Vector Buckets:**")
+                        for bucket in active_vector_buckets:
+                            st.text(f"• {bucket['name']} ({bucket.get('region', 'Unknown region')})")
+
+                    # Available OpenSearch Domains
+                    if active_opensearch_domains:
+                        st.write("**OpenSearch Domains:**")
+                        for domain in active_opensearch_domains:
+                            st.text(f"• {domain['name']} ({domain.get('region', 'Unknown region')})")
+
+                    # Registry metadata
+                    st.caption(f"Last updated: {registry_data.get('updated_at', 'Unknown')}")
+
+                    if st.button("❌ Close Details"):
+                        st.session_state.show_registry_details = False
+                        st.rerun()
+
+        except Exception as e:
+            st.error("❌ Registry Unavailable")
+            st.caption(f"Error: {str(e)[:50]}...")
+
+        # Shared Components Status
+        st.subheader("🔄 Shared Components")
+        try:
+            # Check shared components status
+            supported_types_count = len(list_supported_vector_types())
+            st.info(f"📊 Vector Types: {supported_types_count}")
+
+            # Show available vector types
+            with st.expander("Available Vector Types", expanded=False):
+                for vector_type in list_supported_vector_types():
+                    try:
+                        config = get_vector_type_config(vector_type)
+                        st.text(f"• {vector_type}: {config.dimensions}D")
+                    except Exception:
+                        st.text(f"• {vector_type}: Config unavailable")
+
+            st.success("✅ Shared Components Active")
+        except Exception as e:
+            st.warning("⚠️ Shared Components Limited")
+            st.caption(f"Error: {str(e)[:50]}...")
+
+    render_media_processing_page(service_manager, coordinator)
+
+def initialize_services():
+    """Initialize services if not available."""
+    try:
+        from src.services import get_service_manager, StreamlitIntegrationConfig
+        
+        integration_config = StreamlitIntegrationConfig(
+            enable_multi_vector=True,
+            enable_concurrent_processing=True,
+            default_vector_types=["visual-text", "visual-image", "audio"],
+            max_concurrent_jobs=8,
+            enable_performance_monitoring=True
+        )
+        
+        service_manager = get_service_manager(integration_config)
+        if service_manager:
+            st.session_state.service_manager = service_manager
+            coordinator = getattr(service_manager, 'multi_vector_coordinator', None)
+            if coordinator:
+                st.session_state.coordinator = coordinator
+                st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"Initialization failed: {str(e)}")
+
+def render_media_processing_page(service_manager=None, coordinator=None):
+    """Render the optimized media processing page."""
+    st.title("🎬 Media Processing")
+    st.markdown("**Marengo 2.7 Video Processing - Unified Multi-Modal Embeddings**")
+
+    # Service status indicator
+    if not service_manager or not coordinator:
+        st.warning("⚠️ **Limited Mode**: Some features may be unavailable")
+    else:
+        st.success("✅ **Full Mode**: All processing features available")
+
+    # Initialize processing components
+    processing_components = ProcessingComponents(service_manager, coordinator)
+
+    # Processing tabs
+    tab1, tab2 = st.tabs(["📤 Upload Videos", "🎬 Sample Videos"])
+
+    with tab1:
+        # Use the optimized processing interface for uploads
+        with ErrorBoundary("Media Processing"):
+            render_optimized_processing_interface()
+
+    with tab2:
+        # Sample video selection and processing
+        render_sample_video_section(processing_components)
+
+def render_sample_video_section(processing_components):
+    """Render sample video selection and processing section."""
+    st.subheader("🎬 Sample Videos")
+    st.info("Select from pre-loaded sample videos for quick testing and demonstration")
+
+    # Sample video selection
+    selected_videos = sample_video_manager.render_multi_select_interface()
+
+    if selected_videos:
+        # Processing configuration for sample videos
+        st.write("**⚙️ Processing Configuration**")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            # Marengo 2.7 vector types (as per AWS Bedrock documentation)
+            vector_types = st.multiselect(
+                "Embedding Types:",
+                options=["visual-text", "visual-image", "audio"],
+                default=["visual-text", "visual-image"],
+                help="Marengo 2.7 embedding options: visual-text (optimized for text search), visual-image (optimized for image search), audio",
+                key="sample_video_vector_types"
+            )
+
+        with col2:
+            # Segment duration
+            segment_duration = st.slider(
+                "Segment Duration (sec):",
+                min_value=2.0,
+                max_value=10.0,
+                value=5.0,
+                step=0.5,
+                help="Duration of each video segment for embedding generation",
+                key="sample_video_segment_duration"
+            )
+
+        with col3:
+            # Storage pattern
+            storage_pattern = st.radio(
+                "Storage:",
+                options=["S3Vector", "S3Vector + OpenSearch"],
+                index=0,
+                help="Choose storage backend",
+                key="sample_video_storage_pattern"
+            )
+
+        # Advanced options
+        with st.expander("🔧 Advanced Options"):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                batch_size = st.slider(
+                    "Batch Size:",
+                    min_value=1,
+                    max_value=10,
+                    value=5,
+                    help="Number of segments to process in parallel",
+                    key="sample_video_batch_size"
+                )
+
+            with col2:
+                enable_metadata = st.checkbox(
+                    "Extract Metadata",
+                    value=True,
+                    help="Extract video metadata (duration, resolution, etc.)",
+                    key="sample_video_enable_metadata"
+                )
+
+        # Process button
+        if st.button("🚀 Process Selected Videos", type="primary", disabled=not vector_types):
+            # Update session state with configuration
+            st.session_state.selected_vector_types = vector_types
+            st.session_state.segment_duration = segment_duration
+
+            # Map storage pattern to service format
+            if storage_pattern == "S3Vector + OpenSearch":
+                st.session_state.selected_storage_patterns = ['opensearch_s3vector_hybrid']
+            else:
+                st.session_state.selected_storage_patterns = ['direct_s3vector']
+
+            # Call the real processing method
+            processing_components.process_sample_videos(selected_videos)
+
+
+
+if __name__ == "__main__":
+    main()
+

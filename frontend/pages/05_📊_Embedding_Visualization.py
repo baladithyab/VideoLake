@@ -592,10 +592,10 @@ def render_embedded_search_interface():
 
     with col1:
         modality = st.selectbox(
-            "Search Modality:",
+            "Marengo 2.7 Modality:",
             options=["Visual-Text Search", "Visual-Image Search", "Audio Search"],
             index=0,
-            help="Choose which Marengo 2.7 embedding type to use",
+            help="Choose which Marengo 2.7 embedding type to use (all use the same unified model)",
             key="embed_viz_modality_selectbox"
         )
 

@@ -59,17 +59,24 @@ class ProcessingComponents:
         # Import the service's VectorType to avoid circular imports
         try:
             from src.services.comprehensive_video_processing_service import VectorType
-            
+
             # Create mapping from shared types to service types
+            # Only include types that exist in SupportedVectorTypes (Marengo 2.7 focus)
             type_mapping = {
                 SupportedVectorTypes.VISUAL_TEXT: VectorType.VISUAL_TEXT,
                 SupportedVectorTypes.VISUAL_IMAGE: VectorType.VISUAL_IMAGE,
                 SupportedVectorTypes.AUDIO: VectorType.AUDIO,
-                SupportedVectorTypes.TEXT_TITAN: getattr(VectorType, 'TEXT_TITAN', None),
-                SupportedVectorTypes.TEXT_COHERE: getattr(VectorType, 'TEXT_COHERE', None),
-                SupportedVectorTypes.MULTIMODAL: getattr(VectorType, 'MULTIMODAL', None)
             }
-            
+
+            # Add legacy types only if they exist in SupportedVectorTypes
+            # (commented out to focus on Marengo 2.7)
+            # if hasattr(SupportedVectorTypes, 'TEXT_TITAN'):
+            #     type_mapping[SupportedVectorTypes.TEXT_TITAN] = getattr(VectorType, 'TEXT_TITAN', None)
+            # if hasattr(SupportedVectorTypes, 'TEXT_COHERE'):
+            #     type_mapping[SupportedVectorTypes.TEXT_COHERE] = getattr(VectorType, 'TEXT_COHERE', None)
+            # if hasattr(SupportedVectorTypes, 'MULTIMODAL'):
+            #     type_mapping[SupportedVectorTypes.MULTIMODAL] = getattr(VectorType, 'MULTIMODAL', None)
+
             service_types = []
             for supported_type in supported_types:
                 service_type = type_mapping.get(supported_type)
@@ -77,9 +84,9 @@ class ProcessingComponents:
                     service_types.append(service_type)
                 else:
                     logger.warning(f"No service mapping found for vector type: {supported_type.value}")
-            
+
             return service_types
-            
+
         except ImportError as e:
             logger.error(f"Failed to import service VectorType: {e}")
             # Fallback: return empty list or handle as needed

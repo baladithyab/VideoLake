@@ -48,28 +48,25 @@ class VectorType(Enum):
     CUSTOM = "custom"
 
 
-class ProcessingMode(Enum):
-    """Processing modes for multi-vector operations."""
-    SEQUENTIAL = "sequential"
-    PARALLEL = "parallel"
-    ADAPTIVE = "adaptive"
-
-
 @dataclass
 class MultiVectorConfig:
-    """Configuration for multi-vector processing."""
+    """Configuration for multi-vector processing.
+
+    Note: Processing is always parallel since Bedrock operations are async.
+    Jobs are submitted in parallel and polled for completion.
+    """
     vector_types: List[str] = field(default_factory=lambda: ["visual-text", "visual-image", "audio"])
     max_concurrent_jobs: int = 8
-    processing_mode: ProcessingMode = ProcessingMode.ADAPTIVE
     enable_cross_vector_search: bool = True
     fusion_method: str = "weighted_average"
     default_top_k: int = 10
-    
+
     # Performance settings
     batch_size: int = 5
     timeout_seconds: int = 300
     retry_attempts: int = 3
-    
+    poll_interval_sec: int = 5  # How often to check job status
+
     # Quality settings
     similarity_threshold: float = 0.7
     enable_result_filtering: bool = True
@@ -304,27 +301,27 @@ class MultiVectorCoordinator:
 
     def process_multi_vector_content(self,
                                    content_inputs: List[Dict[str, Any]],
-                                   vector_types: Optional[List[str]] = None,
-                                   processing_mode: Optional[ProcessingMode] = None) -> MultiVectorResult:
+                                   vector_types: Optional[List[str]] = None) -> MultiVectorResult:
         """
         Process content to generate embeddings across multiple vector types.
-        
+
+        All jobs are submitted in parallel since Bedrock operations are async.
+        The method polls for job completion and returns when all jobs finish.
+
         Args:
             content_inputs: List of content input configurations
             vector_types: Vector types to generate (defaults to config)
-            processing_mode: Processing mode override
-            
+
         Returns:
             MultiVectorResult with embeddings by vector type
         """
         start_time = time.time()
         workflow_id = f"multi_vector_{int(start_time)}_{id(content_inputs)}"
-        
+
         vector_types = vector_types or self.config.vector_types
-        processing_mode = processing_mode or self.config.processing_mode
-        
-        logger.info(f"Starting multi-vector processing: {workflow_id}, {len(content_inputs)} inputs, {len(vector_types)} types")
-        
+
+        logger.info(f"Starting parallel multi-vector processing: {workflow_id}, {len(content_inputs)} inputs, {len(vector_types)} types")
+
         # Track active workflow
         with self._coordination_lock:
             self.active_workflows[workflow_id] = {
@@ -332,20 +329,16 @@ class MultiVectorCoordinator:
                 'status': 'processing',
                 'content_count': len(content_inputs),
                 'vector_types': vector_types,
-                'processing_mode': processing_mode.value
+                'processing_mode': 'parallel'  # Always parallel for async Bedrock
             }
-        
+
         try:
-            if processing_mode == ProcessingMode.PARALLEL:
-                results = self._process_parallel(content_inputs, vector_types, workflow_id)
-            elif processing_mode == ProcessingMode.SEQUENTIAL:
-                results = self._process_sequential(content_inputs, vector_types, workflow_id)
-            else:  # ADAPTIVE
-                results = self._process_adaptive(content_inputs, vector_types, workflow_id)
-            
+            # Always use parallel processing since Bedrock is async
+            results = self._process_parallel(content_inputs, vector_types, workflow_id)
+
             # Calculate final statistics
             processing_time_ms = int((time.time() - start_time) * 1000)
-            
+
             # Update workflow status
             with self._coordination_lock:
                 if workflow_id in self.active_workflows:
@@ -354,7 +347,7 @@ class MultiVectorCoordinator:
                         'processing_time_ms': processing_time_ms,
                         'end_time': time.time()
                     })
-            
+
             # Update performance stats
             self._update_performance_stats('process_multi_vector', processing_time_ms, True)
             

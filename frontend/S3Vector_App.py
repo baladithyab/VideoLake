@@ -238,10 +238,10 @@ def render_main_content():
         6. **Analytics**: Monitor performance and manage the system
         
         ### Features:
-        
-        - **Multi-Vector Search**: Search using visual-text, visual-image, and audio vectors
-        - **Dual Storage Patterns**: Compare Direct S3Vector vs OpenSearch Hybrid approaches
-        - **Real-time Processing**: Process videos with Marengo 2.7 and TwelveLabs
+
+        - **Marengo 2.7 Multi-Modal Search**: Unified embedding space for text, image, video, and audio
+        - **Simplified Resource Management**: Streamlined AWS resource creation and cleanup
+        - **Real-time Processing**: Process videos with Marengo 2.7 model exclusively
         - **Interactive Visualization**: Explore embeddings with PCA, t-SNE, and UMAP
         - **Performance Analytics**: Monitor costs, latency, and system health
         """)

@@ -3,24 +3,21 @@ Coordinator Service Interface
 
 Abstract interface for multi-vector coordination services,
 enabling dependency inversion and breaking circular dependencies.
+
+Note: Processing is always parallel since Bedrock operations are async.
 """
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
-from enum import Enum
-
-
-class ProcessingMode(Enum):
-    """Processing modes for multi-vector operations."""
-    SEQUENTIAL = "sequential"
-    PARALLEL = "parallel"
-    ADAPTIVE = "adaptive"
 
 
 @dataclass
 class ProcessingResult:
-    """Result from multi-vector processing operation."""
+    """Result from multi-vector processing operation.
+
+    All processing is done in parallel with async job polling.
+    """
     results_by_type: Dict[str, Any]
     processing_stats: Dict[str, Any]
     total_processing_time_ms: int
@@ -61,16 +58,17 @@ class ICoordinatorService(ABC):
     @abstractmethod
     def process_multi_vector_content(self,
                                    content_inputs: List[Dict[str, Any]],
-                                   vector_types: Optional[List[str]] = None,
-                                   processing_mode: Optional[ProcessingMode] = None) -> ProcessingResult:
+                                   vector_types: Optional[List[str]] = None) -> ProcessingResult:
         """
         Process content to generate embeddings across multiple vector types.
-        
+
+        All jobs are submitted in parallel and polled for completion since
+        Bedrock operations are async.
+
         Args:
             content_inputs: List of content input configurations
             vector_types: Vector types to generate (defaults to config)
-            processing_mode: Processing mode override
-            
+
         Returns:
             ProcessingResult with embeddings by vector type
         """
