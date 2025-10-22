@@ -43,5 +43,9 @@ plotly>=5.0.0
 opencv-python>=4.12.0.88
 ffmpeg-python>=0.2.0
 
-# Streamlit pilot UI
-streamlit>=1.33,<2
+# FastAPI REST API for React frontend
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# Streamlit removed - migrated to React frontend
