@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import numpy as np
 
-from src.services.semantic_mapping_visualization import SemanticMappingVisualization
+from src.services.semantic_mapping_visualization import SemanticMappingVisualizer
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -36,7 +36,7 @@ class EmbeddingAnalysisRequest(BaseModel):
 async def visualize_embeddings(request: VisualizationRequest):
     """Generate embedding visualization."""
     try:
-        viz_service = SemanticMappingVisualization()
+        viz_service = SemanticMappingVisualizer()
         
         # Prepare visualization data
         viz_data = viz_service.prepare_visualization_data(

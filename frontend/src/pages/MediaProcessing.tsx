@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tantml:query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { processingAPI } from '../api/client';
 import { Upload, Film, Play } from 'lucide-react';
 
