@@ -81,6 +81,18 @@ export const resourcesAPI = {
   batchDelete: (data: { resource_type: string; resource_names: string[]; force?: boolean }) =>
     apiClient.post('/api/resources/batch/delete', data),
 
+  // Stack creation - create complete S3Vector setup
+  createStack: (data: {
+    project_name: string;
+    create_vector_bucket?: boolean;
+    create_media_bucket?: boolean;
+    create_opensearch_domain?: boolean;
+    encryption_type?: string;
+    kms_key_arn?: string;
+    opensearch_instance_type?: string;
+    opensearch_instance_count?: number;
+  }) => apiClient.post('/api/resources/stack/create', data),
+
   // Legacy endpoints
   cleanup: (resourceType?: string) => apiClient.delete('/api/resources/cleanup', { params: { resource_type: resourceType } }),
   getActive: () => apiClient.get('/api/resources/active'),

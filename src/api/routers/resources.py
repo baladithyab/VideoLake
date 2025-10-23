@@ -84,6 +84,19 @@ class BatchDeleteRequest(BaseModel):
     force: bool = False  # For media buckets that need to be emptied first
 
 
+class CreateStackRequest(BaseModel):
+    """Request model for creating a complete S3Vector stack."""
+    project_name: str  # Base name for all resources (e.g., 'my-project')
+    create_vector_bucket: bool = True
+    create_media_bucket: bool = True
+    create_opensearch_domain: bool = True
+    # Optional configurations
+    encryption_type: str = "SSE-S3"
+    kms_key_arn: Optional[str] = None
+    opensearch_instance_type: str = "t3.small.search"
+    opensearch_instance_count: int = 1
+
+
 @router.get("/scan")
 async def scan_resources():
     """Scan for existing AWS resources."""
@@ -556,5 +569,175 @@ async def batch_delete_resources(request: BatchDeleteRequest):
         }
     except Exception as e:
         logger.error(f"Batch delete resources failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/stack/create")
+async def create_stack(request: CreateStackRequest):
+    """
+    Create a complete S3Vector stack with selected components.
+
+    Creates a coordinated set of resources with consistent naming:
+    - Vector bucket: {project_name}-vector-bucket
+    - Media bucket: {project_name}-media-bucket
+    - OpenSearch domain: {project_name}-search
+    """
+    try:
+        lifecycle_manager = ResourceLifecycleManager()
+        results = {
+            "project_name": request.project_name,
+            "resources_created": [],
+            "resources_failed": [],
+            "details": {}
+        }
+
+        # Create vector bucket if requested
+        if request.create_vector_bucket:
+            vector_bucket_name = f"{request.project_name}-vector-bucket"
+            try:
+                logger.info(f"Creating vector bucket: {vector_bucket_name}")
+                status = lifecycle_manager.create_vector_bucket(
+                    bucket_name=vector_bucket_name,
+                    encryption_type=request.encryption_type,
+                    kms_key_arn=request.kms_key_arn
+                )
+
+                if status.state == ResourceState.ACTIVE:
+                    results["resources_created"].append({
+                        "type": "vector_bucket",
+                        "name": vector_bucket_name
+                    })
+                    results["details"]["vector_bucket"] = {
+                        "name": vector_bucket_name,
+                        "status": "created",
+                        "state": status.state.value
+                    }
+                else:
+                    results["resources_failed"].append({
+                        "type": "vector_bucket",
+                        "name": vector_bucket_name,
+                        "error": status.error_message
+                    })
+                    results["details"]["vector_bucket"] = {
+                        "name": vector_bucket_name,
+                        "status": "failed",
+                        "error": status.error_message
+                    }
+            except Exception as e:
+                logger.error(f"Failed to create vector bucket: {e}")
+                results["resources_failed"].append({
+                    "type": "vector_bucket",
+                    "name": vector_bucket_name,
+                    "error": str(e)
+                })
+                results["details"]["vector_bucket"] = {
+                    "name": vector_bucket_name,
+                    "status": "failed",
+                    "error": str(e)
+                }
+
+        # Create media bucket if requested
+        if request.create_media_bucket:
+            media_bucket_name = f"{request.project_name}-media-bucket"
+            try:
+                logger.info(f"Creating media bucket: {media_bucket_name}")
+                status = lifecycle_manager.create_media_bucket(bucket_name=media_bucket_name)
+
+                if status.state == ResourceState.ACTIVE:
+                    results["resources_created"].append({
+                        "type": "media_bucket",
+                        "name": media_bucket_name
+                    })
+                    results["details"]["media_bucket"] = {
+                        "name": media_bucket_name,
+                        "status": "created",
+                        "state": status.state.value
+                    }
+                else:
+                    results["resources_failed"].append({
+                        "type": "media_bucket",
+                        "name": media_bucket_name,
+                        "error": status.error_message
+                    })
+                    results["details"]["media_bucket"] = {
+                        "name": media_bucket_name,
+                        "status": "failed",
+                        "error": status.error_message
+                    }
+            except Exception as e:
+                logger.error(f"Failed to create media bucket: {e}")
+                results["resources_failed"].append({
+                    "type": "media_bucket",
+                    "name": media_bucket_name,
+                    "error": str(e)
+                })
+                results["details"]["media_bucket"] = {
+                    "name": media_bucket_name,
+                    "status": "failed",
+                    "error": str(e)
+                }
+
+        # Create OpenSearch domain if requested
+        if request.create_opensearch_domain:
+            opensearch_domain_name = f"{request.project_name}-search"
+            try:
+                logger.info(f"Creating OpenSearch domain: {opensearch_domain_name}")
+                status = lifecycle_manager.create_opensearch_domain(
+                    domain_name=opensearch_domain_name,
+                    instance_type=request.opensearch_instance_type,
+                    instance_count=request.opensearch_instance_count
+                )
+
+                if status.state in [ResourceState.CREATING, ResourceState.ACTIVE]:
+                    results["resources_created"].append({
+                        "type": "opensearch_domain",
+                        "name": opensearch_domain_name
+                    })
+                    results["details"]["opensearch_domain"] = {
+                        "name": opensearch_domain_name,
+                        "status": "creating" if status.state == ResourceState.CREATING else "created",
+                        "state": status.state.value,
+                        "note": "Domain creation takes 5-10 minutes"
+                    }
+                else:
+                    results["resources_failed"].append({
+                        "type": "opensearch_domain",
+                        "name": opensearch_domain_name,
+                        "error": status.error_message
+                    })
+                    results["details"]["opensearch_domain"] = {
+                        "name": opensearch_domain_name,
+                        "status": "failed",
+                        "error": status.error_message
+                    }
+            except Exception as e:
+                logger.error(f"Failed to create OpenSearch domain: {e}")
+                results["resources_failed"].append({
+                    "type": "opensearch_domain",
+                    "name": opensearch_domain_name,
+                    "error": str(e)
+                })
+                results["details"]["opensearch_domain"] = {
+                    "name": opensearch_domain_name,
+                    "status": "failed",
+                    "error": str(e)
+                }
+
+        # Determine overall success
+        success = len(results["resources_created"]) > 0
+
+        return {
+            "success": success,
+            "message": f"Created {len(results['resources_created'])} of {len(results['resources_created']) + len(results['resources_failed'])} requested resources",
+            "project_name": request.project_name,
+            "created_count": len(results["resources_created"]),
+            "failed_count": len(results["resources_failed"]),
+            "resources_created": results["resources_created"],
+            "resources_failed": results["resources_failed"],
+            "details": results["details"]
+        }
+
+    except Exception as e:
+        logger.error(f"Stack creation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
