@@ -1,0 +1,262 @@
+"""
+S3Vector Provider Implementation
+
+Implements the VectorStoreProvider interface for AWS S3 Vectors.
+"""
+
+from typing import Dict, Any, Optional, List
+from datetime import datetime, timezone
+
+from src.services.vector_store_provider import (
+    VectorStoreProvider,
+    VectorStoreType,
+    VectorStoreState,
+    VectorStoreConfig,
+    VectorStoreStatus,
+    VectorStoreProviderFactory
+)
+from src.services.s3_vector_storage import S3VectorStorageManager
+from src.utils.aws_clients import aws_client_factory
+from src.utils.resource_registry import resource_registry
+from src.utils.logging_config import get_logger
+from src.config.unified_config_manager import get_unified_config_manager
+
+logger = get_logger(__name__)
+
+
+class S3VectorProvider(VectorStoreProvider):
+    """S3Vector implementation of the vector store provider."""
+    
+    def __init__(self):
+        """Initialize the S3Vector provider."""
+        self.storage_manager = S3VectorStorageManager()
+        self.s3vectors_client = aws_client_factory.get_s3vectors_client()
+        
+        config_manager = get_unified_config_manager()
+        self.region = config_manager.config.aws.region
+    
+    @property
+    def store_type(self) -> VectorStoreType:
+        """Return S3_VECTOR as the store type."""
+        return VectorStoreType.S3_VECTOR
+    
+    def create(self, config: VectorStoreConfig) -> VectorStoreStatus:
+        """
+        Create a new S3 Vector bucket.
+        
+        Args:
+            config: Configuration for the S3 Vector bucket
+            
+        Returns:
+            VectorStoreStatus with creation result
+        """
+        self.validate_config(config)
+        
+        try:
+            # Extract S3Vector-specific config
+            s3v_config = config.s3vector_config or {}
+            encryption_type = s3v_config.get("encryption_type", "SSE-S3")
+            kms_key_arn = s3v_config.get("kms_key_arn")
+            
+            # Create the vector bucket
+            result = self.storage_manager.create_vector_bucket(
+                bucket_name=config.name,
+                encryption_type=encryption_type,
+                kms_key_arn=kms_key_arn
+            )
+            
+            return VectorStoreStatus(
+                store_type=VectorStoreType.S3_VECTOR,
+                name=config.name,
+                state=VectorStoreState.ACTIVE,
+                arn=result.get("bucket_arn"),
+                region=self.region,
+                created_at=datetime.now(timezone.utc),
+                dimension=config.dimension,
+                metadata={
+                    "encryption_type": encryption_type,
+                    "creation_result": result
+                },
+                progress_percentage=100
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to create S3 Vector bucket: {e}")
+            return VectorStoreStatus(
+                store_type=VectorStoreType.S3_VECTOR,
+                name=config.name,
+                state=VectorStoreState.FAILED,
+                error_message=str(e),
+                progress_percentage=0
+            )
+    
+    def delete(self, name: str, force: bool = False) -> VectorStoreStatus:
+        """
+        Delete an S3 Vector bucket.
+        
+        Args:
+            name: Name of the bucket
+            force: Whether to force deletion
+            
+        Returns:
+            VectorStoreStatus with deletion result
+        """
+        try:
+            # Delete the bucket
+            self.s3vectors_client.delete_bucket(Bucket=name)
+            
+            # Update registry
+            resource_registry.log_vector_bucket_deleted(bucket_name=name, source="s3vector_provider")
+            
+            return VectorStoreStatus(
+                store_type=VectorStoreType.S3_VECTOR,
+                name=name,
+                state=VectorStoreState.DELETED,
+                progress_percentage=100
+            )
+            
+        except Exception as e:
+            error_code = getattr(e, 'response', {}).get('Error', {}).get('Code', '')
+            if error_code in ('NoSuchBucket', '404'):
+                return VectorStoreStatus(
+                    store_type=VectorStoreType.S3_VECTOR,
+                    name=name,
+                    state=VectorStoreState.DELETED,
+                    progress_percentage=100
+                )
+            
+            logger.error(f"Failed to delete S3 Vector bucket: {e}")
+            return VectorStoreStatus(
+                store_type=VectorStoreType.S3_VECTOR,
+                name=name,
+                state=VectorStoreState.FAILED,
+                error_message=str(e),
+                progress_percentage=0
+            )
+    
+    def get_status(self, name: str) -> VectorStoreStatus:
+        """
+        Get current status of an S3 Vector bucket.
+        
+        Args:
+            name: Name of the bucket
+            
+        Returns:
+            VectorStoreStatus with current state
+        """
+        try:
+            response = self.s3vectors_client.list_buckets()
+            buckets = response.get('Buckets', [])
+            
+            for bucket in buckets:
+                if bucket.get('Name') == name:
+                    return VectorStoreStatus(
+                        store_type=VectorStoreType.S3_VECTOR,
+                        name=name,
+                        state=VectorStoreState.ACTIVE,
+                        arn=bucket.get('Arn'),
+                        region=self.region,
+                        metadata=bucket,
+                        progress_percentage=100
+                    )
+            
+            return VectorStoreStatus(
+                store_type=VectorStoreType.S3_VECTOR,
+                name=name,
+                state=VectorStoreState.NOT_FOUND,
+                progress_percentage=0
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get S3 Vector bucket status: {e}")
+            return VectorStoreStatus(
+                store_type=VectorStoreType.S3_VECTOR,
+                name=name,
+                state=VectorStoreState.FAILED,
+                error_message=str(e),
+                progress_percentage=0
+            )
+    
+    def list_stores(self) -> List[VectorStoreStatus]:
+        """
+        List all S3 Vector buckets.
+        
+        Returns:
+            List of VectorStoreStatus objects
+        """
+        try:
+            response = self.s3vectors_client.list_buckets()
+            buckets = response.get('Buckets', [])
+            
+            stores = []
+            for bucket in buckets:
+                stores.append(VectorStoreStatus(
+                    store_type=VectorStoreType.S3_VECTOR,
+                    name=bucket.get('Name'),
+                    state=VectorStoreState.ACTIVE,
+                    arn=bucket.get('Arn'),
+                    region=self.region,
+                    metadata=bucket,
+                    progress_percentage=100
+                ))
+            
+            return stores
+            
+        except Exception as e:
+            logger.error(f"Failed to list S3 Vector buckets: {e}")
+            return []
+    
+    def upsert_vectors(self, name: str, vectors: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Insert or update vectors in an S3 Vector index.
+        
+        Args:
+            name: Name of the bucket (index ARN will be constructed)
+            vectors: List of vector objects
+            
+        Returns:
+            Result dictionary with upsert statistics
+        """
+        try:
+            # This would need index_arn - simplified for now
+            # In practice, you'd need to specify which index within the bucket
+            logger.warning("upsert_vectors requires index ARN - use storage_manager directly")
+            return {
+                "success": False,
+                "message": "Use S3VectorStorageManager.put_vectors with index ARN"
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to upsert vectors: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def query(self, name: str, query_vector: List[float], top_k: int = 10,
+             filter_metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """
+        Query an S3 Vector index for similar vectors.
+        
+        Args:
+            name: Name of the bucket (index ARN will be constructed)
+            query_vector: Query vector
+            top_k: Number of results
+            filter_metadata: Optional filters
+            
+        Returns:
+            List of similar vectors with scores
+        """
+        try:
+            # This would need index_ARN - simplified for now
+            logger.warning("query requires index ARN - use storage_manager directly")
+            return []
+            
+        except Exception as e:
+            logger.error(f"Failed to query vectors: {e}")
+            return []
+
+
+# Register the S3Vector provider
+VectorStoreProviderFactory.register_provider(VectorStoreType.S3_VECTOR, S3VectorProvider)
+
