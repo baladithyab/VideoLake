@@ -5,12 +5,13 @@ This module provides REST API endpoints for the React frontend to interact
 with all backend services.
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import logging
+import time
 
 from src.services import (
     get_service_manager,
@@ -28,14 +29,42 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure CORS
+# Configure CORS - Allow requests from React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # React dev servers
+    allow_origins=[
+        "http://localhost:3000",  # React dev server (alternative port)
+        "http://localhost:5173",  # Vite dev server (default)
+        "http://127.0.0.1:5173",  # Alternative localhost
+        "http://127.0.0.1:3000",  # Alternative localhost
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
+
+
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all incoming requests for debugging."""
+    start_time = time.time()
+
+    # Log request details
+    logger.info(f"Request: {request.method} {request.url.path}")
+    logger.info(f"Origin: {request.headers.get('origin', 'No origin header')}")
+
+    # Process request
+    response = await call_next(request)
+
+    # Log response details
+    process_time = time.time() - start_time
+    logger.info(f"Response: {response.status_code} (took {process_time:.2f}s)")
+
+    return response
+
 
 # Global service manager instance
 service_manager = None
