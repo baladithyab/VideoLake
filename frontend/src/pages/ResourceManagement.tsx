@@ -5,7 +5,20 @@ import { resourcesAPI } from '../api/client';
 import { RefreshCw, Plus, Trash2, Database, HardDrive, Server, Loader2 } from 'lucide-react';
 import ResourceStatusBadge from '../components/ResourceStatusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { ResourceState, ResourceStatus } from '../types/resources';
+
+type ResourceState = 'CREATING' | 'ACTIVE' | 'AVAILABLE' | 'DELETING' | 'DELETED' | 'FAILED' | 'NOT_FOUND';
+
+interface ResourceStatus {
+  resource_id: string;
+  resource_type: string;
+  state: ResourceState;
+  arn?: string;
+  region?: string;
+  progress_percentage: number;
+  estimated_time_remaining?: number;
+  error_message?: string;
+  metadata?: any;
+}
 
 export default function ResourceManagement() {
   const queryClient = useQueryClient();

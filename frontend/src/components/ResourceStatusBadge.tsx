@@ -1,5 +1,6 @@
 import { Loader2, CheckCircle, XCircle, AlertCircle, Clock } from 'lucide-react';
-import { ResourceState } from '../types/resources';
+
+type ResourceState = 'CREATING' | 'ACTIVE' | 'AVAILABLE' | 'DELETING' | 'DELETED' | 'FAILED' | 'NOT_FOUND';
 
 interface ResourceStatusBadgeProps {
   state: ResourceState;
