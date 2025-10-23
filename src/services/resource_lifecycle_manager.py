@@ -346,27 +346,37 @@ class ResourceLifecycleManager:
 
     # ==================== OpenSearch Domain Operations ====================
 
-    def create_opensearch_domain(self, domain_name: str, instance_type: str = "t3.small.search",
+    def create_opensearch_domain(self, domain_name: str, instance_type: str = "or1.medium.search",
                                 instance_count: int = 1) -> ResourceStatus:
         """
-        Create an OpenSearch domain (async operation).
+        Create an OpenSearch domain with S3 Vectors engine enabled (async operation).
+
+        This creates an OpenSearch domain configured to use S3 Vectors as the storage engine,
+        enabling hybrid search capabilities with cost-effective vector storage.
 
         Args:
-            domain_name: Name of the domain
-            instance_type: Instance type
+            domain_name: Name of the domain (max 28 characters)
+            instance_type: Instance type (default: or1.medium.search - required for S3 Vectors)
             instance_count: Number of instances
 
         Returns:
             ResourceStatus with initial creation state
+
+        Note:
+            - Requires OpenSearch 2.19+ for S3 Vectors engine support
+            - Requires OR1 instance types (OpenSearch Optimized)
+            - Requires minimum 20GB EBS volume for OR1 instances
+            - Encryption at rest is required for OR1 instances
         """
-        logger.info(f"Creating OpenSearch domain: {domain_name}")
+        logger.info(f"Creating OpenSearch domain with S3 Vectors engine: {domain_name}")
 
         try:
-            # Create domain using OpenSearch API
+            # Create domain using OpenSearch API with S3 Vectors engine enabled
             response = self.opensearch_client.create_domain(
                 DomainName=domain_name,
+                EngineVersion='OpenSearch_2.19',  # Minimum version for S3 Vectors
                 ClusterConfig={
-                    'InstanceType': instance_type,
+                    'InstanceType': instance_type,  # OR1 instances required for S3 Vectors
                     'InstanceCount': instance_count,
                     'DedicatedMasterEnabled': False,
                     'ZoneAwarenessEnabled': False
@@ -374,22 +384,30 @@ class ResourceLifecycleManager:
                 EBSOptions={
                     'EBSEnabled': True,
                     'VolumeType': 'gp3',
-                    'VolumeSize': 10
+                    'VolumeSize': 20,  # OR1 requires minimum 20GB
+                    'Iops': 3000
+                },
+                EncryptionAtRestOptions={
+                    'Enabled': True  # Required for OR1 instances
+                },
+                AIMLOptions={
+                    'S3VectorsEngine': {
+                        'Enabled': True  # Enable S3 Vectors as storage engine
+                    }
                 },
                 AccessPolicies='',  # Will be configured later
-                EngineVersion='OpenSearch_2.11'
             )
 
             domain_status = response.get('DomainStatus', {})
             arn = domain_status.get('ARN')
 
-            # Log to registry
+            # Log to registry with S3 Vectors enabled
             resource_registry.log_opensearch_domain_created(
                 domain_name=domain_name,
                 domain_arn=arn,
                 region=self.region,
-                engine_version='OpenSearch_2.11',
-                s3_vectors_enabled=False,
+                engine_version='OpenSearch_2.19',
+                s3_vectors_enabled=True,  # S3 Vectors engine is enabled
                 source="lifecycle_manager"
             )
 
