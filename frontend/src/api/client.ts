@@ -43,12 +43,34 @@ apiClient.interceptors.response.use(
 export const resourcesAPI = {
   scan: () => apiClient.get('/api/resources/scan'),
   getRegistry: () => apiClient.get('/api/resources/registry'),
-  createVectorBucket: (data: { bucket_name: string; encryption_type?: string }) =>
+
+  // Media Bucket operations
+  createMediaBucket: (data: { bucket_name: string }) =>
+    apiClient.post('/api/resources/media-bucket', data),
+  deleteMediaBucket: (bucketName: string, force: boolean = false) =>
+    apiClient.delete(`/api/resources/media-bucket/${bucketName}`, { params: { force } }),
+
+  // Vector Bucket operations
+  createVectorBucket: (data: { bucket_name: string; encryption_type?: string; kms_key_arn?: string }) =>
     apiClient.post('/api/resources/vector-bucket', data),
+  deleteVectorBucket: (bucketName: string) =>
+    apiClient.delete(`/api/resources/vector-bucket/${bucketName}`),
+
+  // Vector Index operations
   createVectorIndex: (data: { bucket_name: string; index_name: string; dimension: number; similarity_function?: string }) =>
     apiClient.post('/api/resources/vector-index', data),
+
+  // OpenSearch Domain operations
   createOpenSearchDomain: (data: { domain_name: string; instance_type?: string; instance_count?: number }) =>
     apiClient.post('/api/resources/opensearch-domain', data),
+  deleteOpenSearchDomain: (domainName: string) =>
+    apiClient.delete(`/api/resources/opensearch-domain/${domainName}`),
+
+  // Resource status polling
+  getResourceStatus: (resourceType: string, resourceId: string) =>
+    apiClient.get(`/api/resources/status/${resourceType}/${resourceId}`),
+
+  // Legacy endpoints
   cleanup: (resourceType?: string) => apiClient.delete('/api/resources/cleanup', { params: { resource_type: resourceType } }),
   getActive: () => apiClient.get('/api/resources/active'),
   setActive: (resourceType: string, resourceId: string) =>
