@@ -388,6 +388,8 @@ class ResourceLifecycleManager:
                 domain_name=domain_name,
                 domain_arn=arn,
                 region=self.region,
+                engine_version='OpenSearch_2.11',
+                s3_vectors_enabled=False,
                 source="lifecycle_manager"
             )
 
