@@ -58,6 +58,32 @@ class DeleteResourceRequest(BaseModel):
     force: bool = False  # For buckets that need to be emptied first
 
 
+class BatchCreateMediaBucketsRequest(BaseModel):
+    """Request model for batch creating media buckets."""
+    bucket_names: List[str]
+
+
+class BatchCreateVectorBucketsRequest(BaseModel):
+    """Request model for batch creating vector buckets."""
+    bucket_names: List[str]
+    encryption_type: str = "SSE-S3"
+    kms_key_arn: Optional[str] = None
+
+
+class BatchCreateOpenSearchDomainsRequest(BaseModel):
+    """Request model for batch creating OpenSearch domains."""
+    domain_names: List[str]
+    instance_type: str = "t3.small.search"
+    instance_count: int = 1
+
+
+class BatchDeleteRequest(BaseModel):
+    """Request model for batch deleting resources."""
+    resource_type: str  # 'media', 'vector', or 'opensearch'
+    resource_names: List[str]
+    force: bool = False  # For media buckets that need to be emptied first
+
+
 @router.get("/scan")
 async def scan_resources():
     """Scan for existing AWS resources."""
@@ -345,5 +371,190 @@ async def get_resource_status(resource_type: str, resource_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get resource status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Batch Operations ====================
+
+@router.post("/batch/media-buckets")
+async def batch_create_media_buckets(request: BatchCreateMediaBucketsRequest):
+    """Create multiple media buckets in batch."""
+    try:
+        lifecycle_manager = ResourceLifecycleManager()
+        results = []
+
+        for bucket_name in request.bucket_names:
+            try:
+                status = lifecycle_manager.create_media_bucket(bucket_name)
+                results.append({
+                    "bucket_name": bucket_name,
+                    "success": status.state == ResourceState.ACTIVE,
+                    "status": {
+                        "resource_id": status.resource_id,
+                        "state": status.state.value,
+                        "arn": status.arn,
+                        "region": status.region,
+                        "error_message": status.error_message
+                    }
+                })
+            except Exception as e:
+                logger.error(f"Failed to create media bucket {bucket_name}: {e}")
+                results.append({
+                    "bucket_name": bucket_name,
+                    "success": False,
+                    "error": str(e)
+                })
+
+        success_count = sum(1 for r in results if r.get("success", False))
+        return {
+            "success": success_count > 0,
+            "total": len(request.bucket_names),
+            "successful": success_count,
+            "failed": len(request.bucket_names) - success_count,
+            "results": results
+        }
+    except Exception as e:
+        logger.error(f"Batch create media buckets failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/batch/vector-buckets")
+async def batch_create_vector_buckets(request: BatchCreateVectorBucketsRequest):
+    """Create multiple vector buckets in batch."""
+    try:
+        lifecycle_manager = ResourceLifecycleManager()
+        results = []
+
+        for bucket_name in request.bucket_names:
+            try:
+                status = lifecycle_manager.create_vector_bucket(
+                    bucket_name,
+                    encryption_type=request.encryption_type,
+                    kms_key_arn=request.kms_key_arn
+                )
+                results.append({
+                    "bucket_name": bucket_name,
+                    "success": status.state == ResourceState.ACTIVE,
+                    "status": {
+                        "resource_id": status.resource_id,
+                        "state": status.state.value,
+                        "arn": status.arn,
+                        "region": status.region,
+                        "error_message": status.error_message
+                    }
+                })
+            except Exception as e:
+                logger.error(f"Failed to create vector bucket {bucket_name}: {e}")
+                results.append({
+                    "bucket_name": bucket_name,
+                    "success": False,
+                    "error": str(e)
+                })
+
+        success_count = sum(1 for r in results if r.get("success", False))
+        return {
+            "success": success_count > 0,
+            "total": len(request.bucket_names),
+            "successful": success_count,
+            "failed": len(request.bucket_names) - success_count,
+            "results": results
+        }
+    except Exception as e:
+        logger.error(f"Batch create vector buckets failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/batch/opensearch-domains")
+async def batch_create_opensearch_domains(request: BatchCreateOpenSearchDomainsRequest):
+    """Create multiple OpenSearch domains in batch."""
+    try:
+        lifecycle_manager = ResourceLifecycleManager()
+        results = []
+
+        for domain_name in request.domain_names:
+            try:
+                status = lifecycle_manager.create_opensearch_domain(
+                    domain_name,
+                    instance_type=request.instance_type,
+                    instance_count=request.instance_count
+                )
+                results.append({
+                    "domain_name": domain_name,
+                    "success": status.state == ResourceState.CREATING,
+                    "status": {
+                        "resource_id": status.resource_id,
+                        "state": status.state.value,
+                        "arn": status.arn,
+                        "region": status.region,
+                        "estimated_time_remaining": status.estimated_time_remaining,
+                        "error_message": status.error_message
+                    }
+                })
+            except Exception as e:
+                logger.error(f"Failed to create OpenSearch domain {domain_name}: {e}")
+                results.append({
+                    "domain_name": domain_name,
+                    "success": False,
+                    "error": str(e)
+                })
+
+        success_count = sum(1 for r in results if r.get("success", False))
+        return {
+            "success": success_count > 0,
+            "total": len(request.domain_names),
+            "successful": success_count,
+            "failed": len(request.domain_names) - success_count,
+            "results": results
+        }
+    except Exception as e:
+        logger.error(f"Batch create OpenSearch domains failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/batch/delete")
+async def batch_delete_resources(request: BatchDeleteRequest):
+    """Delete multiple resources in batch."""
+    try:
+        lifecycle_manager = ResourceLifecycleManager()
+        results = []
+
+        for resource_name in request.resource_names:
+            try:
+                if request.resource_type == "media":
+                    status = lifecycle_manager.delete_media_bucket(resource_name, force_empty=request.force)
+                elif request.resource_type == "vector":
+                    status = lifecycle_manager.delete_vector_bucket(resource_name)
+                elif request.resource_type == "opensearch":
+                    status = lifecycle_manager.delete_opensearch_domain(resource_name)
+                else:
+                    raise ValueError(f"Invalid resource type: {request.resource_type}")
+
+                results.append({
+                    "resource_name": resource_name,
+                    "success": status.state in [ResourceState.DELETED, ResourceState.DELETING],
+                    "status": {
+                        "resource_id": status.resource_id,
+                        "state": status.state.value,
+                        "error_message": status.error_message
+                    }
+                })
+            except Exception as e:
+                logger.error(f"Failed to delete {request.resource_type} resource {resource_name}: {e}")
+                results.append({
+                    "resource_name": resource_name,
+                    "success": False,
+                    "error": str(e)
+                })
+
+        success_count = sum(1 for r in results if r.get("success", False))
+        return {
+            "success": success_count > 0,
+            "total": len(request.resource_names),
+            "successful": success_count,
+            "failed": len(request.resource_names) - success_count,
+            "results": results
+        }
+    except Exception as e:
+        logger.error(f"Batch delete resources failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 

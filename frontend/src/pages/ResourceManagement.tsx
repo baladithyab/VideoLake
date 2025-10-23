@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { resourcesAPI } from '../api/client';
-import { RefreshCw, Plus, Trash2, Database, HardDrive, Server, Loader2 } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, Database, HardDrive, Server, Loader2, CheckSquare, Square } from 'lucide-react';
 import ResourceStatusBadge from '../components/ResourceStatusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -22,13 +22,33 @@ interface ResourceStatus {
 
 export default function ResourceManagement() {
   const queryClient = useQueryClient();
+
+  // Create dialogs
   const [showCreateMediaBucket, setShowCreateMediaBucket] = useState(false);
   const [showCreateVectorBucket, setShowCreateVectorBucket] = useState(false);
   const [showCreateOpenSearch, setShowCreateOpenSearch] = useState(false);
+
+  // Batch create dialogs
+  const [showBatchCreateMedia, setShowBatchCreateMedia] = useState(false);
+  const [showBatchCreateVector, setShowBatchCreateVector] = useState(false);
+  const [showBatchCreateOpenSearch, setShowBatchCreateOpenSearch] = useState(false);
+
+  // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<{type: 'media' | 'vector' | 'opensearch'; name: string;} | null>(null);
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{type: 'media' | 'vector' | 'opensearch'; names: string[];} | null>(null);
+
+  // Form inputs
   const [mediaBucketName, setMediaBucketName] = useState('');
   const [vectorBucketName, setVectorBucketName] = useState('');
   const [openSearchDomainName, setOpenSearchDomainName] = useState('');
+  const [batchMediaNames, setBatchMediaNames] = useState('');
+  const [batchVectorNames, setBatchVectorNames] = useState('');
+  const [batchOpenSearchNames, setBatchOpenSearchNames] = useState('');
+
+  // Checkbox selections
+  const [selectedMediaBuckets, setSelectedMediaBuckets] = useState<Set<string>>(new Set());
+  const [selectedVectorBuckets, setSelectedVectorBuckets] = useState<Set<string>>(new Set());
+  const [selectedOpenSearchDomains, setSelectedOpenSearchDomains] = useState<Set<string>>(new Set());
 
   const { data: registry, isLoading: registryLoading, refetch: refetchRegistry } = useQuery({
     queryKey: ['resource-registry'],
@@ -95,12 +115,121 @@ export default function ResourceManagement() {
     },
   });
 
+  // Batch create mutations
+  const batchCreateMediaMutation = useMutation({
+    mutationFn: (data: { bucket_names: string[] }) => resourcesAPI.batchCreateMediaBuckets(data),
+    onSuccess: (response) => {
+      setShowBatchCreateMedia(false);
+      setBatchMediaNames('');
+      toast.success(`Created ${response.data.successful}/${response.data.total} media buckets`);
+      refetchRegistry();
+    },
+  });
+
+  const batchCreateVectorMutation = useMutation({
+    mutationFn: (data: { bucket_names: string[] }) => resourcesAPI.batchCreateVectorBuckets(data),
+    onSuccess: (response) => {
+      setShowBatchCreateVector(false);
+      setBatchVectorNames('');
+      toast.success(`Created ${response.data.successful}/${response.data.total} vector buckets`);
+      refetchRegistry();
+    },
+  });
+
+  const batchCreateOpenSearchMutation = useMutation({
+    mutationFn: (data: { domain_names: string[] }) => resourcesAPI.batchCreateOpenSearchDomains(data),
+    onSuccess: (response) => {
+      setShowBatchCreateOpenSearch(false);
+      setBatchOpenSearchNames('');
+      toast.success(`Started creation of ${response.data.successful}/${response.data.total} OpenSearch domains`);
+      refetchRegistry();
+    },
+  });
+
+  // Batch delete mutation
+  const batchDeleteMutation = useMutation({
+    mutationFn: (data: { resource_type: string; resource_names: string[]; force?: boolean }) =>
+      resourcesAPI.batchDelete(data),
+    onSuccess: (response) => {
+      setBatchDeleteConfirm(null);
+      setSelectedMediaBuckets(new Set());
+      setSelectedVectorBuckets(new Set());
+      setSelectedOpenSearchDomains(new Set());
+      toast.success(`Deleted ${response.data.successful}/${response.data.total} resources`);
+      refetchRegistry();
+    },
+  });
+
   const handleDeleteResource = () => {
     if (!deleteConfirm) return;
     switch (deleteConfirm.type) {
       case 'media': deleteMediaBucketMutation.mutate(deleteConfirm.name); break;
       case 'vector': deleteVectorBucketMutation.mutate(deleteConfirm.name); break;
       case 'opensearch': deleteOpenSearchMutation.mutate(deleteConfirm.name); break;
+    }
+  };
+
+  const handleBatchDelete = () => {
+    if (!batchDeleteConfirm) return;
+    batchDeleteMutation.mutate({
+      resource_type: batchDeleteConfirm.type,
+      resource_names: batchDeleteConfirm.names,
+      force: false
+    });
+  };
+
+  // Checkbox toggle helpers
+  const toggleMediaBucket = (name: string) => {
+    const newSet = new Set(selectedMediaBuckets);
+    if (newSet.has(name)) {
+      newSet.delete(name);
+    } else {
+      newSet.add(name);
+    }
+    setSelectedMediaBuckets(newSet);
+  };
+
+  const toggleVectorBucket = (name: string) => {
+    const newSet = new Set(selectedVectorBuckets);
+    if (newSet.has(name)) {
+      newSet.delete(name);
+    } else {
+      newSet.add(name);
+    }
+    setSelectedVectorBuckets(newSet);
+  };
+
+  const toggleOpenSearchDomain = (name: string) => {
+    const newSet = new Set(selectedOpenSearchDomains);
+    if (newSet.has(name)) {
+      newSet.delete(name);
+    } else {
+      newSet.add(name);
+    }
+    setSelectedOpenSearchDomains(newSet);
+  };
+
+  const toggleAllMedia = () => {
+    if (selectedMediaBuckets.size === mediaBuckets.length) {
+      setSelectedMediaBuckets(new Set());
+    } else {
+      setSelectedMediaBuckets(new Set(mediaBuckets.map((b: any) => b.name)));
+    }
+  };
+
+  const toggleAllVector = () => {
+    if (selectedVectorBuckets.size === vectorBuckets.length) {
+      setSelectedVectorBuckets(new Set());
+    } else {
+      setSelectedVectorBuckets(new Set(vectorBuckets.map((b: any) => b.name)));
+    }
+  };
+
+  const toggleAllOpenSearch = () => {
+    if (selectedOpenSearchDomains.size === openSearchDomains.length) {
+      setSelectedOpenSearchDomains(new Set());
+    } else {
+      setSelectedOpenSearchDomains(new Set(openSearchDomains.map((d: any) => d.name)));
     }
   };
 
@@ -134,19 +263,56 @@ export default function ResourceManagement() {
                 <HardDrive className="w-5 h-5 text-gray-600" />
                 <h2 className="text-lg font-semibold">Media Buckets (S3)</h2>
                 <span className="text-sm text-gray-500">({mediaBuckets.length})</span>
+                {selectedMediaBuckets.size > 0 && (
+                  <span className="text-sm text-indigo-600 font-medium">
+                    {selectedMediaBuckets.size} selected
+                  </span>
+                )}
               </div>
-              <button onClick={() => setShowCreateMediaBucket(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
-                <Plus className="w-4 h-4" />Create
-              </button>
+              <div className="flex gap-2">
+                {selectedMediaBuckets.size > 0 && (
+                  <button
+                    onClick={() => setBatchDeleteConfirm({ type: 'media', names: Array.from(selectedMediaBuckets) })}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white text-sm rounded-md hover:bg-red-700"
+                  >
+                    <Trash2 className="w-4 h-4" />Delete Selected ({selectedMediaBuckets.size})
+                  </button>
+                )}
+                <button onClick={() => setShowBatchCreateMedia(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
+                  <Plus className="w-4 h-4" />Batch Create
+                </button>
+                <button onClick={() => setShowCreateMediaBucket(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
+                  <Plus className="w-4 h-4" />Create
+                </button>
+              </div>
             </div>
             <div className="p-6">
               {mediaBuckets.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">No media buckets created yet</p>
               ) : (
                 <div className="space-y-3">
+                  {mediaBuckets.length > 0 && (
+                    <div className="flex items-center gap-2 pb-2 border-b">
+                      <button onClick={toggleAllMedia} className="p-1 hover:bg-gray-100 rounded">
+                        {selectedMediaBuckets.size === mediaBuckets.length ? (
+                          <CheckSquare className="w-5 h-5 text-indigo-600" />
+                        ) : (
+                          <Square className="w-5 h-5 text-gray-400" />
+                        )}
+                      </button>
+                      <span className="text-sm text-gray-600">Select All</span>
+                    </div>
+                  )}
                   {mediaBuckets.map((bucket: any) => (
-                    <div key={bucket.name} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
+                    <div key={bucket.name} className="flex items-center gap-3 p-4 border rounded-lg hover:bg-gray-50">
+                      <button onClick={() => toggleMediaBucket(bucket.name)} className="p-1">
+                        {selectedMediaBuckets.has(bucket.name) ? (
+                          <CheckSquare className="w-5 h-5 text-indigo-600" />
+                        ) : (
+                          <Square className="w-5 h-5 text-gray-400" />
+                        )}
+                      </button>
+                      <div className="flex-1">
                         <p className="font-medium">{bucket.name}</p>
                         <p className="text-sm text-gray-500">{bucket.region}</p>
                       </div>
@@ -170,19 +336,56 @@ export default function ResourceManagement() {
                 <Database className="w-5 h-5 text-gray-600" />
                 <h2 className="text-lg font-semibold">Vector Buckets (S3 Vectors)</h2>
                 <span className="text-sm text-gray-500">({vectorBuckets.length})</span>
+                {selectedVectorBuckets.size > 0 && (
+                  <span className="text-sm text-indigo-600 font-medium">
+                    {selectedVectorBuckets.size} selected
+                  </span>
+                )}
               </div>
-              <button onClick={() => setShowCreateVectorBucket(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
-                <Plus className="w-4 h-4" />Create
-              </button>
+              <div className="flex gap-2">
+                {selectedVectorBuckets.size > 0 && (
+                  <button
+                    onClick={() => setBatchDeleteConfirm({ type: 'vector', names: Array.from(selectedVectorBuckets) })}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white text-sm rounded-md hover:bg-red-700"
+                  >
+                    <Trash2 className="w-4 h-4" />Delete Selected ({selectedVectorBuckets.size})
+                  </button>
+                )}
+                <button onClick={() => setShowBatchCreateVector(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
+                  <Plus className="w-4 h-4" />Batch Create
+                </button>
+                <button onClick={() => setShowCreateVectorBucket(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
+                  <Plus className="w-4 h-4" />Create
+                </button>
+              </div>
             </div>
             <div className="p-6">
               {vectorBuckets.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">No vector buckets created yet</p>
               ) : (
                 <div className="space-y-3">
+                  {vectorBuckets.length > 0 && (
+                    <div className="flex items-center gap-2 pb-2 border-b">
+                      <button onClick={toggleAllVector} className="p-1 hover:bg-gray-100 rounded">
+                        {selectedVectorBuckets.size === vectorBuckets.length ? (
+                          <CheckSquare className="w-5 h-5 text-indigo-600" />
+                        ) : (
+                          <Square className="w-5 h-5 text-gray-400" />
+                        )}
+                      </button>
+                      <span className="text-sm text-gray-600">Select All</span>
+                    </div>
+                  )}
                   {vectorBuckets.map((bucket: any) => (
-                    <div key={bucket.name} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
+                    <div key={bucket.name} className="flex items-center gap-3 p-4 border rounded-lg hover:bg-gray-50">
+                      <button onClick={() => toggleVectorBucket(bucket.name)} className="p-1">
+                        {selectedVectorBuckets.has(bucket.name) ? (
+                          <CheckSquare className="w-5 h-5 text-indigo-600" />
+                        ) : (
+                          <Square className="w-5 h-5 text-gray-400" />
+                        )}
+                      </button>
+                      <div className="flex-1">
                         <p className="font-medium">{bucket.name}</p>
                         <p className="text-sm text-gray-500">{bucket.region}</p>
                       </div>
@@ -206,19 +409,56 @@ export default function ResourceManagement() {
                 <Server className="w-5 h-5 text-gray-600" />
                 <h2 className="text-lg font-semibold">OpenSearch Domains</h2>
                 <span className="text-sm text-gray-500">({openSearchDomains.length})</span>
+                {selectedOpenSearchDomains.size > 0 && (
+                  <span className="text-sm text-indigo-600 font-medium">
+                    {selectedOpenSearchDomains.size} selected
+                  </span>
+                )}
               </div>
-              <button onClick={() => setShowCreateOpenSearch(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
-                <Plus className="w-4 h-4" />Create
-              </button>
+              <div className="flex gap-2">
+                {selectedOpenSearchDomains.size > 0 && (
+                  <button
+                    onClick={() => setBatchDeleteConfirm({ type: 'opensearch', names: Array.from(selectedOpenSearchDomains) })}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white text-sm rounded-md hover:bg-red-700"
+                  >
+                    <Trash2 className="w-4 h-4" />Delete Selected ({selectedOpenSearchDomains.size})
+                  </button>
+                )}
+                <button onClick={() => setShowBatchCreateOpenSearch(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
+                  <Plus className="w-4 h-4" />Batch Create
+                </button>
+                <button onClick={() => setShowCreateOpenSearch(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
+                  <Plus className="w-4 h-4" />Create
+                </button>
+              </div>
             </div>
             <div className="p-6">
               {openSearchDomains.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">No OpenSearch domains created yet</p>
               ) : (
                 <div className="space-y-3">
+                  {openSearchDomains.length > 0 && (
+                    <div className="flex items-center gap-2 pb-2 border-b">
+                      <button onClick={toggleAllOpenSearch} className="p-1 hover:bg-gray-100 rounded">
+                        {selectedOpenSearchDomains.size === openSearchDomains.length ? (
+                          <CheckSquare className="w-5 h-5 text-indigo-600" />
+                        ) : (
+                          <Square className="w-5 h-5 text-gray-400" />
+                        )}
+                      </button>
+                      <span className="text-sm text-gray-600">Select All</span>
+                    </div>
+                  )}
                   {openSearchDomains.map((domain: any) => (
-                    <div key={domain.name} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
+                    <div key={domain.name} className="flex items-center gap-3 p-4 border rounded-lg hover:bg-gray-50">
+                      <button onClick={() => toggleOpenSearchDomain(domain.name)} className="p-1">
+                        {selectedOpenSearchDomains.has(domain.name) ? (
+                          <CheckSquare className="w-5 h-5 text-indigo-600" />
+                        ) : (
+                          <Square className="w-5 h-5 text-gray-400" />
+                        )}
+                      </button>
+                      <div className="flex-1">
                         <p className="font-medium">{domain.name}</p>
                         <p className="text-sm text-gray-500">{domain.region}</p>
                       </div>
@@ -284,6 +524,101 @@ export default function ResourceManagement() {
         </div>
       )}
 
+      {/* Batch Create Media Buckets Dialog */}
+      {showBatchCreateMedia && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Batch Create Media Buckets</h3>
+            <textarea
+              value={batchMediaNames}
+              onChange={(e) => setBatchMediaNames(e.target.value)}
+              placeholder="Enter bucket names (one per line)"
+              className="w-full px-3 py-2 border rounded-md mb-2 h-32 font-mono text-sm"
+            />
+            <p className="text-xs text-gray-500 mb-4">Enter one bucket name per line</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowBatchCreateMedia(false)} className="px-4 py-2 border rounded-md">Cancel</button>
+              <button
+                onClick={() => {
+                  const names = batchMediaNames.split('\n').map(n => n.trim()).filter(n => n);
+                  if (names.length > 0) {
+                    batchCreateMediaMutation.mutate({ bucket_names: names });
+                  }
+                }}
+                disabled={!batchMediaNames.trim() || batchCreateMediaMutation.isPending}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50"
+              >
+                {batchCreateMediaMutation.isPending ? 'Creating...' : `Create ${batchMediaNames.split('\n').filter(n => n.trim()).length} Buckets`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Create Vector Buckets Dialog */}
+      {showBatchCreateVector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Batch Create Vector Buckets</h3>
+            <textarea
+              value={batchVectorNames}
+              onChange={(e) => setBatchVectorNames(e.target.value)}
+              placeholder="Enter bucket names (one per line)"
+              className="w-full px-3 py-2 border rounded-md mb-2 h-32 font-mono text-sm"
+            />
+            <p className="text-xs text-gray-500 mb-4">Enter one bucket name per line</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowBatchCreateVector(false)} className="px-4 py-2 border rounded-md">Cancel</button>
+              <button
+                onClick={() => {
+                  const names = batchVectorNames.split('\n').map(n => n.trim()).filter(n => n);
+                  if (names.length > 0) {
+                    batchCreateVectorMutation.mutate({ bucket_names: names });
+                  }
+                }}
+                disabled={!batchVectorNames.trim() || batchCreateVectorMutation.isPending}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50"
+              >
+                {batchCreateVectorMutation.isPending ? 'Creating...' : `Create ${batchVectorNames.split('\n').filter(n => n.trim()).length} Buckets`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Create OpenSearch Domains Dialog */}
+      {showBatchCreateOpenSearch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Batch Create OpenSearch Domains</h3>
+            <textarea
+              value={batchOpenSearchNames}
+              onChange={(e) => setBatchOpenSearchNames(e.target.value)}
+              placeholder="Enter domain names (one per line)"
+              className="w-full px-3 py-2 border rounded-md mb-2 h-32 font-mono text-sm"
+            />
+            <p className="text-xs text-gray-500 mb-2">Enter one domain name per line</p>
+            <p className="text-sm text-gray-600 mb-4">Note: Each domain takes 5-10 minutes to create</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowBatchCreateOpenSearch(false)} className="px-4 py-2 border rounded-md">Cancel</button>
+              <button
+                onClick={() => {
+                  const names = batchOpenSearchNames.split('\n').map(n => n.trim()).filter(n => n);
+                  if (names.length > 0) {
+                    batchCreateOpenSearchMutation.mutate({ domain_names: names });
+                  }
+                }}
+                disabled={!batchOpenSearchNames.trim() || batchCreateOpenSearchMutation.isPending}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50"
+              >
+                {batchCreateOpenSearchMutation.isPending ? 'Creating...' : `Create ${batchOpenSearchNames.split('\n').filter(n => n.trim()).length} Domains`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single Delete Confirmation */}
       <ConfirmDialog
         isOpen={deleteConfirm !== null}
         onClose={() => setDeleteConfirm(null)}
@@ -293,6 +628,18 @@ export default function ResourceManagement() {
         confirmText="Delete"
         isDestructive={true}
         isLoading={deleteMediaBucketMutation.isPending || deleteVectorBucketMutation.isPending || deleteOpenSearchMutation.isPending}
+      />
+
+      {/* Batch Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={batchDeleteConfirm !== null}
+        onClose={() => setBatchDeleteConfirm(null)}
+        onConfirm={handleBatchDelete}
+        title="Delete Multiple Resources"
+        message={`Are you sure you want to delete ${batchDeleteConfirm?.names.length} ${batchDeleteConfirm?.type} resource(s)? This action cannot be undone.`}
+        confirmText={`Delete ${batchDeleteConfirm?.names.length || 0} Resources`}
+        isDestructive={true}
+        isLoading={batchDeleteMutation.isPending}
       />
     </div>
   );

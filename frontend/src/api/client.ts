@@ -71,6 +71,16 @@ export const resourcesAPI = {
   getResourceStatus: (resourceType: string, resourceId: string) =>
     apiClient.get(`/api/resources/status/${resourceType}/${resourceId}`),
 
+  // Batch operations
+  batchCreateMediaBuckets: (data: { bucket_names: string[] }) =>
+    apiClient.post('/api/resources/batch/media-buckets', data),
+  batchCreateVectorBuckets: (data: { bucket_names: string[]; encryption_type?: string; kms_key_arn?: string }) =>
+    apiClient.post('/api/resources/batch/vector-buckets', data),
+  batchCreateOpenSearchDomains: (data: { domain_names: string[]; instance_type?: string; instance_count?: number }) =>
+    apiClient.post('/api/resources/batch/opensearch-domains', data),
+  batchDelete: (data: { resource_type: string; resource_names: string[]; force?: boolean }) =>
+    apiClient.post('/api/resources/batch/delete', data),
+
   // Legacy endpoints
   cleanup: (resourceType?: string) => apiClient.delete('/api/resources/cleanup', { params: { resource_type: resourceType } }),
   getActive: () => apiClient.get('/api/resources/active'),
