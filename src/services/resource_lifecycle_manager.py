@@ -422,6 +422,8 @@ class ResourceLifecycleManager:
         try:
             self.opensearch_client.delete_domain(DomainName=domain_name)
 
+            # Note: OpenSearch deletion is async, so we return DELETING state
+            # The registry will be updated when get_opensearch_domain_status confirms deletion
             return ResourceStatus(
                 resource_id=domain_name,
                 resource_type=ResourceType.OPENSEARCH_DOMAIN,
@@ -433,6 +435,12 @@ class ResourceLifecycleManager:
         except ClientError as e:
             code = e.response.get("Error", {}).get("Code", "")
             if code == "ResourceNotFoundException":
+                # Domain already deleted, update registry
+                try:
+                    resource_registry.log_opensearch_domain_deleted(domain_name=domain_name)
+                except Exception as reg_err:
+                    logger.warning(f"Failed to update registry after OpenSearch domain not found {domain_name}: {reg_err}")
+
                 return ResourceStatus(
                     resource_id=domain_name,
                     resource_type=ResourceType.OPENSEARCH_DOMAIN,
@@ -462,6 +470,11 @@ class ResourceLifecycleManager:
             if deleted:
                 state = ResourceState.DELETED
                 progress = 100
+                # Update registry when we confirm deletion
+                try:
+                    resource_registry.log_opensearch_domain_deleted(domain_name=domain_name)
+                except Exception as e:
+                    logger.warning(f"Failed to update registry after confirming OpenSearch domain deletion {domain_name}: {e}")
             elif processing:
                 state = ResourceState.CREATING
                 progress = 50  # Estimate
@@ -485,6 +498,12 @@ class ResourceLifecycleManager:
         except ClientError as e:
             code = e.response.get("Error", {}).get("Code", "")
             if code == "ResourceNotFoundException":
+                # Domain not found - update registry to remove it
+                try:
+                    resource_registry.log_opensearch_domain_deleted(domain_name=domain_name)
+                except Exception as reg_err:
+                    logger.warning(f"Failed to update registry after OpenSearch domain not found {domain_name}: {reg_err}")
+
                 return ResourceStatus(
                     resource_id=domain_name,
                     resource_type=ResourceType.OPENSEARCH_DOMAIN,

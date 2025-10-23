@@ -303,9 +303,9 @@ class S3BucketUtilityService:
             logger.info(f"Deleted S3 bucket: {bucket_name}")
             # Best-effort registry log + clear active if matched
             try:
-                resource_registry.log_s3_bucket_deleted(bucket_name=bucket_name, source="service")
-            except Exception:
-                pass
+                resource_registry.log_s3_bucket_deleted(bucket_name=bucket_name)
+            except Exception as e:
+                logger.warning(f"Failed to update registry after deleting bucket {bucket_name}: {e}")
             out: Dict[str, Any] = {"bucket_name": bucket_name, "status": "deleted", "emptied": bool(force_empty)}
             if emptied_counts is not None:
                 out["emptied_counts"] = emptied_counts
@@ -316,9 +316,9 @@ class S3BucketUtilityService:
             if code in ("NoSuchBucket", "404", "NotFound"):
                 # Consider not_found idempotent; still log deletion to registry
                 try:
-                    resource_registry.log_s3_bucket_deleted(bucket_name=bucket_name, source="service")
-                except Exception:
-                    pass
+                    resource_registry.log_s3_bucket_deleted(bucket_name=bucket_name)
+                except Exception as e:
+                    logger.warning(f"Failed to update registry after bucket not found {bucket_name}: {e}")
                 return {"bucket_name": bucket_name, "status": "not_found", "emptied": bool(force_empty)}
             if code == "BucketNotEmpty":
                 if not force_empty:

@@ -2405,9 +2405,9 @@ class S3VectorStorageManager:
             logger.info(f"Successfully deleted vector bucket: {bucket_name}")
             # Best-effort registry deletion log
             try:
-                resource_registry.log_vector_bucket_deleted(bucket_name=bucket_name, source="service")
-            except Exception:
-                pass
+                resource_registry.log_vector_bucket_deleted(bucket_name=bucket_name)
+            except Exception as e:
+                logger.warning(f"Failed to update registry after deleting vector bucket {bucket_name}: {e}")
 
             return {
                 "bucket_name": bucket_name,
@@ -2424,9 +2424,9 @@ class S3VectorStorageManager:
                 logger.warning(f"Vector bucket not found (may already be deleted): {bucket_name}")
                 # Best-effort registry deletion log
                 try:
-                    resource_registry.log_vector_bucket_deleted(bucket_name=bucket_name, source="service")
-                except Exception:
-                    pass
+                    resource_registry.log_vector_bucket_deleted(bucket_name=bucket_name)
+                except Exception as e:
+                    logger.warning(f"Failed to update registry after vector bucket not found {bucket_name}: {e}")
                 return {
                     "bucket_name": bucket_name,
                     "status": "not_found",
