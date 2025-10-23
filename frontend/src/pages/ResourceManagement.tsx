@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { resourcesAPI } from '../api/client';
 import { RefreshCw, Plus, Trash2, Database, HardDrive, Server, Loader2 } from 'lucide-react';
-import ResourceStatusBadge, { ResourceState } from '../components/ResourceStatusBadge';
+import ResourceStatusBadge from '../components/ResourceStatusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { ResourceState, ResourceStatus } from '../types/resources';
 
 export default function ResourceManagement() {
   const queryClient = useQueryClient();
