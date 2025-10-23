@@ -12,12 +12,22 @@ import logging
 from src.services.aws_resource_scanner import AWSResourceScanner
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.opensearch_integration import OpenSearchIntegrationManager
+from src.services.resource_lifecycle_manager import (
+    ResourceLifecycleManager,
+    ResourceType,
+    ResourceState
+)
 from src.utils.resource_registry import resource_registry
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+class CreateMediaBucketRequest(BaseModel):
+    """Request model for creating media bucket."""
+    bucket_name: str
 
 
 class CreateVectorBucketRequest(BaseModel):
@@ -40,6 +50,12 @@ class CreateOpenSearchDomainRequest(BaseModel):
     domain_name: str
     instance_type: str = "t3.small.search"
     instance_count: int = 1
+
+
+class DeleteResourceRequest(BaseModel):
+    """Request model for deleting resources."""
+    resource_id: str
+    force: bool = False  # For buckets that need to be emptied first
 
 
 @router.get("/scan")
@@ -82,17 +98,27 @@ async def get_resource_registry():
 
 @router.post("/vector-bucket")
 async def create_vector_bucket(request: CreateVectorBucketRequest):
-    """Create a new S3 vector bucket."""
+    """Create a new S3 vector bucket with lifecycle management."""
     try:
-        storage_manager = S3VectorStorageManager()
-        result = storage_manager.create_vector_bucket(
+        lifecycle_manager = ResourceLifecycleManager()
+        status = lifecycle_manager.create_vector_bucket(
             bucket_name=request.bucket_name,
             encryption_type=request.encryption_type,
             kms_key_arn=request.kms_key_arn
         )
+
         return {
-            "success": True,
-            "result": result
+            "success": status.state == ResourceState.ACTIVE,
+            "status": {
+                "resource_id": status.resource_id,
+                "resource_type": status.resource_type.value,
+                "state": status.state.value,
+                "arn": status.arn,
+                "region": status.region,
+                "progress_percentage": status.progress_percentage,
+                "error_message": status.error_message,
+                "metadata": status.metadata
+            }
         }
     except Exception as e:
         logger.error(f"Failed to create vector bucket: {e}")
@@ -121,17 +147,28 @@ async def create_vector_index(request: CreateIndexRequest):
 
 @router.post("/opensearch-domain")
 async def create_opensearch_domain(request: CreateOpenSearchDomainRequest):
-    """Create a new OpenSearch domain."""
+    """Create a new OpenSearch domain with lifecycle management."""
     try:
-        opensearch_manager = OpenSearchIntegrationManager()
-        result = opensearch_manager.create_domain(
+        lifecycle_manager = ResourceLifecycleManager()
+        status = lifecycle_manager.create_opensearch_domain(
             domain_name=request.domain_name,
             instance_type=request.instance_type,
             instance_count=request.instance_count
         )
+
         return {
-            "success": True,
-            "result": result
+            "success": status.state in [ResourceState.CREATING, ResourceState.ACTIVE],
+            "status": {
+                "resource_id": status.resource_id,
+                "resource_type": status.resource_type.value,
+                "state": status.state.value,
+                "arn": status.arn,
+                "region": status.region,
+                "progress_percentage": status.progress_percentage,
+                "estimated_time_remaining": status.estimated_time_remaining,
+                "error_message": status.error_message,
+                "metadata": status.metadata
+            }
         }
     except Exception as e:
         logger.error(f"Failed to create OpenSearch domain: {e}")
@@ -178,5 +215,135 @@ async def set_active_resource(resource_type: str, resource_id: str):
         }
     except Exception as e:
         logger.error(f"Failed to set active resource: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== New Lifecycle Management Endpoints ====================
+
+@router.post("/media-bucket")
+async def create_media_bucket(request: CreateMediaBucketRequest):
+    """Create a new S3 media bucket."""
+    try:
+        lifecycle_manager = ResourceLifecycleManager()
+        status = lifecycle_manager.create_media_bucket(request.bucket_name)
+
+        return {
+            "success": status.state == ResourceState.ACTIVE,
+            "status": {
+                "resource_id": status.resource_id,
+                "resource_type": status.resource_type.value,
+                "state": status.state.value,
+                "arn": status.arn,
+                "region": status.region,
+                "progress_percentage": status.progress_percentage,
+                "error_message": status.error_message,
+                "metadata": status.metadata
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to create media bucket: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/media-bucket/{bucket_name}")
+async def delete_media_bucket(bucket_name: str, force: bool = False):
+    """Delete a media bucket."""
+    try:
+        lifecycle_manager = ResourceLifecycleManager()
+        status = lifecycle_manager.delete_media_bucket(bucket_name, force_empty=force)
+
+        return {
+            "success": status.state == ResourceState.DELETED,
+            "status": {
+                "resource_id": status.resource_id,
+                "resource_type": status.resource_type.value,
+                "state": status.state.value,
+                "progress_percentage": status.progress_percentage,
+                "error_message": status.error_message,
+                "metadata": status.metadata
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to delete media bucket: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/vector-bucket/{bucket_name}")
+async def delete_vector_bucket(bucket_name: str):
+    """Delete a vector bucket."""
+    try:
+        lifecycle_manager = ResourceLifecycleManager()
+        status = lifecycle_manager.delete_vector_bucket(bucket_name)
+
+        return {
+            "success": status.state == ResourceState.DELETED,
+            "status": {
+                "resource_id": status.resource_id,
+                "resource_type": status.resource_type.value,
+                "state": status.state.value,
+                "progress_percentage": status.progress_percentage,
+                "error_message": status.error_message
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to delete vector bucket: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/opensearch-domain/{domain_name}")
+async def delete_opensearch_domain(domain_name: str):
+    """Delete an OpenSearch domain."""
+    try:
+        lifecycle_manager = ResourceLifecycleManager()
+        status = lifecycle_manager.delete_opensearch_domain(domain_name)
+
+        return {
+            "success": status.state in [ResourceState.DELETING, ResourceState.DELETED],
+            "status": {
+                "resource_id": status.resource_id,
+                "resource_type": status.resource_type.value,
+                "state": status.state.value,
+                "progress_percentage": status.progress_percentage,
+                "estimated_time_remaining": status.estimated_time_remaining,
+                "error_message": status.error_message
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to delete OpenSearch domain: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/status/{resource_type}/{resource_id}")
+async def get_resource_status(resource_type: str, resource_id: str):
+    """Get current status of a resource."""
+    try:
+        lifecycle_manager = ResourceLifecycleManager()
+
+        # Convert string to ResourceType enum
+        try:
+            res_type = ResourceType(resource_type)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid resource type: {resource_type}")
+
+        status = lifecycle_manager.get_resource_status(res_type, resource_id)
+
+        return {
+            "success": True,
+            "status": {
+                "resource_id": status.resource_id,
+                "resource_type": status.resource_type.value,
+                "state": status.state.value,
+                "arn": status.arn,
+                "region": status.region,
+                "progress_percentage": status.progress_percentage,
+                "estimated_time_remaining": status.estimated_time_remaining,
+                "error_message": status.error_message,
+                "metadata": status.metadata
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get resource status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
