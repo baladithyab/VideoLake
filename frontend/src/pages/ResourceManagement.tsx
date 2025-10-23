@@ -589,8 +589,13 @@ export default function ResourceManagement() {
                 className="w-full px-3 py-2 border rounded-md"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Resources will be named: {stackProjectName || 'project-name'}-vector-bucket, {stackProjectName || 'project-name'}-media-bucket, {stackProjectName || 'project-name'}-search
+                Resources will be named: {stackProjectName || 'project-name'}-vector-bucket, {stackProjectName || 'project-name'}-media-bucket, {stackProjectName || 'project-name'}-os
               </p>
+              {stackProjectName && stackProjectName.length > 25 && (
+                <p className="text-xs text-red-600 mt-1">
+                  ⚠️ Project name too long ({stackProjectName.length} chars). Must be ≤25 characters for OpenSearch domain (AWS limit: 28 chars total).
+                </p>
+              )}
             </div>
 
             <div className="mb-4 space-y-2">
@@ -665,8 +670,18 @@ export default function ResourceManagement() {
                     });
                   }
                 }}
-                disabled={!stackProjectName.trim() || (!stackCreateVector && !stackCreateMedia && !stackCreateOpenSearch) || createStackMutation.isPending}
+                disabled={
+                  !stackProjectName.trim() ||
+                  (!stackCreateVector && !stackCreateMedia && !stackCreateOpenSearch) ||
+                  (stackCreateOpenSearch && stackProjectName.length > 25) ||
+                  createStackMutation.isPending
+                }
                 className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-md disabled:opacity-50"
+                title={
+                  stackCreateOpenSearch && stackProjectName.length > 25
+                    ? 'Project name too long for OpenSearch domain (max 25 chars)'
+                    : ''
+                }
               >
                 {createStackMutation.isPending ? 'Creating...' : 'Create Stack'}
               </button>

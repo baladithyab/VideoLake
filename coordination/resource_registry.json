@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2025-10-23T08:02:30.185094+00:00",
+  "updated_at": "2025-10-23T08:09:38.706227+00:00",
   "active": {
     "index_arn": null,
     "vector_bucket": null,
@@ -17,6 +17,15 @@
       "source": "service",
       "status": "created",
       "created_at": "2025-10-23T08:02:29.696928+00:00"
+    },
+    {
+      "name": "test-102325-medialake1-vector-bucket",
+      "region": "us-east-1",
+      "encryption": "SSE-S3",
+      "kms_key_arn": null,
+      "source": "service",
+      "status": "created",
+      "created_at": "2025-10-23T08:09:38.209527+00:00"
     }
   ],
   "s3_buckets": [
@@ -26,6 +35,13 @@
       "source": "ui",
       "status": "created",
       "created_at": "2025-10-23T08:02:30.185077+00:00"
+    },
+    {
+      "name": "test-102325-medialake1-media-bucket",
+      "region": "us-east-1",
+      "source": "ui",
+      "status": "created",
+      "created_at": "2025-10-23T08:09:38.706206+00:00"
     }
   ],
   "indexes": [],

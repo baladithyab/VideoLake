@@ -580,10 +580,24 @@ async def create_stack(request: CreateStackRequest):
     Creates a coordinated set of resources with consistent naming:
     - Vector bucket: {project_name}-vector-bucket
     - Media bucket: {project_name}-media-bucket
-    - OpenSearch domain: {project_name}-search
+    - OpenSearch domain: {project_name}-os (shortened to meet 28 char limit)
+
+    Note: OpenSearch domain names must be ≤28 characters
     """
     try:
         lifecycle_manager = ResourceLifecycleManager()
+
+        # Validate OpenSearch domain name length (AWS limit is 28 characters)
+        if request.create_opensearch_domain:
+            opensearch_domain_name = f"{request.project_name}-os"
+            if len(opensearch_domain_name) > 28:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"OpenSearch domain name '{opensearch_domain_name}' is too long ({len(opensearch_domain_name)} chars). "
+                           f"Project name must be ≤25 characters to allow for '-os' suffix (AWS limit: 28 chars total). "
+                           f"Current project name '{request.project_name}' is {len(request.project_name)} characters."
+                )
+
         results = {
             "project_name": request.project_name,
             "resources_created": [],
@@ -679,7 +693,8 @@ async def create_stack(request: CreateStackRequest):
 
         # Create OpenSearch domain if requested
         if request.create_opensearch_domain:
-            opensearch_domain_name = f"{request.project_name}-search"
+            # Use shortened suffix to meet AWS 28-character limit
+            opensearch_domain_name = f"{request.project_name}-os"
             try:
                 logger.info(f"Creating OpenSearch domain: {opensearch_domain_name}")
                 status = lifecycle_manager.create_opensearch_domain(
