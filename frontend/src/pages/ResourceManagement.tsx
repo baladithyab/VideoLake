@@ -33,6 +33,11 @@ export default function ResourceManagement() {
   const [showBatchCreateVector, setShowBatchCreateVector] = useState(false);
   const [showBatchCreateOpenSearch, setShowBatchCreateOpenSearch] = useState(false);
 
+  // Checkbox-based batch create dialogs
+  const [showCheckboxCreateMedia, setShowCheckboxCreateMedia] = useState(false);
+  const [showCheckboxCreateVector, setShowCheckboxCreateVector] = useState(false);
+  const [showCheckboxCreateOpenSearch, setShowCheckboxCreateOpenSearch] = useState(false);
+
   // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<{type: 'media' | 'vector' | 'opensearch'; name: string;} | null>(null);
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{type: 'media' | 'vector' | 'opensearch'; names: string[];} | null>(null);
@@ -45,10 +50,36 @@ export default function ResourceManagement() {
   const [batchVectorNames, setBatchVectorNames] = useState('');
   const [batchOpenSearchNames, setBatchOpenSearchNames] = useState('');
 
-  // Checkbox selections
+  // Checkbox selections for deletion
   const [selectedMediaBuckets, setSelectedMediaBuckets] = useState<Set<string>>(new Set());
   const [selectedVectorBuckets, setSelectedVectorBuckets] = useState<Set<string>>(new Set());
   const [selectedOpenSearchDomains, setSelectedOpenSearchDomains] = useState<Set<string>>(new Set());
+
+  // Checkbox selections for creation
+  const [selectedMediaTemplates, setSelectedMediaTemplates] = useState<Set<string>>(new Set());
+  const [selectedVectorTemplates, setSelectedVectorTemplates] = useState<Set<string>>(new Set());
+  const [selectedOpenSearchTemplates, setSelectedOpenSearchTemplates] = useState<Set<string>>(new Set());
+
+  // Predefined resource templates
+  const mediaTemplates = [
+    { id: 'raw-media', name: 's3vector-raw-media', description: 'Raw uploaded media files' },
+    { id: 'processed-media', name: 's3vector-processed-media', description: 'Processed media files' },
+    { id: 'thumbnails', name: 's3vector-thumbnails', description: 'Generated thumbnails' },
+    { id: 'temp-uploads', name: 's3vector-temp-uploads', description: 'Temporary upload storage' },
+  ];
+
+  const vectorTemplates = [
+    { id: 'text-embeddings', name: 's3vector-text-embeddings', description: 'Text embedding vectors' },
+    { id: 'image-embeddings', name: 's3vector-image-embeddings', description: 'Image embedding vectors' },
+    { id: 'video-embeddings', name: 's3vector-video-embeddings', description: 'Video embedding vectors' },
+    { id: 'audio-embeddings', name: 's3vector-audio-embeddings', description: 'Audio embedding vectors' },
+  ];
+
+  const openSearchTemplates = [
+    { id: 'main-search', name: 's3vector-main-search', description: 'Main search domain' },
+    { id: 'analytics', name: 's3vector-analytics', description: 'Analytics domain' },
+    { id: 'dev-search', name: 's3vector-dev-search', description: 'Development search domain' },
+  ];
 
   const { data: registry, isLoading: registryLoading, refetch: refetchRegistry } = useQuery({
     queryKey: ['resource-registry'],
@@ -56,6 +87,7 @@ export default function ResourceManagement() {
       const response = await resourcesAPI.getRegistry();
       return response.data;
     },
+    refetchInterval: 3000, // Auto-refresh every 3 seconds to catch deletions
   });
 
   const createMediaBucketMutation = useMutation({
@@ -233,6 +265,61 @@ export default function ResourceManagement() {
     }
   };
 
+  // Template selection helpers
+  const toggleMediaTemplate = (id: string) => {
+    const newSet = new Set(selectedMediaTemplates);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedMediaTemplates(newSet);
+  };
+
+  const toggleVectorTemplate = (id: string) => {
+    const newSet = new Set(selectedVectorTemplates);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedVectorTemplates(newSet);
+  };
+
+  const toggleOpenSearchTemplate = (id: string) => {
+    const newSet = new Set(selectedOpenSearchTemplates);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedOpenSearchTemplates(newSet);
+  };
+
+  const toggleAllMediaTemplates = () => {
+    if (selectedMediaTemplates.size === mediaTemplates.length) {
+      setSelectedMediaTemplates(new Set());
+    } else {
+      setSelectedMediaTemplates(new Set(mediaTemplates.map(t => t.id)));
+    }
+  };
+
+  const toggleAllVectorTemplates = () => {
+    if (selectedVectorTemplates.size === vectorTemplates.length) {
+      setSelectedVectorTemplates(new Set());
+    } else {
+      setSelectedVectorTemplates(new Set(vectorTemplates.map(t => t.id)));
+    }
+  };
+
+  const toggleAllOpenSearchTemplates = () => {
+    if (selectedOpenSearchTemplates.size === openSearchTemplates.length) {
+      setSelectedOpenSearchTemplates(new Set());
+    } else {
+      setSelectedOpenSearchTemplates(new Set(openSearchTemplates.map(t => t.id)));
+    }
+  };
+
   const mediaBuckets = registry?.registry?.s3_buckets || [];
   const vectorBuckets = registry?.registry?.vector_buckets || [];
   const openSearchDomains = registry?.registry?.opensearch_domains || [];
@@ -278,6 +365,9 @@ export default function ResourceManagement() {
                     <Trash2 className="w-4 h-4" />Delete Selected ({selectedMediaBuckets.size})
                   </button>
                 )}
+                <button onClick={() => setShowCheckboxCreateMedia(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700">
+                  <CheckSquare className="w-4 h-4" />Select & Create
+                </button>
                 <button onClick={() => setShowBatchCreateMedia(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
                   <Plus className="w-4 h-4" />Batch Create
                 </button>
@@ -351,6 +441,9 @@ export default function ResourceManagement() {
                     <Trash2 className="w-4 h-4" />Delete Selected ({selectedVectorBuckets.size})
                   </button>
                 )}
+                <button onClick={() => setShowCheckboxCreateVector(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700">
+                  <CheckSquare className="w-4 h-4" />Select & Create
+                </button>
                 <button onClick={() => setShowBatchCreateVector(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
                   <Plus className="w-4 h-4" />Batch Create
                 </button>
@@ -424,6 +517,9 @@ export default function ResourceManagement() {
                     <Trash2 className="w-4 h-4" />Delete Selected ({selectedOpenSearchDomains.size})
                   </button>
                 )}
+                <button onClick={() => setShowCheckboxCreateOpenSearch(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700">
+                  <CheckSquare className="w-4 h-4" />Select & Create
+                </button>
                 <button onClick={() => setShowBatchCreateOpenSearch(true)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
                   <Plus className="w-4 h-4" />Batch Create
                 </button>
@@ -518,6 +614,151 @@ export default function ResourceManagement() {
               <button onClick={() => setShowCreateOpenSearch(false)} className="px-4 py-2 border rounded-md">Cancel</button>
               <button onClick={() => createOpenSearchMutation.mutate({ domain_name: openSearchDomainName })} disabled={!openSearchDomainName || createOpenSearchMutation.isPending} className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50">
                 {createOpenSearchMutation.isPending ? 'Creating...' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Checkbox Create Media Buckets Dialog */}
+      {showCheckboxCreateMedia && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Select Media Buckets to Create</h3>
+            <div className="mb-4">
+              <button onClick={toggleAllMediaTemplates} className="text-sm text-indigo-600 hover:text-indigo-700 mb-2">
+                {selectedMediaTemplates.size === mediaTemplates.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
+            <div className="space-y-2 mb-4 max-h-96 overflow-y-auto">
+              {mediaTemplates.map((template) => (
+                <div key={template.id} className="flex items-start gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer" onClick={() => toggleMediaTemplate(template.id)}>
+                  <button className="mt-0.5">
+                    {selectedMediaTemplates.has(template.id) ? (
+                      <CheckSquare className="w-5 h-5 text-indigo-600" />
+                    ) : (
+                      <Square className="w-5 h-5 text-gray-400" />
+                    )}
+                  </button>
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{template.name}</p>
+                    <p className="text-xs text-gray-500">{template.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => { setShowCheckboxCreateMedia(false); setSelectedMediaTemplates(new Set()); }} className="px-4 py-2 border rounded-md">Cancel</button>
+              <button
+                onClick={() => {
+                  const names = Array.from(selectedMediaTemplates).map(id => mediaTemplates.find(t => t.id === id)?.name).filter(Boolean) as string[];
+                  if (names.length > 0) {
+                    batchCreateMediaMutation.mutate({ bucket_names: names });
+                    setShowCheckboxCreateMedia(false);
+                    setSelectedMediaTemplates(new Set());
+                  }
+                }}
+                disabled={selectedMediaTemplates.size === 0 || batchCreateMediaMutation.isPending}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50"
+              >
+                {batchCreateMediaMutation.isPending ? 'Creating...' : `Create ${selectedMediaTemplates.size} Bucket${selectedMediaTemplates.size !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Checkbox Create Vector Buckets Dialog */}
+      {showCheckboxCreateVector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Select Vector Buckets to Create</h3>
+            <div className="mb-4">
+              <button onClick={toggleAllVectorTemplates} className="text-sm text-indigo-600 hover:text-indigo-700 mb-2">
+                {selectedVectorTemplates.size === vectorTemplates.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
+            <div className="space-y-2 mb-4 max-h-96 overflow-y-auto">
+              {vectorTemplates.map((template) => (
+                <div key={template.id} className="flex items-start gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer" onClick={() => toggleVectorTemplate(template.id)}>
+                  <button className="mt-0.5">
+                    {selectedVectorTemplates.has(template.id) ? (
+                      <CheckSquare className="w-5 h-5 text-indigo-600" />
+                    ) : (
+                      <Square className="w-5 h-5 text-gray-400" />
+                    )}
+                  </button>
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{template.name}</p>
+                    <p className="text-xs text-gray-500">{template.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => { setShowCheckboxCreateVector(false); setSelectedVectorTemplates(new Set()); }} className="px-4 py-2 border rounded-md">Cancel</button>
+              <button
+                onClick={() => {
+                  const names = Array.from(selectedVectorTemplates).map(id => vectorTemplates.find(t => t.id === id)?.name).filter(Boolean) as string[];
+                  if (names.length > 0) {
+                    batchCreateVectorMutation.mutate({ bucket_names: names });
+                    setShowCheckboxCreateVector(false);
+                    setSelectedVectorTemplates(new Set());
+                  }
+                }}
+                disabled={selectedVectorTemplates.size === 0 || batchCreateVectorMutation.isPending}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50"
+              >
+                {batchCreateVectorMutation.isPending ? 'Creating...' : `Create ${selectedVectorTemplates.size} Bucket${selectedVectorTemplates.size !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Checkbox Create OpenSearch Domains Dialog */}
+      {showCheckboxCreateOpenSearch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Select OpenSearch Domains to Create</h3>
+            <div className="mb-4">
+              <button onClick={toggleAllOpenSearchTemplates} className="text-sm text-indigo-600 hover:text-indigo-700 mb-2">
+                {selectedOpenSearchTemplates.size === openSearchTemplates.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
+            <div className="space-y-2 mb-4 max-h-96 overflow-y-auto">
+              {openSearchTemplates.map((template) => (
+                <div key={template.id} className="flex items-start gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer" onClick={() => toggleOpenSearchTemplate(template.id)}>
+                  <button className="mt-0.5">
+                    {selectedOpenSearchTemplates.has(template.id) ? (
+                      <CheckSquare className="w-5 h-5 text-indigo-600" />
+                    ) : (
+                      <Square className="w-5 h-5 text-gray-400" />
+                    )}
+                  </button>
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{template.name}</p>
+                    <p className="text-xs text-gray-500">{template.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-gray-600 mb-4">Note: Each domain takes 5-10 minutes to create</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => { setShowCheckboxCreateOpenSearch(false); setSelectedOpenSearchTemplates(new Set()); }} className="px-4 py-2 border rounded-md">Cancel</button>
+              <button
+                onClick={() => {
+                  const names = Array.from(selectedOpenSearchTemplates).map(id => openSearchTemplates.find(t => t.id === id)?.name).filter(Boolean) as string[];
+                  if (names.length > 0) {
+                    batchCreateOpenSearchMutation.mutate({ domain_names: names });
+                    setShowCheckboxCreateOpenSearch(false);
+                    setSelectedOpenSearchTemplates(new Set());
+                  }
+                }}
+                disabled={selectedOpenSearchTemplates.size === 0 || batchCreateOpenSearchMutation.isPending}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50"
+              >
+                {batchCreateOpenSearchMutation.isPending ? 'Creating...' : `Create ${selectedOpenSearchTemplates.size} Domain${selectedOpenSearchTemplates.size !== 1 ? 's' : ''}`}
               </button>
             </div>
           </div>
