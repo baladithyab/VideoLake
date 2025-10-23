@@ -261,33 +261,46 @@ class ResourceLifecycleManager:
                 progress_percentage=0
             )
 
-    def delete_vector_bucket(self, bucket_name: str) -> ResourceStatus:
-        """Delete an S3 Vector bucket."""
+    def delete_vector_bucket(self, bucket_name: str, cascade: bool = True) -> ResourceStatus:
+        """
+        Delete an S3 Vector bucket.
+
+        Args:
+            bucket_name: Name of the vector bucket to delete
+            cascade: If True, delete all indexes in the bucket first (default: True)
+
+        Returns:
+            ResourceStatus with deletion result
+        """
         logger.info(f"Deleting vector bucket: {bucket_name}")
 
         try:
-            # Delete the vector bucket using S3 Vectors API
-            self.s3vectors_client.delete_bucket(Bucket=bucket_name)
+            # Use the S3VectorStorageManager's delete method which handles cascade deletion
+            result = self.s3vector_manager.delete_vector_bucket(
+                bucket_name=bucket_name,
+                cascade=cascade
+            )
 
-            # Update registry
-            resource_registry.log_vector_bucket_deleted(bucket_name=bucket_name, source="lifecycle_manager")
+            # Check if deletion was successful
+            if result.get("status") in ["deleted", "not_found"]:
+                state = ResourceState.DELETED
+                progress = 100
+                error_msg = None
+            else:
+                state = ResourceState.FAILED
+                progress = 0
+                error_msg = result.get("message", "Deletion failed")
 
             return ResourceStatus(
                 resource_id=bucket_name,
                 resource_type=ResourceType.VECTOR_BUCKET,
-                state=ResourceState.DELETED,
-                progress_percentage=100
+                state=state,
+                progress_percentage=progress,
+                error_message=error_msg,
+                metadata=result
             )
 
-        except ClientError as e:
-            code = e.response.get("Error", {}).get("Code", "")
-            if code in ("NoSuchBucket", "404"):
-                return ResourceStatus(
-                    resource_id=bucket_name,
-                    resource_type=ResourceType.VECTOR_BUCKET,
-                    state=ResourceState.DELETED,
-                    progress_percentage=100
-                )
+        except Exception as e:
             logger.error(f"Failed to delete vector bucket: {e}")
             return ResourceStatus(
                 resource_id=bucket_name,
