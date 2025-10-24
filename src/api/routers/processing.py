@@ -257,9 +257,9 @@ async def store_embeddings(job_id: str, index_arn: str):
 async def monitor_processing_job(job_id: str, service: TwelveLabsVideoProcessingService):
     """Background task to monitor processing job."""
     try:
-        # Poll for job completion
-        result = service.wait_for_job_completion(job_id, timeout_sec=3600)
-        
+        # Poll for job completion (use correct method name)
+        result = service.wait_for_completion(job_id, timeout_sec=3600)
+
         # Update job status
         if job_id in processing_jobs:
             processing_jobs[job_id].status = "completed"
@@ -277,6 +277,7 @@ async def monitor_processing_job(job_id: str, service: TwelveLabsVideoProcessing
                     for seg in result.segments
                 ]
             }
+            logger.info(f"Job {job_id} completed successfully with {len(result.segments)} segments")
     except Exception as e:
         logger.error(f"Job monitoring failed for {job_id}: {e}")
         if job_id in processing_jobs:

@@ -110,14 +110,23 @@ export default function MediaProcessing() {
     const videos = sampleVideosData?.categories[0]?.videos || [];
     const selectedVideos = videos.filter((v: SampleVideo) => selectedSampleVideos.has(v.id));
 
-    for (const video of selectedVideos) {
+    toast.success(`Starting processing for ${selectedVideos.length} video(s)...`);
+
+    for (let i = 0; i < selectedVideos.length; i++) {
+      const video = selectedVideos[i];
       try {
         await processMutation.mutateAsync({
           video_s3_uri: video.sources[0],
           embedding_options: settings.vectorTypes,
         });
-      } catch (error) {
+
+        // Add delay between requests to avoid throttling (except for last video)
+        if (i < selectedVideos.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+        }
+      } catch (error: any) {
         console.error(`Failed to process ${video.title}:`, error);
+        toast.error(`Failed to process ${video.title}: ${error.message || 'Unknown error'}`);
       }
     }
   };
