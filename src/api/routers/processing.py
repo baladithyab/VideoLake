@@ -59,11 +59,22 @@ def download_video_to_s3(http_url: str, video_id: str) -> str:
     """
     try:
         # Get media bucket from registry
-        media_buckets = resource_registry.list_resources(resource_type="media_bucket")
-        if not media_buckets:
-            raise ValueError("No media bucket found. Please create a media bucket first.")
+        s3_buckets = resource_registry.list_s3_buckets()
 
-        media_bucket = media_buckets[0]["bucket_name"]
+        # Filter for media buckets (buckets with 'media' in the name or type)
+        media_buckets = [
+            b for b in s3_buckets
+            if 'media' in b.get('name', '').lower() or b.get('bucket_type') == 'media'
+        ]
+
+        if not media_buckets:
+            # Fallback: use any S3 bucket
+            if not s3_buckets:
+                raise ValueError("No S3 bucket found. Please create an S3 bucket first.")
+            media_bucket = s3_buckets[0]["name"]
+            logger.warning(f"No media bucket found, using first available bucket: {media_bucket}")
+        else:
+            media_bucket = media_buckets[0]["name"]
 
         # Download video from HTTP URL
         logger.info(f"Downloading video from {http_url}")
