@@ -25,7 +25,6 @@ interface ProcessingSettings {
 
 export default function MediaProcessing() {
   const [activeTab, setActiveTab] = useState<'samples' | 'upload' | 's3uri'>('samples');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [s3Uri, setS3Uri] = useState('');
   const [selectedSampleVideos, setSelectedSampleVideos] = useState<Set<string>>(new Set());
@@ -81,11 +80,6 @@ export default function MediaProcessing() {
     },
     refetchInterval: 3000, // Poll every 3 seconds
   });
-
-  const handleFileUpload = async () => {
-    if (!selectedFile) return;
-    await uploadMutation.mutateAsync(selectedFile);
-  };
 
   const handleMultipleFileUpload = async () => {
     if (selectedFiles.length === 0) return;
@@ -489,19 +483,21 @@ export default function MediaProcessing() {
         <div className="space-y-3">
           {jobs?.jobs && jobs.jobs.length > 0 ? (
             jobs.jobs.map((job: any) => {
-              const statusIcon = {
+              const statusIconMap: Record<string, JSX.Element> = {
                 processing: <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />,
                 completed: <CheckCircle className="w-5 h-5 text-green-500" />,
                 failed: <XCircle className="w-5 h-5 text-red-500" />,
                 pending: <Clock className="w-5 h-5 text-yellow-500" />,
-              }[job.status] || <Clock className="w-5 h-5 text-gray-500" />;
+              };
+              const statusIcon = statusIconMap[job.status] || <Clock className="w-5 h-5 text-gray-500" />;
 
-              const statusColor = {
+              const statusColorMap: Record<string, string> = {
                 processing: 'bg-blue-50 border-blue-200',
                 completed: 'bg-green-50 border-green-200',
                 failed: 'bg-red-50 border-red-200',
                 pending: 'bg-yellow-50 border-yellow-200',
-              }[job.status] || 'bg-gray-50 border-gray-200';
+              };
+              const statusColor = statusColorMap[job.status] || 'bg-gray-50 border-gray-200';
 
               return (
                 <div
