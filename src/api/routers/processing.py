@@ -11,10 +11,13 @@ import tempfile
 import os
 import boto3
 from datetime import datetime
+import requests
+import uuid
 
 from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.utils.logging_config import get_logger
+from src.utils.resource_registry import resource_registry
 
 logger = get_logger(__name__)
 
@@ -41,6 +44,58 @@ class ProcessingJobStatus(BaseModel):
 
 # In-memory job tracking (in production, use Redis or database)
 processing_jobs: Dict[str, ProcessingJobStatus] = {}
+
+
+def download_video_to_s3(http_url: str, video_id: str) -> str:
+    """
+    Download video from HTTP URL and upload to S3 media bucket.
+
+    Args:
+        http_url: HTTP URL of the video
+        video_id: Unique identifier for the video
+
+    Returns:
+        S3 URI of the uploaded video
+    """
+    try:
+        # Get media bucket from registry
+        media_buckets = resource_registry.list_resources(resource_type="media_bucket")
+        if not media_buckets:
+            raise ValueError("No media bucket found. Please create a media bucket first.")
+
+        media_bucket = media_buckets[0]["bucket_name"]
+
+        # Download video from HTTP URL
+        logger.info(f"Downloading video from {http_url}")
+        response = requests.get(http_url, stream=True, timeout=300)
+        response.raise_for_status()
+
+        # Get file extension from URL
+        file_ext = os.path.splitext(http_url.split('?')[0])[-1] or '.mp4'
+
+        # Create S3 key
+        s3_key = f"sample-videos/{video_id}{file_ext}"
+
+        # Upload to S3
+        s3_client = boto3.client('s3')
+        logger.info(f"Uploading video to s3://{media_bucket}/{s3_key}")
+
+        # Upload in chunks
+        s3_client.upload_fileobj(
+            response.raw,
+            media_bucket,
+            s3_key,
+            ExtraArgs={'ContentType': 'video/mp4'}
+        )
+
+        s3_uri = f"s3://{media_bucket}/{s3_key}"
+        logger.info(f"Video uploaded successfully to {s3_uri}")
+
+        return s3_uri
+
+    except Exception as e:
+        logger.error(f"Failed to download video to S3: {e}")
+        raise
 
 
 @router.post("/upload")
@@ -80,19 +135,28 @@ async def process_video(request: ProcessVideoRequest, background_tasks: Backgrou
     try:
         if not request.video_s3_uri:
             raise HTTPException(status_code=400, detail="video_s3_uri is required")
-        
+
+        video_uri = request.video_s3_uri
+
+        # If the URI is an HTTP URL, download to S3 first
+        if video_uri.startswith('http://') or video_uri.startswith('https://'):
+            logger.info(f"Detected HTTP URL, downloading to S3: {video_uri}")
+            video_id = str(uuid.uuid4())
+            video_uri = download_video_to_s3(video_uri, video_id)
+            logger.info(f"Downloaded to S3: {video_uri}")
+
         # Initialize TwelveLabs service
         twelvelabs_service = TwelveLabsVideoProcessingService()
-        
+
         # Start async processing
         job_info = twelvelabs_service.start_video_processing(
-            video_s3_uri=request.video_s3_uri,
+            video_s3_uri=video_uri,
             embedding_options=request.embedding_options,
             start_sec=request.start_sec,
             length_sec=request.length_sec,
             use_fixed_length_sec=request.use_fixed_length_sec
         )
-        
+
         # Track job
         job_status = ProcessingJobStatus(
             job_id=job_info.job_id,
@@ -100,14 +164,15 @@ async def process_video(request: ProcessVideoRequest, background_tasks: Backgrou
             progress=0.0
         )
         processing_jobs[job_info.job_id] = job_status
-        
+
         # Add background task to monitor job
         background_tasks.add_task(monitor_processing_job, job_info.job_id, twelvelabs_service)
-        
+
         return {
             "success": True,
             "job_id": job_info.job_id,
-            "status": "processing"
+            "status": "processing",
+            "s3_uri": video_uri
         }
     except Exception as e:
         logger.error(f"Video processing failed: {e}")
@@ -328,11 +393,67 @@ async def get_sample_videos():
 
 
 @router.post("/process-sample")
-async def process_sample_video(video_id: str, background_tasks: BackgroundTasks):
-    """Process a sample video."""
-    # Implementation similar to process_video
-    return {
-        "success": True,
-        "message": f"Processing sample video {video_id}"
-    }
+async def process_sample_video(
+    video_id: str,
+    background_tasks: BackgroundTasks,
+    embedding_options: List[str] = ["visual-text", "visual-image", "audio"]
+):
+    """
+    Process a sample video by downloading it to S3 first, then processing.
+
+    This endpoint:
+    1. Finds the sample video by ID
+    2. Downloads it from HTTP URL to S3 media bucket
+    3. Starts TwelveLabs processing with the S3 URI
+    """
+    try:
+        # Get sample videos data
+        sample_videos_response = await get_sample_videos()
+        all_videos = sample_videos_response["categories"][0]["videos"]
+
+        # Find the requested video
+        video = next((v for v in all_videos if v["id"] == video_id), None)
+        if not video:
+            raise HTTPException(status_code=404, detail=f"Sample video '{video_id}' not found")
+
+        # Download video to S3
+        logger.info(f"Downloading sample video '{video['title']}' to S3")
+        http_url = video["sources"][0]
+        s3_uri = download_video_to_s3(http_url, video_id)
+
+        # Initialize TwelveLabs service
+        twelvelabs_service = TwelveLabsVideoProcessingService()
+
+        # Start async processing with S3 URI
+        job_info = twelvelabs_service.start_video_processing(
+            video_s3_uri=s3_uri,
+            embedding_options=embedding_options,
+            start_sec=0,
+            use_fixed_length_sec=5.0
+        )
+
+        # Track job
+        job_status = ProcessingJobStatus(
+            job_id=job_info.job_id,
+            status="processing",
+            progress=0.0
+        )
+        processing_jobs[job_info.job_id] = job_status
+
+        # Add background task to monitor job
+        background_tasks.add_task(monitor_processing_job, job_info.job_id, twelvelabs_service)
+
+        return {
+            "success": True,
+            "job_id": job_info.job_id,
+            "status": "processing",
+            "video_title": video["title"],
+            "s3_uri": s3_uri
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to process sample video: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
