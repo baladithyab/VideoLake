@@ -19,11 +19,15 @@ logger = get_logger(__name__)
 
 class VectorStoreType(str, Enum):
     """Supported vector store types."""
+    # Currently implemented
     S3_VECTOR = "s3_vector"
     OPENSEARCH = "opensearch"
+    LANCEDB = "lancedb"
+    QDRANT = "qdrant"
+
+    # Extensible for future implementations
     PINECONE = "pinecone"
     WEAVIATE = "weaviate"
-    QDRANT = "qdrant"
     MILVUS = "milvus"
     CHROMA = "chroma"
 
@@ -48,13 +52,14 @@ class VectorStoreConfig:
     dimension: int
     similarity_metric: str = "cosine"  # cosine, euclidean, dot_product
     metadata: Dict[str, Any] = field(default_factory=dict)
-    
+
     # Provider-specific configurations
     s3vector_config: Optional[Dict[str, Any]] = None
     opensearch_config: Optional[Dict[str, Any]] = None
+    lancedb_config: Optional[Dict[str, Any]] = None
+    qdrant_config: Optional[Dict[str, Any]] = None
     pinecone_config: Optional[Dict[str, Any]] = None
     weaviate_config: Optional[Dict[str, Any]] = None
-    qdrant_config: Optional[Dict[str, Any]] = None
 
 
 @dataclass

@@ -19,6 +19,14 @@ from src.utils.logging_config import get_logger
 # Import providers to register them
 from src.services.vector_store_s3vector_provider import S3VectorProvider
 from src.services.vector_store_opensearch_provider import OpenSearchProvider
+from src.services.vector_store_lancedb_provider import LanceDBProvider
+from src.services.vector_store_qdrant_provider import QdrantProvider
+
+# Register all providers
+VectorStoreProviderFactory.register_provider(VectorStoreType.S3_VECTOR, S3VectorProvider)
+VectorStoreProviderFactory.register_provider(VectorStoreType.OPENSEARCH, OpenSearchProvider)
+VectorStoreProviderFactory.register_provider(VectorStoreType.LANCEDB, LanceDBProvider)
+VectorStoreProviderFactory.register_provider(VectorStoreType.QDRANT, QdrantProvider)
 
 logger = get_logger(__name__)
 

@@ -10,8 +10,6 @@ This document describes the organization of documentation files in the S3Vector 
 S3Vector/
 ├── README.md                          # Main project README
 ├── QUICKSTART.md                      # Quick start guide
-├── CLAUDE.md                          # Claude Code configuration
-├── CRUSH.md                           # Project context
 ├── README_UNIFIED_DEMO.md             # Unified demo documentation
 │
 ├── docs/                              # Main documentation directory
@@ -48,8 +46,6 @@ S3Vector/
 **Keep in Root:**
 - `README.md` - Main project documentation
 - `QUICKSTART.md` - Quick start guide for new users
-- `CLAUDE.md` - Claude Code configuration
-- `CRUSH.md` - Project context and overview
 - `README_UNIFIED_DEMO.md` - Unified demo guide
 
 **Moved to docs/summaries/:**

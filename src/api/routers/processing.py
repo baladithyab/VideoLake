@@ -18,6 +18,7 @@ from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingSe
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.utils.logging_config import get_logger
 from src.utils.resource_registry import resource_registry
+from src.utils.timing_tracker import TimingTracker
 
 logger = get_logger(__name__)
 
@@ -112,28 +113,35 @@ def download_video_to_s3(http_url: str, video_id: str) -> str:
 @router.post("/upload")
 async def upload_video(file: UploadFile = File(...)):
     """Upload video file to S3."""
+    tracker = TimingTracker("video_upload")
+
     try:
         # Create temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp_file:
-            content = await file.read()
-            tmp_file.write(content)
-            tmp_path = tmp_file.name
-        
+        with tracker.time_operation("create_temp_file"):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp_file:
+                content = await file.read()
+                tmp_file.write(content)
+                tmp_path = tmp_file.name
+
         # Upload to S3
-        s3_client = boto3.client('s3')
-        bucket_name = os.getenv('S3_VECTORS_BUCKET')
-        s3_key = f"uploads/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
-        
-        s3_client.upload_file(tmp_path, bucket_name, s3_key)
-        s3_uri = f"s3://{bucket_name}/{s3_key}"
-        
+        with tracker.time_operation("s3_upload"):
+            s3_client = boto3.client('s3')
+            bucket_name = os.getenv('S3_VECTORS_BUCKET')
+            s3_key = f"uploads/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+
+            s3_client.upload_file(tmp_path, bucket_name, s3_key)
+            s3_uri = f"s3://{bucket_name}/{s3_key}"
+
         # Cleanup temp file
         os.unlink(tmp_path)
-        
+
+        report = tracker.finish()
+
         return {
             "success": True,
             "s3_uri": s3_uri,
-            "filename": file.filename
+            "filename": file.filename,
+            "timing_report": report.to_dict()
         }
     except Exception as e:
         logger.error(f"Video upload failed: {e}")
@@ -143,6 +151,8 @@ async def upload_video(file: UploadFile = File(...)):
 @router.post("/process")
 async def process_video(request: ProcessVideoRequest, background_tasks: BackgroundTasks):
     """Start video processing job."""
+    tracker = TimingTracker("video_processing")
+
     try:
         if not request.video_s3_uri:
             raise HTTPException(status_code=400, detail="video_s3_uri is required")
@@ -151,22 +161,24 @@ async def process_video(request: ProcessVideoRequest, background_tasks: Backgrou
 
         # If the URI is an HTTP URL, download to S3 first
         if video_uri.startswith('http://') or video_uri.startswith('https://'):
-            logger.info(f"Detected HTTP URL, downloading to S3: {video_uri}")
-            video_id = str(uuid.uuid4())
-            video_uri = download_video_to_s3(video_uri, video_id)
-            logger.info(f"Downloaded to S3: {video_uri}")
+            with tracker.time_operation("download_video_to_s3"):
+                logger.info(f"Detected HTTP URL, downloading to S3: {video_uri}")
+                video_id = str(uuid.uuid4())
+                video_uri = download_video_to_s3(video_uri, video_id)
+                logger.info(f"Downloaded to S3: {video_uri}")
 
         # Initialize TwelveLabs service
-        twelvelabs_service = TwelveLabsVideoProcessingService()
+        with tracker.time_operation("start_twelvelabs_processing"):
+            twelvelabs_service = TwelveLabsVideoProcessingService()
 
-        # Start async processing
-        job_info = twelvelabs_service.start_video_processing(
-            video_s3_uri=video_uri,
-            embedding_options=request.embedding_options,
-            start_sec=request.start_sec,
-            length_sec=request.length_sec,
-            use_fixed_length_sec=request.use_fixed_length_sec
-        )
+            # Start async processing
+            job_info = twelvelabs_service.start_video_processing(
+                video_s3_uri=video_uri,
+                embedding_options=request.embedding_options,
+                start_sec=request.start_sec,
+                length_sec=request.length_sec,
+                use_fixed_length_sec=request.use_fixed_length_sec
+            )
 
         # Track job
         job_status = ProcessingJobStatus(
@@ -179,11 +191,14 @@ async def process_video(request: ProcessVideoRequest, background_tasks: Backgrou
         # Add background task to monitor job
         background_tasks.add_task(monitor_processing_job, job_info.job_id, twelvelabs_service)
 
+        report = tracker.finish()
+
         return {
             "success": True,
             "job_id": job_info.job_id,
             "status": "processing",
-            "s3_uri": video_uri
+            "s3_uri": video_uri,
+            "timing_report": report.to_dict()
         }
     except Exception as e:
         logger.error(f"Video processing failed: {e}")
@@ -214,40 +229,48 @@ async def list_jobs():
 @router.post("/store-embeddings")
 async def store_embeddings(job_id: str, index_arn: str):
     """Store processed embeddings in S3 Vector index."""
+    tracker = TimingTracker("store_embeddings")
+
     try:
-        if job_id not in processing_jobs:
-            raise HTTPException(status_code=404, detail="Job not found")
-        
-        job = processing_jobs[job_id]
-        if job.status != "completed":
-            raise HTTPException(status_code=400, detail="Job not completed")
-        
-        if not job.result:
-            raise HTTPException(status_code=400, detail="No results available")
-        
+        with tracker.time_operation("validate_job"):
+            if job_id not in processing_jobs:
+                raise HTTPException(status_code=404, detail="Job not found")
+
+            job = processing_jobs[job_id]
+            if job.status != "completed":
+                raise HTTPException(status_code=400, detail="Job not completed")
+
+            if not job.result:
+                raise HTTPException(status_code=400, detail="No results available")
+
         # Store embeddings
-        storage_manager = S3VectorStorageManager()
-        
-        # Extract vectors from result
-        vectors_data = []
-        for segment in job.result.get('segments', []):
-            vectors_data.append({
-                'id': segment.get('segment_id'),
-                'vector': segment.get('embedding'),
-                'metadata': {
-                    'video_id': job.result.get('video_id'),
-                    'start_sec': segment.get('start_offset_sec'),
-                    'end_sec': segment.get('end_offset_sec'),
-                    'embedding_option': segment.get('embedding_option')
-                }
-            })
-        
-        result = storage_manager.put_vectors(index_arn, vectors_data)
-        
+        with tracker.time_operation("prepare_vectors"):
+            storage_manager = S3VectorStorageManager()
+
+            # Extract vectors from result
+            vectors_data = []
+            for segment in job.result.get('segments', []):
+                vectors_data.append({
+                    'id': segment.get('segment_id'),
+                    'vector': segment.get('embedding'),
+                    'metadata': {
+                        'video_id': job.result.get('video_id'),
+                        'start_sec': segment.get('start_offset_sec'),
+                        'end_sec': segment.get('end_offset_sec'),
+                        'embedding_option': segment.get('embedding_option')
+                    }
+                })
+
+        with tracker.time_operation("s3vector_put_vectors"):
+            result = storage_manager.put_vectors(index_arn, vectors_data)
+
+        report = tracker.finish()
+
         return {
             "success": True,
             "stored_count": len(vectors_data),
-            "result": result
+            "result": result,
+            "timing_report": report.to_dict()
         }
     except Exception as e:
         logger.error(f"Failed to store embeddings: {e}")
