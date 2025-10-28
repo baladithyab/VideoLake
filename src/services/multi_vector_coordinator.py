@@ -5,11 +5,11 @@ This service orchestrates multi-vector processing workflows across different vec
 and manages coordination between various embedding services, storage systems, and search engines.
 
 Key Features:
-- Unified API for multi-vector operations  
+- Unified API for multi-vector operations
 - Intelligent routing based on vector types
 - Cross-vector-type search and fusion
 - Performance optimization and monitoring
-- Integration with enhanced Streamlit architecture
+- Integration with REST API architecture
 """
 
 import time
@@ -106,8 +106,8 @@ class SearchRequest:
 
 class MultiVectorCoordinator:
     """
-    Orchestrates multi-vector processing workflows with unified API for Streamlit integration.
-    
+    Orchestrates multi-vector processing workflows with unified API for application integration.
+
     This coordinator manages:
     1. Multi-vector embedding generation
     2. Cross-vector-type storage operations

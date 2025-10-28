@@ -2,7 +2,7 @@
 S3 Bucket Utility Service
 
 Provides safe, idempotent creation of regular S3 buckets (not S3 Vectors) for use by
-the Streamlit UI without performing direct AWS calls in the UI layer.
+the application without performing direct AWS calls in the UI layer.
 Also includes video download and upload functionality for processing workflows.
 """
 

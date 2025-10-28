@@ -3,7 +3,7 @@ Services package for S3 Vector Embedding POC.
 
 This package contains service classes for managing different aspects
 of the vector embedding pipeline including multi-vector architecture,
-OpenSearch integration, and enhanced Streamlit coordination.
+OpenSearch integration, and multi-backend vector store coordination.
 """
 
 from .bedrock_embedding import BedrockEmbeddingService, EmbeddingResult, ModelInfo
@@ -35,12 +35,6 @@ from .multi_vector_coordinator import (
     MultiVectorResult,
     SearchRequest,
     VectorType
-)
-from .streamlit_integration_utils import (
-    StreamlitServiceManager,
-    StreamlitIntegrationConfig,
-    get_service_manager,
-    reset_service_manager
 )
 
 __all__ = [
@@ -78,11 +72,5 @@ __all__ = [
     'MultiVectorConfig',
     'MultiVectorResult',
     'SearchRequest',
-    'VectorType',
-    
-    # Streamlit Integration
-    'StreamlitServiceManager',
-    'StreamlitIntegrationConfig',
-    'get_service_manager',
-    'reset_service_manager'
+    'VectorType'
 ]

@@ -13,11 +13,10 @@ from pydantic import BaseModel
 import logging
 import time
 
-from src.services import (
-    get_service_manager,
-    StreamlitIntegrationConfig,
-    MultiVectorCoordinator
-)
+from src.services.s3_vector_storage import S3VectorStorageManager
+from src.services.similarity_search_engine import SimilaritySearchEngine
+from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
+from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -62,25 +61,24 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-# Global service manager instance
-service_manager = None
-coordinator = None
+# Global service instances
+storage_manager = None
+search_engine = None
+twelvelabs_service = None
+bedrock_service = None
 
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
-    global service_manager, coordinator
+    global storage_manager, search_engine, twelvelabs_service, bedrock_service
     try:
-        integration_config = StreamlitIntegrationConfig(
-            enable_multi_vector=True,
-            enable_concurrent_processing=True,
-            default_vector_types=["visual-text", "visual-image", "audio"],
-            max_concurrent_jobs=8,
-            enable_performance_monitoring=True
-        )
-        service_manager = get_service_manager(integration_config)
-        coordinator = service_manager.multi_vector_coordinator if service_manager else None
+        # Initialize core services
+        storage_manager = S3VectorStorageManager()
+        search_engine = SimilaritySearchEngine()
+        twelvelabs_service = TwelveLabsVideoProcessingService()
+        bedrock_service = BedrockEmbeddingService()
+
         logger.info("Services initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize services: {e}")
@@ -102,8 +100,10 @@ async def health_check():
     return {
         "status": "healthy",
         "services": {
-            "service_manager": service_manager is not None,
-            "coordinator": coordinator is not None
+            "storage_manager": storage_manager is not None,
+            "search_engine": search_engine is not None,
+            "twelvelabs_service": twelvelabs_service is not None,
+            "bedrock_service": bedrock_service is not None
         }
     }
 

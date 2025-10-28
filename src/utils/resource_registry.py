@@ -13,7 +13,7 @@ def _utc_now_iso() -> str:
 class ResourceRegistry:
     """
     Lightweight JSON-backed registry for created AWS resources (S3 buckets, S3 Vectors buckets, and indexes).
-    - Thread-safe (single-process Streamlit) using an in-process lock
+    - Thread-safe using an in-process lock
     - Append-only by default; supports marking index records as deleted
     - Stores an 'active' selection to simplify UI workflows
     """
