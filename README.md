@@ -12,9 +12,16 @@ A comprehensive, production-ready vector embedding platform that integrates AWS 
 │   ├── core.py                                    # Main POC initialization and orchestration
 │   ├── config.py                                 # Configuration management
 │   ├── exceptions.py                             # Custom exception classes
+│   ├── api/                                       # FastAPI application
+│   │   ├── main.py                               # API server and routes
+│   │   └── routers/                              # API route modules
 │   ├── services/                                 # AWS service integrations
 │   │   ├── __init__.py
-│   │   ├── s3_vector_storage.py                 # ✅ S3 Vector storage manager
+│   │   ├── s3_vector_storage.py                 # ✅ S3 Vector facade (352 lines)
+│   │   ├── s3vector/                             # 🆕 Specialized managers
+│   │   │   ├── bucket_manager.py                # ✅ Bucket lifecycle (576 lines)
+│   │   │   ├── index_manager.py                 # ✅ Index lifecycle (656 lines)
+│   │   │   └── vector_operations.py             # ✅ Vector CRUD (590 lines)
 │   │   ├── bedrock_embedding.py                 # ✅ Bedrock embedding service
 │   │   ├── embedding_storage_integration.py     # ✅ Text embedding integration
 │   │   ├── twelvelabs_video_processing.py       # ✅ TwelveLabs video processing
@@ -24,10 +31,16 @@ A comprehensive, production-ready vector embedding platform that integrates AWS 
 │   └── utils/                                    # Utility functions and helpers
 │       ├── __init__.py
 │       ├── aws_clients.py                       # AWS client factory
+│       ├── aws_retry.py                         # 🆕 Centralized retry logic (209 lines)
+│       ├── arn_parser.py                        # 🆕 ARN parsing utilities (234 lines)
+│       ├── vector_validation.py                 # 🆕 Vector validation (287 lines)
 │       ├── helpers.py                           # Common utility functions
 │       └── logging_config.py                    # Structured logging setup
 ├── tests/                                        # Comprehensive test suite
 │   ├── test_s3_vector_storage.py               # ✅ S3 Vector storage tests
+│   ├── test_s3vector_bucket_manager.py         # 🆕 Bucket manager tests (654 lines)
+│   ├── test_s3vector_index_manager.py          # 🆕 Index manager tests (686 lines)
+│   ├── test_s3vector_operations.py             # 🆕 Vector operations tests (610 lines)
 │   ├── test_bedrock_embedding.py               # ✅ Bedrock embedding tests
 │   ├── test_embedding_storage_integration.py   # ✅ Text integration tests
 │   ├── test_video_embedding_storage.py         # ✅ Video integration tests
@@ -39,8 +52,11 @@ A comprehensive, production-ready vector embedding platform that integrates AWS 
 │   ├── cleanup_s3vectors_buckets.py            # Resource cleanup
 │   └── list_s3vectors.py                       # Resource listing
 ├── docs/                                         # Implementation documentation
+│   ├── REFACTORING_ARCHITECTURE.md             # 🆕 Facade pattern refactoring guide
+│   ├── REFACTORING_RESULTS.md                  # 🆕 Refactoring metrics and benefits
+│   ├── UTILITY_LIBRARIES.md                    # 🆕 Shared utilities reference
 │   ├── task_2_1_implementation_summary.md      # S3 Vector bucket management
-│   ├── task_2_2_implementation_summary.md      # S3 Vector index operations  
+│   ├── task_2_2_implementation_summary.md      # S3 Vector index operations
 │   ├── task_3_1_implementation_summary.md      # Bedrock text embeddings
 │   ├── task_3_2_implementation_summary.md      # Bedrock batch processing
 │   ├── task_3_3_implementation_summary.md      # Text embedding integration
@@ -48,6 +64,18 @@ A comprehensive, production-ready vector embedding platform that integrates AWS 
 ├── requirements.txt                              # Python dependencies
 └── README.md                                     # This file
 ```
+
+### 🆕 Recent Architecture Improvements
+
+The S3 Vector storage system has been refactored using the **Facade Pattern** for improved maintainability:
+
+- **85.7% LOC Reduction**: Main file reduced from 2,467 → 352 lines
+- **Specialized Managers**: Bucket, Index, and Vector operations separated into focused modules
+- **Shared Utilities**: Retry logic, ARN parsing, and validation extracted to reusable utilities
+- **100% Backward Compatible**: All existing code continues to work without changes
+- **80%+ Test Coverage**: Comprehensive unit tests for all components (1,950 lines of tests)
+
+See [REFACTORING_ARCHITECTURE.md](docs/REFACTORING_ARCHITECTURE.md) for detailed architectural patterns and [REFACTORING_RESULTS.md](docs/REFACTORING_RESULTS.md) for complete metrics.
 
 ## Features
 
