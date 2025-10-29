@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from enum import Enum
 
 from src.services.advanced_query_analysis import AdvancedQueryAnalyzer, QueryAnalysisResult, QueryIntent
-from src.services.s3_vector_storage import S3VectorStorageService
+from src.services.s3_vector_storage import S3VectorStorageManager
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
