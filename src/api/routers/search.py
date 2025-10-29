@@ -4,8 +4,8 @@ Search API Router.
 Handles multi-modal search queries and similarity search.
 """
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel, validator, Field
 from typing import List, Dict, Any, Optional
 
 from src.services.similarity_search_engine import SimilaritySearchEngine, SimilarityQuery, IndexType
@@ -13,6 +13,14 @@ from src.services.multi_vector_coordinator import MultiVectorCoordinator, Search
 from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.utils.logging_config import get_logger
 from src.utils.timing_tracker import TimingTracker
+from src.core.dependencies import get_search_engine, get_bedrock_service
+from src.api.validators import (
+    validate_query_text,
+    validate_top_k,
+    validate_backend,
+    validate_index_arn,
+    validate_embedding_options
+)
 
 logger = get_logger(__name__)
 
@@ -20,25 +28,63 @@ router = APIRouter()
 
 
 class SearchQueryRequest(BaseModel):
-    """Request model for search query."""
-    query_text: str
-    vector_types: List[str] = ["visual-text", "visual-image", "audio"]
-    top_k: int = 10
-    index_arn: Optional[str] = None
-    use_opensearch: bool = False
-    backend: Optional[str] = None  # s3_vector, opensearch, lancedb, qdrant
+    """Request model for search query with enhanced validation."""
+    query_text: str = Field(..., description="Search query text", min_length=1, max_length=10000)
+    vector_types: List[str] = Field(
+        default=["visual-text", "visual-image", "audio"],
+        description="Vector types to search"
+    )
+    top_k: int = Field(default=10, ge=1, le=1000, description="Number of results to return")
+    index_arn: Optional[str] = Field(None, description="Index ARN")
+    use_opensearch: bool = Field(default=False, description="Use OpenSearch backend")
+    backend: Optional[str] = Field(None, description="Backend: s3_vector, opensearch, lancedb, qdrant")
+
+    @validator('query_text')
+    def validate_query(cls, v):
+        return validate_query_text(v)
+
+    @validator('top_k')
+    def validate_k(cls, v):
+        return validate_top_k(v)
+
+    @validator('backend')
+    def validate_backend_name(cls, v):
+        return validate_backend(v)
+
+    @validator('index_arn')
+    def validate_arn(cls, v):
+        return validate_index_arn(v)
+
+    @validator('vector_types')
+    def validate_types(cls, v):
+        return validate_embedding_options(v)
 
 
 class MultiVectorSearchRequest(BaseModel):
-    """Request model for multi-vector search."""
-    query_text: str
-    vector_types: List[str] = ["visual-text", "visual-image", "audio"]
-    top_k: int = 10
+    """Request model for multi-vector search with enhanced validation."""
+    query_text: str = Field(..., min_length=1, max_length=10000)
+    vector_types: List[str] = Field(default=["visual-text", "visual-image", "audio"])
+    top_k: int = Field(default=10, ge=1, le=1000)
     enable_reranking: bool = True
+
+    @validator('query_text')
+    def validate_query(cls, v):
+        return validate_query_text(v)
+
+    @validator('top_k')
+    def validate_k(cls, v):
+        return validate_top_k(v)
+
+    @validator('vector_types')
+    def validate_types(cls, v):
+        return validate_embedding_options(v)
 
 
 @router.post("/query")
-async def search_query(request: SearchQueryRequest):
+async def search_query(
+    request: SearchQueryRequest,
+    search_engine: SimilaritySearchEngine = Depends(get_search_engine)
+):
     """
     Execute search query on specified backend.
 
@@ -54,8 +100,7 @@ async def search_query(request: SearchQueryRequest):
         # Determine backend
         backend = request.backend or ("opensearch" if request.use_opensearch else "s3_vector")
 
-        with tracker.time_operation(f"initialize_search_engine_{backend}"):
-            search_engine = SimilaritySearchEngine()
+        with tracker.time_operation(f"prepare_query_{backend}"):
 
             # Map backend string to IndexType
             backend_map = {
