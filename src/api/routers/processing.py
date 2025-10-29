@@ -4,8 +4,8 @@ Media Processing API Router.
 Handles video upload and processing with TwelveLabs Marengo.
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Depends
+from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
 import tempfile
 import os
@@ -16,6 +16,13 @@ import uuid
 
 from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
 from src.services.s3_vector_storage import S3VectorStorageManager
+from src.core.dependencies import get_storage_manager, get_twelvelabs_service
+from src.api.validators import (
+    validate_s3_uri,
+    validate_index_arn,
+    validate_embedding_options,
+    VideoParametersValidator
+)
 from src.utils.logging_config import get_logger
 from src.utils.resource_registry import resource_registry
 from src.utils.timing_tracker import TimingTracker
@@ -26,12 +33,56 @@ router = APIRouter()
 
 
 class ProcessVideoRequest(BaseModel):
-    """Request model for video processing."""
-    video_s3_uri: Optional[str] = None
-    embedding_options: List[str] = ["visual-text", "visual-image", "audio"]
-    start_sec: float = 0
-    length_sec: Optional[float] = None
-    use_fixed_length_sec: Optional[float] = None
+    """Request model for video processing with enhanced validation."""
+    video_s3_uri: Optional[str] = Field(
+        None,
+        description="S3 URI or HTTP URL of the video to process"
+    )
+    embedding_options: List[str] = Field(
+        default=["visual-text", "visual-image", "audio"],
+        description="Embedding options for video processing"
+    )
+    start_sec: float = Field(
+        default=0,
+        ge=0,
+        description="Start time in seconds"
+    )
+    length_sec: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Length of video segment to process in seconds"
+    )
+    use_fixed_length_sec: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Fixed length for video clips in seconds"
+    )
+
+    @validator('video_s3_uri')
+    def validate_uri(cls, v):
+        """Validate S3 URI if provided and it's an S3 URI."""
+        if v and v.startswith('s3://'):
+            return validate_s3_uri(v)
+        return v
+
+    @validator('embedding_options')
+    def validate_options(cls, v):
+        return validate_embedding_options(v)
+
+    @validator('start_sec', 'length_sec', 'use_fixed_length_sec', always=True)
+    def validate_time_params(cls, v, values, field):
+        """Validate time parameters using VideoParametersValidator."""
+        start_sec = values.get('start_sec', 0)
+        length_sec = values.get('length_sec')
+        use_fixed_length_sec = values.get('use_fixed_length_sec')
+
+        # Only validate when we have all required parameters
+        if field.name == 'use_fixed_length_sec' or (field.name == 'length_sec' and v is not None):
+            VideoParametersValidator.validate_time_range(
+                start_sec, length_sec, use_fixed_length_sec
+            )
+
+        return v
 
 
 class ProcessingJobStatus(BaseModel):
@@ -41,6 +92,16 @@ class ProcessingJobStatus(BaseModel):
     progress: Optional[float] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+
+
+class StoreEmbeddingsRequest(BaseModel):
+    """Request model for storing embeddings with enhanced validation."""
+    job_id: str = Field(..., description="Processing job ID", min_length=1)
+    index_arn: str = Field(..., description="S3 Vector index ARN")
+
+    @validator('index_arn')
+    def validate_arn(cls, v):
+        return validate_index_arn(v)
 
 
 # In-memory job tracking (in production, use Redis or database)
@@ -149,7 +210,11 @@ async def upload_video(file: UploadFile = File(...)):
 
 
 @router.post("/process")
-async def process_video(request: ProcessVideoRequest, background_tasks: BackgroundTasks):
+async def process_video(
+    request: ProcessVideoRequest,
+    background_tasks: BackgroundTasks,
+    twelvelabs_service: TwelveLabsVideoProcessingService = Depends(get_twelvelabs_service)
+):
     """Start video processing job."""
     tracker = TimingTracker("video_processing")
 
@@ -167,11 +232,8 @@ async def process_video(request: ProcessVideoRequest, background_tasks: Backgrou
                 video_uri = download_video_to_s3(video_uri, video_id)
                 logger.info(f"Downloaded to S3: {video_uri}")
 
-        # Initialize TwelveLabs service
+        # Start async processing
         with tracker.time_operation("start_twelvelabs_processing"):
-            twelvelabs_service = TwelveLabsVideoProcessingService()
-
-            # Start async processing
             job_info = twelvelabs_service.start_video_processing(
                 video_s3_uri=video_uri,
                 embedding_options=request.embedding_options,
@@ -227,16 +289,19 @@ async def list_jobs():
 
 
 @router.post("/store-embeddings")
-async def store_embeddings(job_id: str, index_arn: str):
+async def store_embeddings(
+    request: StoreEmbeddingsRequest,
+    storage_manager: S3VectorStorageManager = Depends(get_storage_manager)
+):
     """Store processed embeddings in S3 Vector index."""
     tracker = TimingTracker("store_embeddings")
 
     try:
         with tracker.time_operation("validate_job"):
-            if job_id not in processing_jobs:
+            if request.job_id not in processing_jobs:
                 raise HTTPException(status_code=404, detail="Job not found")
 
-            job = processing_jobs[job_id]
+            job = processing_jobs[request.job_id]
             if job.status != "completed":
                 raise HTTPException(status_code=400, detail="Job not completed")
 
@@ -245,7 +310,6 @@ async def store_embeddings(job_id: str, index_arn: str):
 
         # Store embeddings
         with tracker.time_operation("prepare_vectors"):
-            storage_manager = S3VectorStorageManager()
 
             # Extract vectors from result
             vectors_data = []
@@ -262,7 +326,7 @@ async def store_embeddings(job_id: str, index_arn: str):
                 })
 
         with tracker.time_operation("s3vector_put_vectors"):
-            result = storage_manager.put_vectors(index_arn, vectors_data)
+            result = storage_manager.put_vectors(request.index_arn, vectors_data)
 
         report = tracker.finish()
 
@@ -431,6 +495,7 @@ async def get_sample_videos():
 async def process_sample_video(
     video_id: str,
     background_tasks: BackgroundTasks,
+    twelvelabs_service: TwelveLabsVideoProcessingService = Depends(get_twelvelabs_service),
     embedding_options: List[str] = ["visual-text", "visual-image", "audio"]
 ):
     """
@@ -455,9 +520,6 @@ async def process_sample_video(
         logger.info(f"Downloading sample video '{video['title']}' to S3")
         http_url = video["sources"][0]
         s3_uri = download_video_to_s3(http_url, video_id)
-
-        # Initialize TwelveLabs service
-        twelvelabs_service = TwelveLabsVideoProcessingService()
 
         # Start async processing with S3 URI
         job_info = twelvelabs_service.start_video_processing(

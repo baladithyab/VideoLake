@@ -5,7 +5,7 @@ Handles AWS resource creation, scanning, and cleanup.
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
 import logging
 
@@ -17,6 +17,12 @@ from src.services.resource_lifecycle_manager import (
     ResourceType,
     ResourceState
 )
+from src.core.dependencies import get_storage_manager
+from src.api.validators import (
+    validate_bucket_name,
+    validate_index_name,
+    validate_domain_name
+)
 from src.utils.resource_registry import resource_registry
 from src.utils.logging_config import get_logger
 
@@ -26,30 +32,50 @@ router = APIRouter()
 
 
 class CreateMediaBucketRequest(BaseModel):
-    """Request model for creating media bucket."""
-    bucket_name: str
+    """Request model for creating media bucket with validation."""
+    bucket_name: str = Field(..., description="S3 bucket name", min_length=3, max_length=63)
+
+    @validator('bucket_name')
+    def validate_name(cls, v):
+        return validate_bucket_name(v)
 
 
 class CreateVectorBucketRequest(BaseModel):
-    """Request model for creating vector bucket."""
-    bucket_name: str
-    encryption_type: str = "SSE-S3"
-    kms_key_arn: Optional[str] = None
+    """Request model for creating vector bucket with validation."""
+    bucket_name: str = Field(..., description="S3 bucket name", min_length=3, max_length=63)
+    encryption_type: str = Field(default="SSE-S3", description="Encryption type")
+    kms_key_arn: Optional[str] = Field(None, description="KMS key ARN for SSE-KMS encryption")
+
+    @validator('bucket_name')
+    def validate_name(cls, v):
+        return validate_bucket_name(v)
 
 
 class CreateIndexRequest(BaseModel):
-    """Request model for creating vector index."""
-    bucket_name: str
-    index_name: str
-    dimension: int
-    similarity_function: str = "cosine"
+    """Request model for creating vector index with validation."""
+    bucket_name: str = Field(..., description="S3 bucket name", min_length=3, max_length=63)
+    index_name: str = Field(..., description="Index name", min_length=1, max_length=255)
+    dimension: int = Field(..., description="Vector dimension", ge=1, le=4096)
+    similarity_function: str = Field(default="cosine", description="Similarity function")
+
+    @validator('bucket_name')
+    def validate_bucket(cls, v):
+        return validate_bucket_name(v)
+
+    @validator('index_name')
+    def validate_index(cls, v):
+        return validate_index_name(v)
 
 
 class CreateOpenSearchDomainRequest(BaseModel):
-    """Request model for creating OpenSearch domain."""
-    domain_name: str
-    instance_type: str = "t3.small.search"
-    instance_count: int = 1
+    """Request model for creating OpenSearch domain with validation."""
+    domain_name: str = Field(..., description="OpenSearch domain name", min_length=3, max_length=28)
+    instance_type: str = Field(default="t3.small.search", description="Instance type")
+    instance_count: int = Field(default=1, ge=1, le=10, description="Number of instances")
+
+    @validator('domain_name')
+    def validate_name(cls, v):
+        return validate_domain_name(v)
 
 
 class DeleteResourceRequest(BaseModel):
@@ -165,10 +191,12 @@ async def create_vector_bucket(request: CreateVectorBucketRequest):
 
 
 @router.post("/vector-index")
-async def create_vector_index(request: CreateIndexRequest):
+async def create_vector_index(
+    request: CreateIndexRequest,
+    storage_manager: S3VectorStorageManager = Depends(get_storage_manager)
+):
     """Create a new vector index."""
     try:
-        storage_manager = S3VectorStorageManager()
         result = storage_manager.create_index(
             bucket_name=request.bucket_name,
             index_name=request.index_name,
