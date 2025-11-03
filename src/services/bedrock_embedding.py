@@ -11,11 +11,10 @@ import logging
 from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass
 from botocore.exceptions import ClientError, BotoCoreError
-import time
-import random
 
 from src.config.unified_config_manager import get_unified_config_manager
 from src.utils.aws_clients import aws_client_factory
+from src.utils.aws_retry import AWSRetryHandler
 from src.exceptions import ModelAccessError, ValidationError, VectorEmbeddingError
 from src.utils.logging_config import get_logger
 
@@ -326,7 +325,11 @@ class BedrockEmbeddingService:
         
         try:
             # Use retry logic for transient errors
-            return self._retry_with_backoff(_invoke_model, max_retries=3)
+            return AWSRetryHandler.retry_with_backoff(
+                _invoke_model,
+                max_retries=3,
+                operation_name=f"bedrock_invoke_{model_id}"
+            )
                 
         except ClientError as e:
             self._handle_bedrock_error(e, model_id)
@@ -464,7 +467,11 @@ class BedrockEmbeddingService:
             
             try:
                 # Use retry logic for each batch
-                embeddings = self._retry_with_backoff(_process_cohere_batch, max_retries=3)
+                embeddings = AWSRetryHandler.retry_with_backoff(
+                    _process_cohere_batch,
+                    max_retries=3,
+                    operation_name=f"bedrock_batch_{model_id}"
+                )
                 
                 for j, embedding in enumerate(embeddings):
                     results.append(EmbeddingResult(
@@ -655,38 +662,6 @@ class BedrockEmbeddingService:
                 error_details={"model_id": model_id, "aws_error_code": error_code}
             )
     
-    def _retry_with_backoff(self, func, max_retries: int = 3, base_delay: float = 1.0):
-        """
-        Implement exponential backoff retry logic for AWS API calls.
-        
-        Args:
-            func: Function to retry
-            max_retries: Maximum number of retry attempts
-            base_delay: Base delay in seconds
-            
-        Returns:
-            Result from successful function call
-        """
-        for attempt in range(max_retries):
-            try:
-                return func()
-            except ClientError as e:
-                error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-                if error_code in ['Throttling', 'ServiceUnavailable', 'InternalError']:
-                    if attempt < max_retries - 1:
-                        delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-                        logger.warning(f"Retrying after {delay:.2f}s due to {error_code} (attempt {attempt + 1}/{max_retries})")
-                        time.sleep(delay)
-                        continue
-                # Re-raise non-retryable errors or final attempt
-                raise
-            except BotoCoreError as e:
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)
-                    logger.warning(f"Retrying after {delay:.2f}s due to BotoCoreError (attempt {attempt + 1}/{max_retries})")
-                    time.sleep(delay)
-                    continue
-                raise
     
     def estimate_cost(self, texts: List[str], model_id: Optional[str] = None) -> Dict[str, Any]:
         """
