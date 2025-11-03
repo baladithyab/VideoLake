@@ -8,6 +8,7 @@ error handling, and batch processing capabilities.
 
 import json
 import logging
+import time
 from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass
 from botocore.exceptions import ClientError, BotoCoreError
