@@ -6,16 +6,19 @@ Nova embeddings use a SINGLE unified embedding space across all modalities (text
 video, audio), unlike Marengo which uses separate embedding spaces per modality.
 
 Key Differences from Marengo:
-- Nova: Single 1024D embedding space for all modalities
+- Nova: Single embedding space (e.g., 3072D) for all modalities
 - Marengo: Separate embedding spaces (visual-text, visual-image, audio)
 - Nova: Unified semantic search across all content types
-- Marengo: Task-specific search with result fusion
+- Marengo: Task-specific search with result fusion and user-selectable vector types
+
+AWS Documentation:
+https://docs.aws.amazon.com/nova/latest/userguide/nova-embeddings.html
 """
 
 import json
 import time
 import logging
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Literal
 from dataclasses import dataclass
 from botocore.exceptions import ClientError
 
@@ -28,6 +31,13 @@ from src.utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+# Type hints for Nova parameters
+EmbeddingPurpose = Literal["GENERIC_INDEX", "RETRIEVAL", "CLASSIFICATION", "CLUSTERING"]
+EmbeddingDimension = Literal[3072, 1024, 384, 256]
+VideoEmbeddingMode = Literal["AUDIO_VIDEO_COMBINED", "AUDIO_ONLY", "VIDEO_ONLY"]
+TruncationMode = Literal["END", "START"]
+
+
 @dataclass
 class NovaEmbeddingResult:
     """Result from Nova embedding generation - single unified embedding."""
@@ -35,7 +45,8 @@ class NovaEmbeddingResult:
     input_type: str  # 'text', 'image', 'video', 'audio'
     input_source: str  # URI or text content
     model_id: str
-    embedding_dimension: int = 1024
+    embedding_dimension: int
+    embedding_purpose: str
     processing_time_ms: Optional[int] = None
     unified_space: bool = True  # Always True for Nova
 
@@ -44,13 +55,14 @@ class NovaEmbeddingResult:
 class NovaModelInfo:
     """Information about Nova embedding models."""
     model_id: str
-    dimensions: int
-    max_input_tokens: int
+    supported_dimensions: List[int]
+    max_context: str
     supports_video: bool
     supports_image: bool
     supports_audio: bool
     supports_text: bool
-    cost_per_1k_tokens: float
+    supports_async: bool
+    cost_per_1k_input_tokens: float
     description: str
 
 
@@ -61,13 +73,16 @@ class NovaEmbeddingService:
     Nova provides a unified embedding space across all modalities, enabling
     seamless cross-modal search (e.g., search videos with text queries).
 
-    Example:
-        service = NovaEmbeddingService()
+    This contrasts with Marengo's approach where users select which specific
+    embedding types (visual-text, visual-image, audio) they want to generate.
 
-        # Generate video embedding (unified space)
+    Example:
+        service = NovaEmbeddingService(embedding_dimension=1024)
+
+        # Generate video embedding (unified space, all modalities combined)
         video_result = service.generate_video_embedding(
             video_uri="s3://bucket/video.mp4",
-            modalities=['visual', 'audio', 'text']
+            embedding_mode="AUDIO_VIDEO_COMBINED"  # Single unified embedding
         )
 
         # Generate text embedding (same unified space)
@@ -77,42 +92,41 @@ class NovaEmbeddingService:
         # because they exist in the same semantic space
     """
 
-    # Nova embedding models
+    # Official Nova embedding model (as per AWS documentation)
     SUPPORTED_MODELS = {
-        'amazon.nova-embed-v1': NovaModelInfo(
-            model_id='amazon.nova-embed-v1',
-            dimensions=1024,
-            max_input_tokens=8192,
+        'amazon.nova-2-multimodal-embeddings-v1:0': NovaModelInfo(
+            model_id='amazon.nova-2-multimodal-embeddings-v1:0',
+            supported_dimensions=[3072, 1024, 384, 256],
+            max_context='8K tokens or 30s video/audio',
             supports_video=True,
             supports_image=True,
             supports_audio=True,
             supports_text=True,
-            cost_per_1k_tokens=0.0002,
-            description='Amazon Nova Embeddings V1 - Unified multi-modal embedding space'
-        ),
-        'amazon.nova-embed-text-v1': NovaModelInfo(
-            model_id='amazon.nova-embed-text-v1',
-            dimensions=1024,
-            max_input_tokens=8192,
-            supports_video=False,
-            supports_image=False,
-            supports_audio=False,
-            supports_text=True,
-            cost_per_1k_tokens=0.0001,
-            description='Amazon Nova Text Embeddings V1 - Text-only variant'
+            supports_async=True,
+            cost_per_1k_input_tokens=0.0002,  # Estimated, check AWS pricing
+            description='Amazon Nova Multimodal Embeddings - Unified space across text, image, video, audio'
         )
     }
 
-    def __init__(self, model_id: str = 'amazon.nova-embed-v1'):
+    # Default model ID
+    DEFAULT_MODEL_ID = 'amazon.nova-2-multimodal-embeddings-v1:0'
+
+    def __init__(
+        self,
+        model_id: str = DEFAULT_MODEL_ID,
+        embedding_dimension: EmbeddingDimension = 1024,
+        embedding_purpose: EmbeddingPurpose = "GENERIC_INDEX",
+        region_name: str = "us-east-1"
+    ):
         """
         Initialize Nova embedding service.
 
         Args:
-            model_id: Nova model ID (default: amazon.nova-embed-v1)
+            model_id: Nova model ID (default: amazon.nova-2-multimodal-embeddings-v1:0)
+            embedding_dimension: Output dimension (3072, 1024, 384, or 256)
+            embedding_purpose: Purpose for embeddings (GENERIC_INDEX, RETRIEVAL, etc.)
+            region_name: AWS region (Nova currently only in us-east-1)
         """
-        self.bedrock_client = aws_client_factory.get_bedrock_runtime_client()
-        self.model_id = model_id
-
         # Validate model
         if model_id not in self.SUPPORTED_MODELS:
             raise ValueError(
@@ -120,120 +134,153 @@ class NovaEmbeddingService:
                 f"Supported models: {list(self.SUPPORTED_MODELS.keys())}"
             )
 
+        self.model_id = model_id
         self.model_info = self.SUPPORTED_MODELS[model_id]
 
-        config_manager = get_unified_config_manager()
-        self.config = {
-            'region': config_manager.config.aws.region,
-            'model_id': model_id
-        }
+        # Validate dimension
+        if embedding_dimension not in self.model_info.supported_dimensions:
+            raise ValueError(
+                f"Unsupported embedding dimension: {embedding_dimension}. "
+                f"Supported: {self.model_info.supported_dimensions}"
+            )
+
+        self.embedding_dimension = embedding_dimension
+        self.embedding_purpose = embedding_purpose
+        self.region_name = region_name
+
+        # Initialize Bedrock client
+        self.bedrock_client = aws_client_factory.get_bedrock_runtime_client()
 
         logger.info(
-            f"Initialized Nova embedding service with model {model_id} "
-            f"(unified {self.model_info.dimensions}D space)"
+            f"Initialized Nova embedding service: model={model_id}, "
+            f"dimension={embedding_dimension}, purpose={embedding_purpose}, "
+            f"unified_space=True"
         )
 
     def generate_video_embedding(
         self,
         video_uri: str,
-        modalities: Optional[List[str]] = None,
+        embedding_mode: VideoEmbeddingMode = "AUDIO_VIDEO_COMBINED",
+        segment_duration_sec: Optional[int] = None,
         start_time_sec: Optional[float] = None,
-        end_time_sec: Optional[float] = None
-    ) -> NovaEmbeddingResult:
+        end_time_sec: Optional[float] = None,
+        use_async: bool = False
+    ) -> Union[NovaEmbeddingResult, str]:
         """
         Generate unified embedding for video content.
 
-        Unlike Marengo (which generates separate embeddings per modality),
-        Nova generates a SINGLE embedding that captures all modalities in
-        a unified semantic space.
+        Unlike Marengo (which generates separate embeddings per modality that
+        users can select), Nova generates a SINGLE embedding that captures
+        the selected modality combination in a unified semantic space.
 
         Args:
-            video_uri: S3 URI or URL of video
-            modalities: Modalities to include (default: all)
+            video_uri: S3 URI of video (e.g., s3://bucket/video.mp4)
+            embedding_mode: How to combine modalities:
+                - "AUDIO_VIDEO_COMBINED": Single unified embedding (default)
+                - "AUDIO_ONLY": Audio-only unified embedding
+                - "VIDEO_ONLY": Video-only unified embedding
+            segment_duration_sec: If set, use segmented embeddings (async only)
             start_time_sec: Optional start time for clip
             end_time_sec: Optional end time for clip
+            use_async: Use async API for large videos (returns invocation ARN)
 
         Returns:
-            NovaEmbeddingResult with single unified embedding
+            NovaEmbeddingResult with single unified embedding (sync)
+            OR invocation ARN string (async)
         """
         if not self.model_info.supports_video:
             raise ValidationError(
-                f"Model {self.model_id} does not support video embeddings. "
-                f"Use amazon.nova-embed-v1 instead."
+                f"Model {self.model_id} does not support video embeddings."
             )
 
-        modalities = modalities or ['visual', 'audio', 'text']
         start_time = time.time()
 
-        # Build Nova video embedding request
-        request_body = {
-            'inputVideo': {
-                'source': video_uri
-            },
-            'modalities': modalities,
-            'embeddingConfig': {
-                'outputDimensions': self.model_info.dimensions
+        # Determine task type
+        task_type = "SEGMENTED_EMBEDDING" if segment_duration_sec else "SINGLE_EMBEDDING"
+
+        if task_type == "SINGLE_EMBEDDING":
+            # Build single embedding request
+            request_body = {
+                "taskType": "SINGLE_EMBEDDING",
+                "singleEmbeddingParams": {
+                    "embeddingPurpose": self.embedding_purpose,
+                    "embeddingDimension": self.embedding_dimension,
+                    "video": {
+                        "embeddingMode": embedding_mode,
+                        "source": {
+                            "s3Location": {"uri": video_uri}
+                        }
+                    }
+                }
             }
-        }
 
-        if start_time_sec is not None:
-            request_body['inputVideo']['startTime'] = start_time_sec
-        if end_time_sec is not None:
-            request_body['inputVideo']['endTime'] = end_time_sec
+            # Add optional time range
+            if start_time_sec is not None or end_time_sec is not None:
+                request_body["singleEmbeddingParams"]["video"]["timeRange"] = {}
+                if start_time_sec is not None:
+                    request_body["singleEmbeddingParams"]["video"]["timeRange"]["startSeconds"] = start_time_sec
+                if end_time_sec is not None:
+                    request_body["singleEmbeddingParams"]["video"]["timeRange"]["endSeconds"] = end_time_sec
 
-        try:
-            # Call Bedrock with retry logic
-            def _invoke_nova():
-                return self.bedrock_client.invoke_model(
-                    modelId=self.model_id,
-                    contentType='application/json',
-                    accept='application/json',
-                    body=json.dumps(request_body)
+            try:
+                # Call Bedrock with retry logic
+                def _invoke_nova():
+                    return self.bedrock_client.invoke_model(
+                        modelId=self.model_id,
+                        contentType='application/json',
+                        accept='application/json',
+                        body=json.dumps(request_body)
+                    )
+
+                response = AWSRetryHandler.retry_with_backoff(
+                    _invoke_nova,
+                    max_retries=3,
+                    operation_name=f"nova_video_embedding_{self.model_id}"
                 )
 
-            response = AWSRetryHandler.retry_with_backoff(
-                _invoke_nova,
-                max_retries=3,
-                operation_name=f"nova_video_embedding_{self.model_id}"
+                response_body = json.loads(response['body'].read())
+
+                # Nova response format: {"embeddings": [{"embeddingType": "VIDEO", "embedding": [...]}]}
+                embedding = response_body['embeddings'][0]['embedding']
+
+                processing_time_ms = int((time.time() - start_time) * 1000)
+
+                logger.info(
+                    f"Generated Nova unified video embedding: {len(embedding)}D "
+                    f"from {video_uri} with mode={embedding_mode}"
+                )
+
+                return NovaEmbeddingResult(
+                    embedding=embedding,
+                    input_type='video',
+                    input_source=video_uri,
+                    model_id=self.model_id,
+                    embedding_dimension=len(embedding),
+                    embedding_purpose=self.embedding_purpose,
+                    processing_time_ms=processing_time_ms,
+                    unified_space=True
+                )
+
+            except ClientError as e:
+                self._handle_bedrock_error(e, "video embedding")
+
+        else:
+            # Use async API for segmented embeddings
+            if not use_async:
+                raise ValidationError(
+                    "Segmented embeddings require use_async=True"
+                )
+
+            return self._generate_video_embedding_async(
+                video_uri=video_uri,
+                embedding_mode=embedding_mode,
+                segment_duration_sec=segment_duration_sec
             )
-
-            response_body = json.loads(response['body'].read())
-
-            # Nova returns single unified embedding
-            embedding = response_body.get('embedding', [])
-
-            processing_time_ms = int((time.time() - start_time) * 1000)
-
-            logger.info(
-                f"Generated Nova unified video embedding: {len(embedding)}D "
-                f"from {video_uri} with modalities {modalities}"
-            )
-
-            return NovaEmbeddingResult(
-                embedding=embedding,
-                input_type='video',
-                input_source=video_uri,
-                model_id=self.model_id,
-                embedding_dimension=len(embedding),
-                processing_time_ms=processing_time_ms,
-                unified_space=True
-            )
-
-        except ClientError as e:
-            error_code = e.response['Error']['Code']
-            error_msg = e.response['Error']['Message']
-
-            if error_code == 'ValidationException':
-                raise ValidationError(f"Nova validation error: {error_msg}")
-            elif error_code in ['ThrottlingException', 'TooManyRequestsException']:
-                raise ModelAccessError(f"Nova rate limit: {error_msg}")
-            else:
-                raise VectorEmbeddingError(f"Nova embedding failed: {error_msg}")
 
     def generate_text_embedding(
         self,
         text: str,
-        normalize: bool = True
+        truncation_mode: TruncationMode = "END"
     ) -> NovaEmbeddingResult:
         """
         Generate unified embedding for text.
@@ -243,7 +290,7 @@ class NovaEmbeddingService:
 
         Args:
             text: Input text
-            normalize: Whether to normalize embedding (default: True)
+            truncation_mode: How to truncate if too long ("END" or "START")
 
         Returns:
             NovaEmbeddingResult with text embedding in unified space
@@ -253,16 +300,18 @@ class NovaEmbeddingService:
 
         start_time = time.time()
 
-        # Build Nova text embedding request
+        # Build Nova text embedding request (following AWS API format)
         request_body = {
-            'inputText': text,
-            'embeddingConfig': {
-                'outputDimensions': self.model_info.dimensions
+            "taskType": "SINGLE_EMBEDDING",
+            "singleEmbeddingParams": {
+                "embeddingPurpose": self.embedding_purpose,
+                "embeddingDimension": self.embedding_dimension,
+                "text": {
+                    "truncationMode": truncation_mode,
+                    "value": text
+                }
             }
         }
-
-        if normalize:
-            request_body['embeddingConfig']['normalize'] = True
 
         try:
             def _invoke_nova():
@@ -280,7 +329,9 @@ class NovaEmbeddingService:
             )
 
             response_body = json.loads(response['body'].read())
-            embedding = response_body.get('embedding', [])
+
+            # Parse Nova response format
+            embedding = response_body['embeddings'][0]['embedding']
 
             processing_time_ms = int((time.time() - start_time) * 1000)
 
@@ -295,20 +346,13 @@ class NovaEmbeddingService:
                 input_source=text,
                 model_id=self.model_id,
                 embedding_dimension=len(embedding),
+                embedding_purpose=self.embedding_purpose,
                 processing_time_ms=processing_time_ms,
                 unified_space=True
             )
 
         except ClientError as e:
-            error_code = e.response['Error']['Code']
-            error_msg = e.response['Error']['Message']
-
-            if error_code == 'ValidationException':
-                raise ValidationError(f"Nova validation error: {error_msg}")
-            elif error_code in ['ThrottlingException', 'TooManyRequestsException']:
-                raise ModelAccessError(f"Nova rate limit: {error_msg}")
-            else:
-                raise VectorEmbeddingError(f"Nova embedding failed: {error_msg}")
+            self._handle_bedrock_error(e, "text embedding")
 
     def generate_image_embedding(
         self,
@@ -318,25 +362,28 @@ class NovaEmbeddingService:
         Generate unified embedding for image.
 
         Args:
-            image_uri: S3 URI or URL of image
+            image_uri: S3 URI of image
 
         Returns:
             NovaEmbeddingResult with image embedding in unified space
         """
         if not self.model_info.supports_image:
             raise ValidationError(
-                f"Model {self.model_id} does not support image embeddings. "
-                f"Use amazon.nova-embed-v1 instead."
+                f"Model {self.model_id} does not support image embeddings."
             )
 
         start_time = time.time()
 
         request_body = {
-            'inputImage': {
-                'source': image_uri
-            },
-            'embeddingConfig': {
-                'outputDimensions': self.model_info.dimensions
+            "taskType": "SINGLE_EMBEDDING",
+            "singleEmbeddingParams": {
+                "embeddingPurpose": self.embedding_purpose,
+                "embeddingDimension": self.embedding_dimension,
+                "image": {
+                    "source": {
+                        "s3Location": {"uri": image_uri}
+                    }
+                }
             }
         }
 
@@ -356,7 +403,7 @@ class NovaEmbeddingService:
             )
 
             response_body = json.loads(response['body'].read())
-            embedding = response_body.get('embedding', [])
+            embedding = response_body['embeddings'][0]['embedding']
 
             processing_time_ms = int((time.time() - start_time) * 1000)
 
@@ -370,20 +417,89 @@ class NovaEmbeddingService:
                 input_source=image_uri,
                 model_id=self.model_id,
                 embedding_dimension=len(embedding),
+                embedding_purpose=self.embedding_purpose,
                 processing_time_ms=processing_time_ms,
                 unified_space=True
             )
 
         except ClientError as e:
-            error_code = e.response['Error']['Code']
-            error_msg = e.response['Error']['Message']
+            self._handle_bedrock_error(e, "image embedding")
 
-            if error_code == 'ValidationException':
-                raise ValidationError(f"Nova validation error: {error_msg}")
-            elif error_code in ['ThrottlingException', 'TooManyRequestsException']:
-                raise ModelAccessError(f"Nova rate limit: {error_msg}")
-            else:
-                raise VectorEmbeddingError(f"Nova embedding failed: {error_msg}")
+    def _generate_video_embedding_async(
+        self,
+        video_uri: str,
+        embedding_mode: VideoEmbeddingMode,
+        segment_duration_sec: int
+    ) -> str:
+        """
+        Generate segmented video embeddings asynchronously.
+
+        Args:
+            video_uri: S3 URI of video
+            embedding_mode: AUDIO_VIDEO_COMBINED, AUDIO_ONLY, or VIDEO_ONLY
+            segment_duration_sec: Segment duration in seconds
+
+        Returns:
+            Invocation ARN for status polling
+        """
+        request_body = {
+            "taskType": "SEGMENTED_EMBEDDING",
+            "segmentedEmbeddingParams": {
+                "embeddingPurpose": self.embedding_purpose,
+                "embeddingDimension": self.embedding_dimension,
+                "video": {
+                    "format": "mp4",
+                    "embeddingMode": embedding_mode,
+                    "source": {
+                        "s3Location": {"uri": video_uri}
+                    },
+                    "segmentationConfig": {
+                        "durationSeconds": segment_duration_sec
+                    }
+                }
+            }
+        }
+
+        try:
+            # Extract S3 output path from video URI
+            bucket = video_uri.split('/')[2]
+            output_s3_uri = f"s3://{bucket}/nova-embeddings/"
+
+            response = self.bedrock_client.start_async_invoke(
+                modelId=self.model_id,
+                modelInput=request_body,
+                outputDataConfig={
+                    "s3OutputDataConfig": {
+                        "s3Uri": output_s3_uri
+                    }
+                }
+            )
+
+            invocation_arn = response['invocationArn']
+
+            logger.info(
+                f"Started async Nova video embedding: ARN={invocation_arn}, "
+                f"segments={segment_duration_sec}s"
+            )
+
+            return invocation_arn
+
+        except ClientError as e:
+            self._handle_bedrock_error(e, "async video embedding")
+
+    def _handle_bedrock_error(self, e: ClientError, operation: str) -> None:
+        """Handle Bedrock API errors."""
+        error_code = e.response['Error']['Code']
+        error_msg = e.response['Error']['Message']
+
+        if error_code == 'ValidationException':
+            raise ValidationError(f"Nova {operation} validation error: {error_msg}")
+        elif error_code in ['ThrottlingException', 'TooManyRequestsException']:
+            raise ModelAccessError(f"Nova {operation} rate limit: {error_msg}")
+        elif error_code == 'ResourceNotFoundException':
+            raise ModelAccessError(f"Nova model not found in region {self.region_name}: {error_msg}")
+        else:
+            raise VectorEmbeddingError(f"Nova {operation} failed: {error_msg}")
 
     def get_model_info(self) -> NovaModelInfo:
         """Get information about the current Nova model."""
@@ -405,13 +521,16 @@ class NovaEmbeddingService:
         return {
             'nova': {
                 'embedding_spaces': 1,
-                'embedding_dimension': 1024,
+                'embedding_dimensions': [3072, 1024, 384, 256],
                 'approach': 'Unified multi-modal space',
+                'user_control': 'Choose embedding dimension and purpose',
+                'modality_combination': 'Single combined embedding per input',
                 'advantages': [
                     'Single query searches all content types',
                     'Simpler implementation',
-                    'Lower storage requirements',
-                    'Direct cross-modal comparison'
+                    'Lower storage requirements per item',
+                    'Direct cross-modal comparison',
+                    'Flexible dimension for cost/accuracy tradeoff'
                 ],
                 'use_cases': [
                     'General-purpose multi-modal search',
@@ -428,8 +547,11 @@ class NovaEmbeddingService:
                     'audio': 1024
                 },
                 'approach': 'Task-specific embedding spaces',
+                'user_control': 'Choose which embedding types to generate (visual-text, visual-image, audio)',
+                'modality_combination': 'Separate embeddings per task type',
                 'advantages': [
                     'Optimized for specific modalities',
+                    'User selects which vectors to generate',
                     'Higher precision for domain-specific tasks',
                     'Fine-grained control over search',
                     'Task-specific tuning'
@@ -442,7 +564,7 @@ class NovaEmbeddingService:
                 ]
             },
             'recommendation': {
-                'nova_best_for': 'General multi-modal search, simplicity, unified semantics',
-                'marengo_best_for': 'Specialized video tasks, fine-grained control, domain expertise'
+                'nova_best_for': 'General multi-modal search, simplicity, unified semantics, cost optimization',
+                'marengo_best_for': 'Specialized video tasks, fine-grained control, domain expertise, modality selection'
             }
         }
