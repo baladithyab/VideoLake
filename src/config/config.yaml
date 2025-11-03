@@ -18,8 +18,14 @@ aws:
   bedrock_model_id: amazon.titan-embed-text-v1
   bedrock_max_tokens: 8192
 
-# Marengo 2.7 Configuration
+# Embedding Model Selection
+# Choose between "marengo" (multi-vector) or "nova" (unified single-vector)
+embedding:
+  default_model: marengo  # "marengo" or "nova"
+
+# Marengo 2.7 Configuration (Multi-Vector Approach)
 # Choose access method: "bedrock" (recommended) or "twelvelabs_api"
+# Marengo generates SEPARATE embeddings per modality (user-selectable)
 marengo:
   access_method: bedrock  # "bedrock" or "twelvelabs_api"
 
@@ -34,10 +40,32 @@ marengo:
   # Common processing settings
   max_video_duration: 3600  # seconds
   segment_duration: 5.0     # seconds
+
+  # User-selectable vector types (can choose which embeddings to generate)
+  default_vector_types:
+    - visual-text
+    - visual-image
+    - audio
   supported_vector_types:
     - visual-text
     - visual-image
     - audio
+
+# Amazon Nova Configuration (Unified Single-Vector Approach)
+# Nova generates a SINGLE unified embedding across all modalities
+nova:
+  model_id: amazon.nova-2-multimodal-embeddings-v1:0
+  region: us-east-1  # Currently only available in us-east-1
+
+  # Embedding configuration
+  default_dimension: 1024  # Options: 3072, 1024, 384, 256
+  embedding_purpose: GENERIC_INDEX  # GENERIC_INDEX, RETRIEVAL, CLASSIFICATION, CLUSTERING
+
+  # Video processing settings
+  default_embedding_mode: AUDIO_VIDEO_COMBINED  # AUDIO_VIDEO_COMBINED, AUDIO_ONLY, VIDEO_ONLY
+  max_video_duration: 3600  # seconds
+  segment_duration: 15.0    # seconds (for segmented embeddings)
+  use_async_for_long_videos: true  # Use async API for videos > 30s
 
 # Legacy TwelveLabs Configuration (for backward compatibility)
 twelvelabs:
