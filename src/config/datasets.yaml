@@ -1,0 +1,175 @@
+# Video Dataset Catalog
+# Pre-configured datasets for demo and stress testing
+
+# Quick Demo Datasets (4-10 videos)
+quick_demo:
+  blender_cc:
+    name: "Blender Creative Commons"
+    description: "4 high-quality Blender Foundation videos"
+    source: "direct_url"
+    video_count: 4
+    total_duration_min: 48
+    license: "CC BY 3.0"
+    videos:
+      - id: "big-buck-bunny"
+        url: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+        duration_sec: 596
+        title: "Big Buck Bunny"
+      - id: "sintel"
+        url: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
+        duration_sec: 888
+        title: "Sintel"
+      - id: "elephants-dream"
+        url: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"
+        duration_sec: 654
+        title: "Elephants Dream"
+      - id: "tears-of-steel"
+        url: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+        duration_sec: 734
+        title: "Tears of Steel"
+
+# Small Test Datasets (100-1000 videos)
+small_test:
+  msr_vtt_100:
+    name: "MSR-VTT (100 videos)"
+    description: "Microsoft Research Video to Text dataset subset"
+    source: "huggingface"
+    hf_dataset_id: "AlexZigma/msr-vtt"
+    hf_split: "train"
+    streaming: true
+    max_videos: 100
+    estimated_duration_min: 500  # ~5min avg per video
+    estimated_cost_usd: 630  # Marengo processing cost
+    license: "Research use"
+    use_case: "Initial testing, algorithm validation"
+
+  pexels_cc0_100:
+    name: "Pexels Videos (100 videos)"
+    description: "High-quality stock videos from Pexels"
+    source: "pexels"
+    max_videos: 100
+    license: "CC0 (Public Domain)"
+    estimated_cost_usd: 350
+    use_case: "Diverse content testing"
+    api_key_required: true
+
+# Medium Stress Test Datasets (1000-5000 videos)
+stress_test:
+  msr_vtt_1000:
+    name: "MSR-VTT (1,000 videos)"
+    description: "Full MSR-VTT training set subset"
+    source: "huggingface"
+    hf_dataset_id: "AlexZigma/msr-vtt"
+    max_videos: 1000
+    estimated_duration_min: 5000
+    estimated_cost_usd: 6300
+    estimated_processing_time_hours: 24
+    use_case: "Performance stress testing"
+
+  activitynet_1000:
+    name: "ActivityNet (1,000 videos)"
+    description: "Human activity recognition dataset"
+    source: "huggingface"
+    hf_dataset_id: "sayakpaul/activitynet"
+    max_videos: 1000
+    estimated_cost_usd: 7000
+    use_case: "Activity-based search testing"
+
+  youcook2_full:
+    name: "YouCook2 (2,000 videos)"
+    description: "Cooking instruction videos"
+    source: "huggingface"
+    hf_dataset_id: "Awiny/YouCook2"
+    video_count: 2000
+    estimated_cost_usd: 12600
+    use_case: "Domain-specific testing (cooking)"
+
+# Large Scale Datasets (10K+ videos)
+large_scale:
+  msr_vtt_full:
+    name: "MSR-VTT (10,000 videos)"
+    description: "Complete MSR-VTT dataset"
+    source: "huggingface"
+    hf_dataset_id: "AlexZigma/msr-vtt"
+    video_count: 10000
+    captions: 200000  # 20 captions per video
+    estimated_cost_usd: 63000  # Marengo 1 vector type
+    estimated_processing_time_hours: 168  # 7 days
+    storage_requirement_gb: 500
+    use_case: "Production-scale testing"
+
+  webvid_10k:
+    name: "WebVid-10M (10,000 videos)"
+    description: "Subset of WebVid 10M dataset"
+    source: "huggingface"
+    hf_dataset_id: "TempoFunk/webvid-10M"
+    max_videos: 10000
+    license: "CC0"
+    estimated_cost_usd: 80000  # Includes download time
+    use_case: "Real-world web video testing"
+
+# Production Scale (100K+ videos)
+production_scale:
+  webvid_100k:
+    name: "WebVid-10M (100,000 videos)"
+    description: "Large subset for production simulation"
+    source: "huggingface"
+    hf_dataset_id: "TempoFunk/webvid-10M"
+    max_videos: 100000
+    license: "CC0"
+    estimated_cost_usd: 800000
+    estimated_processing_time_days: 60
+    storage_requirement_tb: 5
+    use_case: "Production-scale validation"
+    warning: "Requires significant AWS resources and budget approval"
+
+# Dataset Selection Recommendations
+recommendations:
+  first_time_demo:
+    dataset: "blender_cc"
+    reason: "4 high-quality videos, free, quick to process"
+    time: "5-10 minutes"
+    cost: "~$10"
+
+  algorithm_validation:
+    dataset: "msr_vtt_100"
+    reason: "Well-structured, proven benchmark, diverse content"
+    time: "2-4 hours"
+    cost: "~$630"
+
+  stress_testing:
+    dataset: "msr_vtt_1000"
+    reason: "Realistic load, manageable cost, 24-hour timeline"
+    time: "24 hours"
+    cost: "~$6,300"
+
+  production_simulation:
+    dataset: "msr_vtt_full"
+    reason: "Full dataset, comprehensive testing"
+    time: "7 days"
+    cost: "~$63,000"
+    warning: "Requires budget approval and dedicated resources"
+
+# Cost Calculation Notes
+cost_notes:
+  marengo_cost_per_minute: 0.35  # USD, includes Bedrock API calls
+  marengo_cost_per_vector_type: 1.0  # Multiplier per vector type
+  storage_cost_s3_per_gb_month: 0.023
+  storage_cost_opensearch_ocup_hour: 0.24
+  avg_video_duration_min: 5.0  # Conservative estimate
+
+# HuggingFace Streaming Settings
+huggingface:
+  enable_streaming: true
+  cache_dir: "/tmp/hf_datasets_cache"
+  max_retries: 3
+  timeout_sec: 60
+  trust_remote_code: true  # Required for some datasets
+
+# Progressive Upload Settings
+upload:
+  batch_size: 10  # Upload 10 videos at a time
+  concurrent_uploads: 5
+  enable_checkpointing: true
+  checkpoint_interval: 10  # Save progress every 10 videos
+  resume_on_failure: true
