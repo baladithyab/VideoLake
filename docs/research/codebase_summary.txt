@@ -1,0 +1,96 @@
+CODEBASE FILE LOCATIONS & ANALYSIS
+
+1. VECTOR STORE PROVIDERS
+   Location: /home/ubuntu/S3Vector/src/services/
+   
+   a) vector_store_qdrant_provider.py (359 lines)
+      - QdrantProvider class implementing VectorStoreProvider interface
+      - Current implementation:
+        * Basic CRUD: create(), delete(), get_status(), list_stores()
+        * Vector operations: upsert_vectors(), query()
+        * Config: QDRANT_URL, QDRANT_API_KEY environment variables
+        * Distance metrics: cosine, euclidean, dot_product
+      - Missing:
+        * Resource tracking (not in resource_registry)
+        * Backup/snapshot functionality
+        * Connection pooling
+        * Error recovery/retry logic
+        * High availability configuration
+      - File path: /home/ubuntu/S3Vector/src/services/vector_store_qdrant_provider.py
+
+   b) vector_store_lancedb_provider.py (316 lines)
+      - LanceDBProvider class implementing VectorStoreProvider interface
+      - Current implementation:
+        * S3 backend support with AWS credentials
+        * Config: LANCEDB_URI, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+        * Table CRUD operations
+        * Vector search with SQL-like filtering
+      - Missing:
+        * DynamoDB commit store for concurrent writes
+        * EFS backend support
+        * Resource tracking
+        * Intelligent tiering configuration
+        * Table versioning
+      - File path: /home/ubuntu/S3Vector/src/services/vector_store_lancedb_provider.py
+
+2. RESOURCE MANAGEMENT
+   Location: /home/ubuntu/S3Vector/src/utils/resource_registry.py (730 lines)
+   
+   - ResourceRegistry class (JSON-backed, thread-safe)
+   - Currently tracked resources:
+     * s3_buckets
+     * vector_buckets (S3Vector)
+     * indexes (S3Vector indexes)
+     * opensearch_collections
+     * opensearch_domains
+     * opensearch_pipelines
+     * opensearch_indexes
+     * iam_roles
+   
+   - NOT tracked:
+     * Qdrant deployments/collections
+     * LanceDB instances/tables
+     * DynamoDB tables
+     * EBS volumes
+     * EFS volumes
+     * EC2 instances
+
+3. OTHER SERVICE PROVIDERS
+   Location: /home/ubuntu/S3Vector/src/services/
+   
+   - vector_store_s3vector_provider.py: AWS S3Vector backend
+   - vector_store_opensearch_provider.py: AWS OpenSearch backend
+   - opensearch/resource_manager.py: OpenSearch resource management
+
+4. BASE PROVIDER INTERFACE
+   Location: /home/ubuntu/S3Vector/src/services/vector_store_provider.py
+   
+   - VectorStoreProvider: Abstract base class
+   - VectorStoreType: Enum (S3VECTOR, QDRANT, LANCEDB, OPENSEARCH)
+   - VectorStoreConfig: Configuration dataclass
+   - VectorStoreStatus: Status/result dataclass
+   - VectorStoreState: Enum (ACTIVE, DELETED, NOT_FOUND, FAILED)
+
+KEY INSIGHTS:
+
+1. CURRENT IMPLEMENTATION STATUS:
+   - Qdrant: Client-based (HTTP/REST) - supports cloud & self-hosted via URL
+   - LanceDB: Library-based (in-process) - supports local & S3 backends
+   - Both implement same provider interface
+
+2. ARCHITECTURAL DIFFERENCES:
+   - Qdrant = Server (requires running instance/service)
+   - LanceDB = Library (embedded in application)
+
+3. DEPLOYMENT IMPLICATIONS:
+   - Qdrant: Need to manage server infrastructure (EC2/ECS/EKS/Cloud)
+   - LanceDB: More flexible (Lambda, EKS pods, etc.)
+
+4. MISSING PRODUCTION CAPABILITIES:
+   - Resource lifecycle tracking
+   - Infrastructure provisioning
+   - Backup/disaster recovery
+   - High availability setup
+   - Cost optimization
+   - Monitoring/alerting integration
+

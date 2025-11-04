@@ -14,13 +14,18 @@ interface SampleVideo {
 }
 
 interface ProcessingSettings {
-  embeddingModel: 'bedrock-titan' | 'twelvelabs-marengo';
-  vectorTypes: string[];
+  embeddingModel: 'bedrock-titan' | 'twelvelabs-marengo' | 'amazon-nova';
+  vectorTypes: string[];  // For Marengo: which embeddings to generate
+  novaDimension?: 1024 | 3072 | 384 | 256;  // For Nova: embedding dimension
+  novaMode?: 'AUDIO_VIDEO_COMBINED' | 'AUDIO_ONLY' | 'VIDEO_ONLY';  // For Nova
   segmentDuration: number;
   quality: 'standard' | 'high' | 'maximum';
   batchProcessing: boolean;
   storeInS3Vectors: boolean;
   storeInOpenSearch: boolean;
+  storeInQdrant: boolean;
+  storeInLanceDB: boolean;
+  lancedbBackend?: 's3' | 'efs' | 'ebs';  // LanceDB backend choice
 }
 
 export default function MediaProcessing() {
@@ -32,11 +37,16 @@ export default function MediaProcessing() {
   const [settings, setSettings] = useState<ProcessingSettings>({
     embeddingModel: 'twelvelabs-marengo',
     vectorTypes: ['visual-text', 'visual-image', 'audio'],
+    novaDimension: 1024,
+    novaMode: 'AUDIO_VIDEO_COMBINED',
     segmentDuration: 5,
     quality: 'standard',
     batchProcessing: false,
     storeInS3Vectors: true,
     storeInOpenSearch: true,
+    storeInQdrant: false,
+    storeInLanceDB: false,
+    lancedbBackend: 's3',
   });
 
   // Fetch sample videos
@@ -327,7 +337,7 @@ export default function MediaProcessing() {
           {/* Model Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Embedding Model</label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <button
                 onClick={() => setSettings({ ...settings, embeddingModel: 'twelvelabs-marengo' })}
                 className={`p-4 border-2 rounded-lg text-left transition-all ${
@@ -336,8 +346,21 @@ export default function MediaProcessing() {
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
-                <h4 className="font-medium text-gray-900">TwelveLabs Marengo 2.7</h4>
-                <p className="text-xs text-gray-500 mt-1">Multi-vector model (visual, audio, text)</p>
+                <h4 className="font-medium text-gray-900">Marengo 2.7</h4>
+                <p className="text-xs text-gray-500 mt-1">Multi-vector (3 spaces)</p>
+                <p className="text-xs text-indigo-600 mt-1">Choose vector types</p>
+              </button>
+              <button
+                onClick={() => setSettings({ ...settings, embeddingModel: 'amazon-nova' })}
+                className={`p-4 border-2 rounded-lg text-left transition-all ${
+                  settings.embeddingModel === 'amazon-nova'
+                    ? 'border-indigo-500 bg-indigo-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <h4 className="font-medium text-gray-900">Amazon Nova</h4>
+                <p className="text-xs text-gray-500 mt-1">Single unified space</p>
+                <p className="text-xs text-indigo-600 mt-1">Choose dimension</p>
               </button>
               <button
                 onClick={() => setSettings({ ...settings, embeddingModel: 'bedrock-titan' })}
@@ -347,16 +370,19 @@ export default function MediaProcessing() {
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
-                <h4 className="font-medium text-gray-900">Amazon Bedrock Titan</h4>
-                <p className="text-xs text-gray-500 mt-1">Text embeddings (1536 dimensions)</p>
+                <h4 className="font-medium text-gray-900">Titan Text</h4>
+                <p className="text-xs text-gray-500 mt-1">Text-only (1536D)</p>
+                <p className="text-xs text-gray-400 mt-1">Legacy option</p>
               </button>
             </div>
           </div>
 
-          {/* Vector Types (for TwelveLabs) */}
+          {/* Vector Types (for Marengo - Multi-Vector Approach) */}
           {settings.embeddingModel === 'twelvelabs-marengo' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Vector Types</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Vector Types (Choose which embeddings to generate)
+              </label>
               <div className="space-y-2">
                 {['visual-text', 'visual-image', 'audio'].map((type) => (
                   <label key={type} className="flex items-center">
@@ -367,10 +393,56 @@ export default function MediaProcessing() {
                       className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                     />
                     <span className="ml-2 text-sm text-gray-700 capitalize">
-                      {type.replace('-', ' ')}
+                      {type.replace('-', ' ')} (1024D)
                     </span>
                   </label>
                 ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Generates separate embeddings in different semantic spaces
+              </p>
+            </div>
+          )}
+
+          {/* Nova Configuration (Single-Vector Approach) */}
+          {settings.embeddingModel === 'amazon-nova' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Embedding Dimension (Choose accuracy vs cost tradeoff)
+                </label>
+                <select
+                  value={settings.novaDimension}
+                  onChange={(e) => setSettings({ ...settings, novaDimension: parseInt(e.target.value) as any })}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                >
+                  <option value="3072">3072D - Highest accuracy (premium cost)</option>
+                  <option value="1024">1024D - Balanced (recommended)</option>
+                  <option value="384">384D - Fast & affordable</option>
+                  <option value="256">256D - Ultra-fast & low cost</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Embedding Mode (Choose which modalities to include)
+                </label>
+                <select
+                  value={settings.novaMode}
+                  onChange={(e) => setSettings({ ...settings, novaMode: e.target.value as any })}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                >
+                  <option value="AUDIO_VIDEO_COMBINED">Audio + Video Combined (all modalities)</option>
+                  <option value="VIDEO_ONLY">Video Only (visual content)</option>
+                  <option value="AUDIO_ONLY">Audio Only (audio content)</option>
+                </select>
+              </div>
+
+              <div className="bg-blue-50 p-3 rounded">
+                <p className="text-xs text-blue-800">
+                  <strong>Nova generates 1 unified embedding</strong> across all selected modalities.
+                  This enables direct cross-modal search (e.g., text query finds relevant videos).
+                </p>
               </div>
             </div>
           )}
@@ -436,10 +508,11 @@ export default function MediaProcessing() {
 
       {/* Storage Backend Selection */}
       <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">4. Storage Backend</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-4">4. Storage Backends (Select Multiple for Comparison)</h3>
 
-        <div className="space-y-3">
-          <label className="flex items-start">
+        <div className="grid grid-cols-2 gap-4">
+          <label className="flex items-start p-3 border-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-all"
+                 style={{borderColor: settings.storeInS3Vectors ? '#4F46E5' : '#E5E7EB'}}>
             <input
               type="checkbox"
               checked={settings.storeInS3Vectors}
@@ -447,14 +520,16 @@ export default function MediaProcessing() {
               className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded mt-1"
             />
             <div className="ml-3">
-              <span className="text-sm font-medium text-gray-700">S3 Vectors (Direct)</span>
-              <p className="text-xs text-gray-500">
-                Store embeddings directly in S3 Vector buckets. Cost-effective, limited to 10 metadata tags.
+              <span className="text-sm font-medium text-gray-900">S3 Vectors (Direct)</span>
+              <p className="text-xs text-gray-500 mt-1">
+                Native AWS, serverless, $0.023/GB/month
               </p>
+              <p className="text-xs text-indigo-600 mt-1">40-80ms latency</p>
             </div>
           </label>
 
-          <label className="flex items-start">
+          <label className="flex items-start p-3 border-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-all"
+                 style={{borderColor: settings.storeInOpenSearch ? '#4F46E5' : '#E5E7EB'}}>
             <input
               type="checkbox"
               checked={settings.storeInOpenSearch}
@@ -462,19 +537,95 @@ export default function MediaProcessing() {
               className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded mt-1"
             />
             <div className="ml-3">
-              <span className="text-sm font-medium text-gray-700">OpenSearch (with S3 Vector Backend)</span>
-              <p className="text-xs text-gray-500">
-                Store in OpenSearch with S3 Vectors as storage engine. Unlimited metadata, hybrid search capability.
+              <span className="text-sm font-medium text-gray-900">OpenSearch</span>
+              <p className="text-xs text-gray-500 mt-1">
+                S3Vector backend, hybrid search, unlimited metadata
               </p>
+              <p className="text-xs text-indigo-600 mt-1">100-200ms latency</p>
             </div>
           </label>
 
-          {!settings.storeInS3Vectors && !settings.storeInOpenSearch && (
-            <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded">
-              ⚠️ Please select at least one storage backend
-            </p>
-          )}
+          <label className="flex items-start p-3 border-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-all"
+                 style={{borderColor: settings.storeInQdrant ? '#4F46E5' : '#E5E7EB'}}>
+            <input
+              type="checkbox"
+              checked={settings.storeInQdrant}
+              onChange={(e) => setSettings({ ...settings, storeInQdrant: e.target.checked })}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded mt-1"
+            />
+            <div className="ml-3">
+              <span className="text-sm font-medium text-gray-900">Qdrant</span>
+              <p className="text-xs text-gray-500 mt-1">
+                High-performance HNSW, managed cloud or self-hosted
+              </p>
+              <p className="text-xs text-green-600 mt-1">20-50ms latency (fastest)</p>
+            </div>
+          </label>
+
+          <label className="flex items-start p-3 border-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-all"
+                 style={{borderColor: settings.storeInLanceDB ? '#4F46E5' : '#E5E7EB'}}>
+            <input
+              type="checkbox"
+              checked={settings.storeInLanceDB}
+              onChange={(e) => setSettings({ ...settings, storeInLanceDB: e.target.checked })}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded mt-1"
+            />
+            <div className="ml-3">
+              <span className="text-sm font-medium text-gray-900">LanceDB</span>
+              <p className="text-xs text-gray-500 mt-1">
+                Embedded, flexible backends (S3/EFS/EBS)
+              </p>
+              <p className="text-xs text-indigo-600 mt-1">50-500ms (depends on backend)</p>
+            </div>
+          </label>
         </div>
+
+        {/* LanceDB Backend Selection */}
+        {settings.storeInLanceDB && (
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              LanceDB Backend
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => setSettings({ ...settings, lancedbBackend: 's3' })}
+                className={`p-2 text-sm border-2 rounded ${
+                  settings.lancedbBackend === 's3'
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                S3 (Serverless)
+              </button>
+              <button
+                onClick={() => setSettings({ ...settings, lancedbBackend: 'efs' })}
+                className={`p-2 text-sm border-2 rounded ${
+                  settings.lancedbBackend === 'efs'
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                EFS (Shared)
+              </button>
+              <button
+                onClick={() => setSettings({ ...settings, lancedbBackend: 'ebs' })}
+                className={`p-2 text-sm border-2 rounded ${
+                  settings.lancedbBackend === 'ebs'
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                EBS (Fast)
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!settings.storeInS3Vectors && !settings.storeInOpenSearch && !settings.storeInQdrant && !settings.storeInLanceDB && (
+          <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded mt-4">
+            ⚠️ Please select at least one storage backend
+          </p>
+        )}
       </div>
 
       {/* Processing Jobs Dashboard */}
@@ -593,7 +744,7 @@ export default function MediaProcessing() {
             <div>
               <p className="text-gray-600">Storage</p>
               <p className="text-xl font-bold text-gray-900">
-                {[settings.storeInS3Vectors, settings.storeInOpenSearch].filter(Boolean).length}
+                {[settings.storeInS3Vectors, settings.storeInOpenSearch, settings.storeInQdrant, settings.storeInLanceDB].filter(Boolean).length}
               </p>
             </div>
           </div>
