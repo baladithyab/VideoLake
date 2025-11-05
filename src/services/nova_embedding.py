@@ -164,7 +164,7 @@ class NovaEmbeddingService:
         segment_duration_sec: Optional[int] = None,
         start_time_sec: Optional[float] = None,
         end_time_sec: Optional[float] = None,
-        use_async: bool = False
+        use_async: bool = True  # Default to async for videos (no 100MB limit)
     ) -> Union[NovaEmbeddingResult, str]:
         """
         Generate unified embedding for video content.

@@ -1,0 +1,31 @@
+{
+  "dataset": "Blender Creative Commons",
+  "configuration": {
+    "embedding_model": "nova",
+    "vector_types": null,
+    "nova_dimension": 1024,
+    "vector_stores": [
+      "s3vector"
+    ],
+    "max_concurrent": 5,
+    "batch_size": 10
+  },
+  "metrics": {
+    "total_videos": 4,
+    "processed": 0,
+    "failed": 4,
+    "success_rate": 0.0,
+    "embeddings_generated": 0,
+    "processing_time_hours": 0.0037258370717366536,
+    "avg_time_per_video_sec": 0.0,
+    "total_cost_usd": 0.0,
+    "cost_per_video": 0.0
+  },
+  "vector_stores": {
+    "s3vector": {
+      "vectors_stored": 0,
+      "errors": 0
+    }
+  },
+  "completed_at": "2025-11-05T18:36:32.824253"
+}
