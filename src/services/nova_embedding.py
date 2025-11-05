@@ -200,12 +200,24 @@ class NovaEmbeddingService:
 
         if task_type == "SINGLE_EMBEDDING":
             # Build single embedding request
+            # Extract video format from URI (default to mp4)
+            video_format = "mp4"
+            if video_uri.endswith('.webm'):
+                video_format = "webm"
+            elif video_uri.endswith('.mkv'):
+                video_format = "mkv"
+            elif video_uri.endswith('.avi'):
+                video_format = "avi"
+            elif video_uri.endswith('.mov'):
+                video_format = "mov"
+
             request_body = {
                 "taskType": "SINGLE_EMBEDDING",
                 "singleEmbeddingParams": {
                     "embeddingPurpose": self.embedding_purpose,
                     "embeddingDimension": self.embedding_dimension,
                     "video": {
+                        "format": video_format,  # Required by Nova API
                         "embeddingMode": embedding_mode,
                         "source": {
                             "s3Location": {"uri": video_uri}
