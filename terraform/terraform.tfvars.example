@@ -1,0 +1,74 @@
+# Example Terraform Variables
+# Copy to terraform.tfvars and customize
+
+#------------------------------------------------------------------------------
+# GENERAL
+#------------------------------------------------------------------------------
+
+aws_region  = "us-east-1"
+environment = "dev"
+
+#------------------------------------------------------------------------------
+# DATA STORAGE
+#------------------------------------------------------------------------------
+
+data_bucket_name    = "s3vector-demo-data-dev"
+enable_web_upload   = true  # Enable for UI uploads
+web_allowed_origins = ["http://localhost:5173", "http://localhost:8501"]
+
+#------------------------------------------------------------------------------
+# S3VECTOR (DIRECT)
+#------------------------------------------------------------------------------
+
+s3vector_bucket_name = "s3vector-demo-vectors-dev"
+
+#------------------------------------------------------------------------------
+# OPENSEARCH (WITH S3VECTOR BACKEND)
+#------------------------------------------------------------------------------
+
+opensearch_domain_name     = "s3vector-demo-dev"
+opensearch_instance_type   = "or1.medium.search" # OR1 for S3Vector engine
+opensearch_instance_count  = 2
+opensearch_multi_az        = false  # Set true for production
+opensearch_enable_auth     = true
+opensearch_master_user     = "admin"
+opensearch_master_password = "ChangeMe123!" # CHANGE IN PRODUCTION!
+
+#------------------------------------------------------------------------------
+# QDRANT
+#------------------------------------------------------------------------------
+
+qdrant_deployment_name = "s3vector-demo-qdrant-dev"
+qdrant_instance_type   = "t3.xlarge"  # 4 vCPU, 16 GB RAM
+qdrant_storage_gb      = 100
+qdrant_version         = "v1.7.4"  # Or "latest"
+
+#------------------------------------------------------------------------------
+# LANCEDB
+#------------------------------------------------------------------------------
+
+lancedb_deployment_name = "s3vector-demo-lancedb-dev"
+lancedb_storage_gb      = 100
+
+#------------------------------------------------------------------------------
+# DEPLOYMENT NOTES
+#------------------------------------------------------------------------------
+
+# Expected Monthly Costs (dev environment):
+# - Qdrant (t3.xlarge):        ~$138/month
+# - OpenSearch (2x or1.medium): ~$250/month
+# - LanceDB S3:                ~$2/month (100GB)
+# - LanceDB EFS:               ~$30/month (100GB)
+# - LanceDB EBS:               ~$8/month (100GB)
+# - Data S3 bucket:            ~$5/month (varies by usage)
+# TOTAL:                       ~$433/month for full demo setup
+
+# To deploy:
+# 1. cp terraform.tfvars.example terraform.tfvars
+# 2. Edit terraform.tfvars with your values
+# 3. terraform init
+# 4. terraform plan
+# 5. terraform apply
+
+# To destroy:
+# terraform destroy

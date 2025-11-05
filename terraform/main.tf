@@ -1,6 +1,6 @@
-# S3Vector Demo Infrastructure
+# S3Vector Demo Complete Infrastructure
 #
-# Complete Terraform configuration for vector store comparison demo
+# Provisions all vector stores and data storage for demo
 
 terraform {
   required_version = ">= 1.0"
@@ -12,7 +12,7 @@ terraform {
     }
   }
 
-  # Backend configuration for remote state (optional)
+  # Optional: Store state in S3 for team collaboration
   # backend "s3" {
   #   bucket = "s3vector-terraform-state"
   #   key    = "demo/terraform.tfstate"
@@ -28,33 +28,87 @@ provider "aws" {
       Project   = "S3Vector"
       ManagedBy = "Terraform"
       Demo      = "VectorStoreComparison"
+      Environment = var.environment
     }
   }
 }
 
-# Data source for current region's AZs
+# Data source for AZs
 data "aws_availability_zones" "available" {
   state = "available"
 }
 
-# Qdrant Deployment (High-Performance HNSW)
+#------------------------------------------------------------------------------
+# DATA STORAGE
+#------------------------------------------------------------------------------
+
+# S3 bucket for videos, embeddings, and datasets
+module "data_bucket" {
+  source = "./modules/s3_data_buckets"
+
+  bucket_name       = var.data_bucket_name
+  enable_versioning = true
+  enable_lifecycle  = true
+  enable_web_upload = var.enable_web_upload
+  allowed_origins   = var.web_allowed_origins
+
+  tags = {
+    Purpose = "Media and Embedding Storage"
+  }
+}
+
+#------------------------------------------------------------------------------
+# VECTOR STORES
+#------------------------------------------------------------------------------
+
+# 1. S3Vector (Direct) - Native AWS vector storage
+module "s3vector" {
+  source = "./modules/s3vector"
+
+  bucket_name = var.s3vector_bucket_name
+  region      = var.aws_region
+
+  tags = {
+    VectorStore = "S3Vector-Direct"
+  }
+}
+
+# 2. OpenSearch with S3Vector Backend - Hybrid search capability
+module "opensearch" {
+  source = "./modules/opensearch"
+
+  domain_name            = var.opensearch_domain_name
+  engine_version         = "OpenSearch_2.19" # Required for S3Vector
+  instance_type          = var.opensearch_instance_type
+  instance_count         = var.opensearch_instance_count
+  multi_az               = var.opensearch_multi_az
+  enable_fine_grained_access = var.opensearch_enable_auth
+  master_user_name       = var.opensearch_master_user
+  master_user_password   = var.opensearch_master_password
+
+  tags = {
+    VectorStore = "OpenSearch-S3Vector-Backend"
+  }
+}
+
+# 3. Qdrant - High-performance HNSW indexing
 module "qdrant" {
   source = "./modules/qdrant"
 
   deployment_name   = var.qdrant_deployment_name
   instance_type     = var.qdrant_instance_type
   availability_zone = data.aws_availability_zones.available.names[0]
-
   ebs_volume_size_gb = var.qdrant_storage_gb
-  qdrant_version     = var.qdrant_version
+  qdrant_version    = var.qdrant_version
 
   tags = {
     VectorStore = "Qdrant"
-    Environment = var.environment
   }
 }
 
-# LanceDB S3 Backend (Serverless, Cost-Effective)
+# 4. LanceDB - Flexible backends
+
+# LanceDB S3 Backend (Serverless, cost-effective)
 module "lancedb_s3" {
   source = "./modules/lancedb"
 
@@ -64,11 +118,10 @@ module "lancedb_s3" {
   tags = {
     VectorStore = "LanceDB"
     Backend     = "S3"
-    Environment = var.environment
   }
 }
 
-# LanceDB EFS Backend (Shared, Multi-AZ)
+# LanceDB EFS Backend (Shared, multi-AZ)
 module "lancedb_efs" {
   source = "./modules/lancedb"
 
@@ -79,11 +132,10 @@ module "lancedb_efs" {
   tags = {
     VectorStore = "LanceDB"
     Backend     = "EFS"
-    Environment = var.environment
   }
 }
 
-# LanceDB EBS Backend (Single Instance, Fast)
+# LanceDB EBS Backend (Single instance, fastest)
 module "lancedb_ebs" {
   source = "./modules/lancedb"
 
@@ -95,9 +147,5 @@ module "lancedb_ebs" {
   tags = {
     VectorStore = "LanceDB"
     Backend     = "EBS"
-    Environment = var.environment
   }
 }
-
-# Note: S3Vector and OpenSearch are managed via AWS APIs
-# since they are AWS managed services, not infrastructure resources
