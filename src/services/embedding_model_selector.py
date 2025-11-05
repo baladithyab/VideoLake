@@ -8,6 +8,7 @@ Provides unified interface for choosing between different embedding models:
 This enables the demo to showcase both architectures side-by-side.
 """
 
+import time
 from typing import Dict, Any, List, Optional, Union, Literal
 from dataclasses import dataclass
 from enum import Enum
@@ -232,7 +233,10 @@ class EmbeddingModelSelector:
 
         # Use configured default if not specified
         if embedding_mode is None:
-            embedding_mode = self.model_config.default_embedding_mode or "AUDIO_VIDEO_COMBINED"
+            if self.model_config and hasattr(self.model_config, 'default_embedding_mode'):
+                embedding_mode = self.model_config.default_embedding_mode
+            else:
+                embedding_mode = "AUDIO_VIDEO_COMBINED"
 
         logger.info(
             f"Processing video with Nova: {video_uri}, "
