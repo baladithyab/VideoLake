@@ -13,12 +13,10 @@ from typing import Dict, List, Optional, Any
 from botocore.config import Config
 
 from .opensearch import (
-    OpenSearchExportManager,
     OpenSearchEngineManager,
     OpenSearchHybridSearch,
     OpenSearchCostAnalyzer,
     OpenSearchResourceManager,
-    ExportStatus,
     HybridSearchResult,
     CostAnalysis,
     IntegrationPattern
@@ -33,15 +31,12 @@ class OpenSearchIntegrationManager:
     """
     Manages integration between S3 Vectors and OpenSearch Service (Facade).
 
-    Provides two integration patterns:
-    1. Export Pattern: Export data to OpenSearch Serverless for high performance
-    2. Engine Pattern: Use S3 Vectors as cost-effective OpenSearch storage engine
+    Provides Engine Pattern: Use S3 Vectors as cost-effective OpenSearch storage engine
 
     Features:
-    - Point-in-time data export to OpenSearch Serverless
     - S3 Vectors engine configuration for OpenSearch domains
     - Hybrid search combining vector similarity and keyword search
-    - Cost monitoring and analysis across integration patterns
+    - Cost monitoring and analysis
 
     This is a facade that delegates to specialized managers while maintaining
     backward compatibility with the original API.
@@ -130,12 +125,6 @@ class OpenSearchIntegrationManager:
 
     def _init_managers(self) -> None:
         """Initialize specialized managers."""
-        # Export manager
-        self.export_manager = OpenSearchExportManager(
-            region_name=self.region_name,
-            boto_config=self.boto_config
-        )
-
         # Engine manager
         self.engine_manager = OpenSearchEngineManager(
             region_name=self.region_name,
@@ -161,60 +150,6 @@ class OpenSearchIntegrationManager:
         )
 
         self.logger.log_operation("Specialized managers initialized successfully")
-
-    # Export Pattern Methods (delegate to ExportManager)
-
-    def export_to_opensearch_serverless(
-        self,
-        vector_index_arn: str,
-        collection_name: str,
-        target_index_name: Optional[str] = None,
-        iam_role_arn: Optional[str] = None,
-        dead_letter_queue_bucket: Optional[str] = None,
-        **kwargs
-    ) -> str:
-        """
-        Export S3 vector data to OpenSearch Serverless collection.
-
-        Args:
-            vector_index_arn: ARN of source S3 vector index
-            collection_name: Target OpenSearch Serverless collection name
-            target_index_name: Target index name in OpenSearch (defaults to vector index name)
-            iam_role_arn: IAM role for ingestion pipeline (auto-created if not provided)
-            dead_letter_queue_bucket: S3 bucket for failed records
-            **kwargs: Additional export configuration
-
-        Returns:
-            str: Export job/pipeline ID
-        """
-        export_id = self.export_manager.export_to_opensearch_serverless(
-            vector_index_arn=vector_index_arn,
-            collection_name=collection_name,
-            target_index_name=target_index_name,
-            iam_role_arn=iam_role_arn,
-            dead_letter_queue_bucket=dead_letter_queue_bucket,
-            **kwargs
-        )
-
-        # Sync export tracking to facade's cost tracker
-        for export in self.export_manager._exports:
-            if export.export_id == export_id:
-                self._cost_tracker['exports'].append(export)
-                break
-
-        return export_id
-
-    def get_export_status(self, export_id: str) -> ExportStatus:
-        """
-        Get status of an OpenSearch export operation.
-
-        Args:
-            export_id: Export/pipeline ID
-
-        Returns:
-            ExportStatus: Current export status with progress information
-        """
-        return self.export_manager.get_export_status(export_id)
 
     # Engine Pattern Methods (delegate to EngineManager)
 
@@ -390,19 +325,6 @@ class OpenSearchIntegrationManager:
     def get_opensearch_resource_summary(self) -> Dict[str, Any]:
         """Get comprehensive summary of all OpenSearch-related resources."""
         return self.resource_manager.get_opensearch_resource_summary()
-
-    def cleanup_export_resources(
-        self,
-        export_id: str,
-        cleanup_collection: bool = False,
-        cleanup_iam_role: bool = True
-    ) -> Dict[str, Any]:
-        """Clean up resources created for export pattern."""
-        return self.resource_manager.cleanup_export_resources(
-            export_id=export_id,
-            cleanup_collection=cleanup_collection,
-            cleanup_iam_role=cleanup_iam_role
-        )
 
     def cleanup_engine_resources(
         self,

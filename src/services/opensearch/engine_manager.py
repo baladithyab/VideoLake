@@ -180,17 +180,10 @@ class OpenSearchEngineManager:
                 operation_name="describe_updated_domain"
             )
 
-            # Log domain configuration in resource registry
+            # Domain configuration complete
             domain_status = updated_domain['DomainStatus']
             domain_arn = domain_status.get('ARN', f'arn:aws:es:{self.region_name}:123456789012:domain/{domain_name}')
             engine_version = domain_status.get('EngineVersion', 'OpenSearch_2.19')
-                domain_name=domain_name,
-                domain_arn=domain_arn,
-                region=self.region_name,
-                engine_version=engine_version,
-                s3_vectors_enabled=enable_s3_vectors,
-                source="engine_pattern"
-            )
 
             configuration_result = {
                 'domain_name': domain_name,
@@ -325,16 +318,6 @@ class OpenSearchEngineManager:
                 "created_at": datetime.utcnow().isoformat(),
                 "response": response.json() if response.text else {}
             }
-
-            # Log index creation in resource registry
-                index_name=index_name,
-                opensearch_endpoint=opensearch_endpoint,
-                vector_field_name=vector_field_name,
-                vector_dimension=vector_dimension,
-                space_type=space_type,
-                engine_type="s3vector",
-                source="engine_pattern"
-            )
 
             self.logger.log_operation(
                 "s3_vector_index_created",

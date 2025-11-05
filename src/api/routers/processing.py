@@ -5,7 +5,7 @@ Handles video upload and processing with TwelveLabs Marengo.
 """
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Depends
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Any, Optional
 import tempfile
 import os
@@ -58,31 +58,18 @@ class ProcessVideoRequest(BaseModel):
         description="Fixed length for video clips in seconds"
     )
 
-    @validator('video_s3_uri')
+    @field_validator('video_s3_uri')
+    @classmethod
     def validate_uri(cls, v):
         """Validate S3 URI if provided and it's an S3 URI."""
         if v and v.startswith('s3://'):
             return validate_s3_uri(v)
         return v
 
-    @validator('embedding_options')
+    @field_validator('embedding_options')
+    @classmethod
     def validate_options(cls, v):
         return validate_embedding_options(v)
-
-    @validator('start_sec', 'length_sec', 'use_fixed_length_sec', always=True)
-    def validate_time_params(cls, v, values, field):
-        """Validate time parameters using VideoParametersValidator."""
-        start_sec = values.get('start_sec', 0)
-        length_sec = values.get('length_sec')
-        use_fixed_length_sec = values.get('use_fixed_length_sec')
-
-        # Only validate when we have all required parameters
-        if field.name == 'use_fixed_length_sec' or (field.name == 'length_sec' and v is not None):
-            VideoParametersValidator.validate_time_range(
-                start_sec, length_sec, use_fixed_length_sec
-            )
-
-        return v
 
 
 class ProcessingJobStatus(BaseModel):
@@ -99,7 +86,8 @@ class StoreEmbeddingsRequest(BaseModel):
     job_id: str = Field(..., description="Processing job ID", min_length=1)
     index_arn: str = Field(..., description="S3 Vector index ARN")
 
-    @validator('index_arn')
+    @field_validator('index_arn')
+    @classmethod
     def validate_arn(cls, v):
         return validate_index_arn(v)
 

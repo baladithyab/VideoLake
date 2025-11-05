@@ -13,7 +13,7 @@ from src.services.similarity_search_engine import SimilaritySearchEngine
 from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
 from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.services.vector_store_manager import VectorStoreManager
-from src.utils.resource_registry import ResourceRegistry, resource_registry
+from src.utils.resource_registry import resource_registry
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -79,12 +79,12 @@ def get_vector_store_manager() -> VectorStoreManager:
     return VectorStoreManager()
 
 
-def get_resource_registry() -> ResourceRegistry:
+def get_resource_registry():
     """
-    Get the global ResourceRegistry instance.
+    Get the global ResourceRegistry stub instance.
 
     Returns:
-        ResourceRegistry singleton
+        ResourceRegistry stub (deprecated)
     """
     return resource_registry
 

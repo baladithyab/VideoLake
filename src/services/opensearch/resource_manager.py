@@ -154,9 +154,6 @@ class OpenSearchResourceManager:
             # Delete OSI pipeline
             try:
                 self.osis_client.delete_pipeline(PipelineName=export_id)
-                    pipeline_name=export_id,
-                    source="cleanup"
-                )
                 cleanup_results['pipeline_deleted'] = True
                 self.logger.log_operation("Export pipeline deleted", pipeline_id=export_id)
             except Exception as e:
@@ -173,9 +170,6 @@ class OpenSearchResourceManager:
                 if target_collection:
                     try:
                         self.opensearch_serverless_client.delete_collection(id=target_collection)
-                            collection_name=target_collection,
-                            source="cleanup"
-                        )
                         cleanup_results['collection_deleted'] = True
                         self.logger.log_operation("Collection deleted", collection_name=target_collection)
                     except Exception as e:

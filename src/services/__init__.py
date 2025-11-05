@@ -10,7 +10,6 @@ from .bedrock_embedding import BedrockEmbeddingService, EmbeddingResult, ModelIn
 from .opensearch_integration import (
     OpenSearchIntegrationManager,
     IntegrationPattern,
-    ExportStatus,
     HybridSearchResult,
     CostAnalysis
 )
@@ -46,7 +45,6 @@ __all__ = [
     # OpenSearch integration
     'OpenSearchIntegrationManager',
     'IntegrationPattern',
-    'ExportStatus',
     'HybridSearchResult',
     'CostAnalysis',
     
