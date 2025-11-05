@@ -53,6 +53,7 @@ class OpenSearchExportManager:
 
     def __init__(
         self,
+        region_name: str = "us-east-1",
         boto_config: Optional[Config] = None
     ):
         """
@@ -70,9 +71,13 @@ class OpenSearchExportManager:
         # Use provided config or create default
         self.boto_config = boto_config or Config(
             retries={'max_attempts': 3, 'mode': 'adaptive'},
+            read_timeout=60,
+            connect_timeout=10,
             max_pool_connections=50
+        )
 
         # Initialize clients
+        self._init_clients()
 
         # Export tracking
         self._exports: List[ExportStatus] = []
@@ -80,6 +85,7 @@ class OpenSearchExportManager:
     def _init_clients(self) -> None:
         """Initialize AWS service clients."""
         try:
+            session = boto3.Session(region_name=self.region_name)
 
             self.opensearch_serverless_client = session.client(
                 'opensearchserverless',
@@ -91,6 +97,7 @@ class OpenSearchExportManager:
                 config=self.boto_config
             )
 
+            self.logger.log_operation("Export manager clients initialized successfully")
 
         except Exception as e:
             error_msg = f"Failed to initialize export manager clients: {str(e)}"
@@ -101,6 +108,9 @@ class OpenSearchExportManager:
         self,
         vector_index_arn: str,
         collection_name: str,
+        target_index_name: Optional[str] = None,
+        iam_role_arn: Optional[str] = None,
+        dead_letter_queue_bucket: Optional[str] = None,
         **kwargs
     ) -> str:
         """
@@ -112,6 +122,7 @@ class OpenSearchExportManager:
         Args:
             vector_index_arn: ARN of source S3 vector index
             collection_name: Target OpenSearch Serverless collection name
+            target_index_name: Target index name in OpenSearch (defaults to vector index name)
             iam_role_arn: IAM role for ingestion pipeline (auto-created if not provided)
             dead_letter_queue_bucket: S3 bucket for failed records
             **kwargs: Additional export configuration
@@ -122,6 +133,7 @@ class OpenSearchExportManager:
         Raises:
             OpenSearchIntegrationError: If export setup fails
         """
+        operation = self.timing_tracker.start_operation("export_to_opensearch_serverless")
         try:
             # Extract vector index details
             index_name = vector_index_arn.split('/')[-1]
@@ -129,10 +141,20 @@ class OpenSearchExportManager:
 
             self.logger.log_operation(
                 "starting_opensearch_export",
+                vector_index_arn=vector_index_arn,
+                collection_name=collection_name,
                 target_index=target_index
+            )
 
             # Ensure OpenSearch Serverless collection exists
+            collection_arn = self._ensure_serverless_collection(collection_name)
 
+            # Log collection creation in resource registry
+                collection_name=collection_name,
+                collection_arn=collection_arn,
+                region=self.region_name,
+                source="export_pattern"
+            )
 
             # Create or validate IAM role for ingestion
             if not iam_role_arn:
@@ -140,16 +162,26 @@ class OpenSearchExportManager:
                     vector_index_arn,
                     collection_arn,
                     dead_letter_queue_bucket
+                )
 
                 # Log IAM role creation in resource registry
                 role_name = iam_role_arn.split('/')[-1]
                     role_name=role_name,
+                    role_arn=iam_role_arn,
+                    purpose="opensearch_ingestion",
+                    region=self.region_name,
                     source="export_pattern"
+                )
 
             # Create OpenSearch Ingestion pipeline for export
             pipeline_config = self._create_export_pipeline_config(
                 vector_index_arn=vector_index_arn,
+                collection_name=collection_name,
+                target_index=target_index,
+                iam_role_arn=iam_role_arn,
+                dead_letter_queue_bucket=dead_letter_queue_bucket,
                 **kwargs
+            )
 
             # Create ingestion pipeline with retry
             def _create_pipeline():
@@ -163,25 +195,42 @@ class OpenSearchExportManager:
                         {'Key': 'IntegrationPattern', 'Value': 'Export'},
                         {'Key': 'SourceIndex', 'Value': index_name}
                     ]
+                )
 
             response = AWSRetryHandler.retry_with_backoff(
                 _create_pipeline,
+                max_retries=3,
                 operation_name="create_osi_pipeline"
+            )
 
             pipeline_arn = response['Pipeline']['PipelineArn']
             export_id = pipeline_arn.split('/')[-1]
 
             # Log pipeline creation in resource registry
+                pipeline_name=export_id,
+                pipeline_arn=pipeline_arn,
+                source_index_arn=vector_index_arn,
+                target_collection=collection_name,
+                region=self.region_name,
                 source="export_pattern"
+            )
 
             # Track export status
             export_status = ExportStatus(
                 export_id=export_id,
+                status='PENDING',
+                source_index_arn=vector_index_arn,
+                target_collection_name=collection_name,
+                created_at=datetime.utcnow()
             )
 
+            self._exports.append(export_status)
 
             self.logger.log_operation(
                 "opensearch_export_started",
+                export_id=export_id,
+                pipeline_arn=pipeline_arn,
+                estimated_duration_minutes=kwargs.get('estimated_duration', 30)
             )
 
             return export_id
@@ -195,6 +244,7 @@ class OpenSearchExportManager:
             self.logger.log_operation("export_unexpected_error", level="ERROR", error=error_msg)
             raise OpenSearchIntegrationError(error_msg) from e
         finally:
+            operation.finish()
 
     def get_export_status(self, export_id: str) -> ExportStatus:
         """
@@ -213,7 +263,9 @@ class OpenSearchExportManager:
 
             response = AWSRetryHandler.retry_with_backoff(
                 _get_pipeline,
+                max_retries=3,
                 operation_name="get_osi_pipeline_status"
+            )
 
             pipeline = response['Pipeline']
 
@@ -233,8 +285,10 @@ class OpenSearchExportManager:
                 export_status.status = 'IN_PROGRESS'
             elif pipeline_status == 'CREATE_COMPLETE':
                 export_status.status = 'COMPLETED'
+                export_status.completed_at = datetime.utcnow()
             elif pipeline_status in ['CREATE_FAILED', 'UPDATE_FAILED']:
                 export_status.status = 'FAILED'
+                export_status.error_message = pipeline.get('StatusReason', 'Unknown error')
 
             return export_status
 
@@ -250,10 +304,13 @@ class OpenSearchExportManager:
             def _get_collection():
                 return self.opensearch_serverless_client.batch_get_collection(
                     names=[collection_name]
+                )
 
             response = AWSRetryHandler.retry_with_backoff(
                 _get_collection,
+                max_retries=3,
                 operation_name="get_serverless_collection"
+            )
 
             if response['collectionDetails']:
                 return response['collectionDetails'][0]['arn']
@@ -262,17 +319,24 @@ class OpenSearchExportManager:
             def _create_collection():
                 return self.opensearch_serverless_client.create_collection(
                     name=collection_name,
+                    type='VECTORSEARCH',
                     description=f'Collection for S3 Vectors export: {collection_name}'
                 )
 
             create_response = AWSRetryHandler.retry_with_backoff(
                 _create_collection,
+                max_retries=3,
                 operation_name="create_serverless_collection"
+            )
 
             collection_arn = create_response['createCollectionDetail']['arn']
 
             # Log new collection creation in resource registry
+                collection_name=collection_name,
+                collection_arn=collection_arn,
+                region=self.region_name,
                 source="auto_created"
+            )
 
             return collection_arn
 
@@ -305,16 +369,20 @@ class OpenSearchExportManager:
             }
 
             # Create the role
+            iam_client = boto3.client('iam', region_name=self.region_name)
 
             def _create_role():
                 return iam_client.create_role(
                     RoleName=role_name,
+                    AssumeRolePolicyDocument=json.dumps(trust_policy),
                     Description="Role for S3 Vectors to OpenSearch ingestion pipeline"
                 )
 
             role_response = AWSRetryHandler.retry_with_backoff(
                 _create_role,
+                max_retries=3,
                 operation_name="create_iam_role"
+            )
 
             role_arn = role_response['Role']['Arn']
 
@@ -336,6 +404,8 @@ class OpenSearchExportManager:
 
             iam_client.put_role_policy(
                 RoleName=role_name,
+                PolicyName=f"{role_name}-s3vectors-policy",
+                PolicyDocument=json.dumps(s3vectors_policy)
             )
 
             # Create and attach policy for OpenSearch Serverless access
@@ -355,6 +425,8 @@ class OpenSearchExportManager:
 
             iam_client.put_role_policy(
                 RoleName=role_name,
+                PolicyName=f"{role_name}-opensearch-policy",
+                PolicyDocument=json.dumps(opensearch_policy)
             )
 
             # Add DLQ policy if bucket specified
@@ -372,8 +444,11 @@ class OpenSearchExportManager:
 
                 iam_client.put_role_policy(
                     RoleName=role_name,
+                    PolicyName=f"{role_name}-dlq-policy",
+                    PolicyDocument=json.dumps(dlq_policy)
                 )
 
+            self.logger.log_operation("Created IAM role for ingestion", role_arn=role_arn)
 
             return role_arn
 
@@ -406,3 +481,4 @@ s3-vectors-pipeline:
           region: "{self.region_name}"
           role: "{kwargs['iam_role_arn']}"
         """
+        return config.strip()

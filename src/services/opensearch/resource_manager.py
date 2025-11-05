@@ -30,6 +30,7 @@ class OpenSearchResourceManager:
 
     def __init__(
         self,
+        region_name: str = "us-east-1",
         boto_config: Optional[Config] = None
     ):
         """
@@ -46,13 +47,18 @@ class OpenSearchResourceManager:
         # Use provided config or create default
         self.boto_config = boto_config or Config(
             retries={'max_attempts': 3, 'mode': 'adaptive'},
+            read_timeout=60,
+            connect_timeout=10,
             max_pool_connections=50
+        )
 
         # Initialize clients
+        self._init_clients()
 
     def _init_clients(self) -> None:
         """Initialize AWS service clients."""
         try:
+            session = boto3.Session(region_name=self.region_name)
 
             self.opensearch_client = session.client(
                 'opensearch',
@@ -69,6 +75,7 @@ class OpenSearchResourceManager:
                 config=self.boto_config
             )
 
+            self.logger.log_operation("Resource manager clients initialized successfully")
 
         except Exception as e:
             error_msg = f"Failed to initialize resource manager clients: {str(e)}"
@@ -131,6 +138,7 @@ class OpenSearchResourceManager:
     def cleanup_export_resources(
         self,
         export_id: str,
+        cleanup_collection: bool = False,
         cleanup_iam_role: bool = True
     ) -> Dict[str, Any]:
         """Clean up resources created for export pattern."""
@@ -145,11 +153,16 @@ class OpenSearchResourceManager:
         try:
             # Delete OSI pipeline
             try:
+                self.osis_client.delete_pipeline(PipelineName=export_id)
                     pipeline_name=export_id,
                     source="cleanup"
+                )
                 cleanup_results['pipeline_deleted'] = True
+                self.logger.log_operation("Export pipeline deleted", pipeline_id=export_id)
             except Exception as e:
+                cleanup_results['errors'].append(f"Pipeline deletion failed: {str(e)}")
 
+            # Optionally delete collection (usually kept for other exports)
             if cleanup_collection:
                 target_collection = None
                 for pipeline in pipelines:
@@ -159,10 +172,14 @@ class OpenSearchResourceManager:
 
                 if target_collection:
                     try:
+                        self.opensearch_serverless_client.delete_collection(id=target_collection)
                             collection_name=target_collection,
                             source="cleanup"
+                        )
                         cleanup_results['collection_deleted'] = True
+                        self.logger.log_operation("Collection deleted", collection_name=target_collection)
                     except Exception as e:
+                        cleanup_results['errors'].append(f"Collection deletion failed: {str(e)}")
 
             # Clean up IAM role if created specifically for this export
             if cleanup_iam_role:
@@ -172,16 +189,21 @@ class OpenSearchResourceManager:
 
                 for role in export_roles:
                     try:
+                        iam_client = boto3.client('iam', region_name=self.region_name)
                         role_name = role.get('name')
 
                         # Delete role policies first
+                        policies = iam_client.list_role_policies(RoleName=role_name)
                         for policy_name in policies['PolicyNames']:
                             iam_client.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
 
                         # Delete the role
+                        iam_client.delete_role(RoleName=role_name)
                         cleanup_results['iam_role_deleted'] = True
+                        self.logger.log_operation("IAM role deleted", role_name=role_name)
 
                     except Exception as e:
+                        cleanup_results['errors'].append(f"IAM role deletion failed: {str(e)}")
 
             return cleanup_results
 
@@ -194,6 +216,8 @@ class OpenSearchResourceManager:
     def cleanup_engine_resources(
         self,
         domain_name: str,
+        disable_s3_vectors: bool = True,
+        cleanup_indexes: bool = False,
         engine_manager=None  # Injected dependency
     ) -> Dict[str, Any]:
         """Clean up or reset resources used in engine pattern."""
@@ -211,8 +235,11 @@ class OpenSearchResourceManager:
                     engine_manager.configure_s3_vectors_engine(
                         domain_name=domain_name,
                         enable_s3_vectors=False
+                    )
                     cleanup_results['s3_vectors_disabled'] = True
+                    self.logger.log_operation("S3 vectors disabled on domain", domain_name=domain_name)
                 except Exception as e:
+                    cleanup_results['errors'].append(f"S3 vectors disable failed: {str(e)}")
 
             # Optionally cleanup indexes
             if cleanup_indexes:
@@ -221,12 +248,14 @@ class OpenSearchResourceManager:
                 for index in domain_indexes:
                     try:
                         import requests
+                        endpoint = index.get('endpoint')
                         index_name = index.get('name')
 
                         # Delete index via REST API
                         response = requests.delete(
                             f"https://{endpoint}/{index_name}",
                             timeout=30
+                        )
 
                         if response.status_code in [200, 404]:  # 404 is OK - already deleted
                             cleanup_results['indexes_deleted'] += 1
@@ -234,6 +263,7 @@ class OpenSearchResourceManager:
                                                     index_name=index_name, endpoint=endpoint)
 
                     except Exception as e:
+                        cleanup_results['errors'].append(f"Index {index.get('name')} deletion failed: {str(e)}")
 
             return cleanup_results
 
@@ -245,12 +275,16 @@ class OpenSearchResourceManager:
 
     def cleanup_all_opensearch_resources(
         self,
+        confirm_deletion: bool = False,
+        preserve_collections: bool = True,
+        preserve_domains: bool = True,
         engine_manager=None  # Injected dependency
     ) -> Dict[str, Any]:
         """Clean up all OpenSearch integration resources."""
         if not confirm_deletion:
             return {
                 'error': 'Must set confirm_deletion=True to proceed with cleanup',
+                'resources_found': self.get_opensearch_resource_summary()
             }
 
         cleanup_results = {
@@ -272,14 +306,18 @@ class OpenSearchResourceManager:
                         export_id=pipeline.get('name'),
                         cleanup_collection=not preserve_collections,
                         cleanup_iam_role=True
+                    )
                     if result.get('pipeline_deleted'):
                         cleanup_results['pipelines_deleted'] += 1
                     if result.get('collection_deleted'):
                         cleanup_results['collections_deleted'] += 1
                     if result.get('iam_role_deleted'):
                         cleanup_results['iam_roles_deleted'] += 1
+                    cleanup_results['errors'].extend(result.get('errors', []))
                 except Exception as e:
+                    cleanup_results['errors'].append(f"Pipeline cleanup failed: {str(e)}")
 
+            # Disable S3 vectors on domains (if not preserving)
             if not preserve_domains:
                 active_domains = [d for d in domains if d.get('status') == 'created']
 
@@ -288,14 +326,22 @@ class OpenSearchResourceManager:
                         result = self.cleanup_engine_resources(
                             domain_name=domain.get('name'),
                             disable_s3_vectors=True,
+                            cleanup_indexes=True,
                             engine_manager=engine_manager
+                        )
                         if result.get('s3_vectors_disabled'):
                             cleanup_results['domains_modified'] += 1
+                        cleanup_results['indexes_deleted'] += result.get('indexes_deleted', 0)
                         cleanup_results['errors'].extend(result.get('errors', []))
                     except Exception as e:
+                        cleanup_results['errors'].append(f"Domain cleanup failed: {str(e)}")
 
             self.logger.log_operation(
                 "OpenSearch resource cleanup completed",
+                pipelines_deleted=cleanup_results['pipelines_deleted'],
+                collections_deleted=cleanup_results['collections_deleted'],
+                domains_modified=cleanup_results['domains_modified'],
+                errors_count=len(cleanup_results['errors'])
             )
 
             return cleanup_results
