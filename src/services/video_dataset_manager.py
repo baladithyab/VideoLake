@@ -507,7 +507,7 @@ class VideoDatasetManager:
                         'video-id': metadata.video_id,
                         'dataset': self.config.name
                     },
-                    'Tagging': f"dataset={self.config.name}&source={self.config.source}"
+                    'Tagging': 'dataset=video'
                 }
             )
 

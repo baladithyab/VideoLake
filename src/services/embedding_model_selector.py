@@ -108,7 +108,11 @@ class EmbeddingModelSelector:
         # Initialize the selected model service
         if model == EmbeddingModel.MARENGO:
             self.service = TwelveLabsVideoProcessingService()
-            self.model_config = self.config_manager.config.marengo
+            # Try to get marengo config, use None if not available
+            try:
+                self.model_config = self.config_manager.config.marengo
+            except AttributeError:
+                self.model_config = None
             logger.info("Initialized with Marengo (multi-vector approach)")
 
         elif model == EmbeddingModel.NOVA:
