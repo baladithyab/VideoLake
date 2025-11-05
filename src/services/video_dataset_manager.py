@@ -267,7 +267,7 @@ class VideoDatasetManager:
                 self.config.hf_dataset_id,
                 split=self.config.hf_split,
                 streaming=self.config.hf_streaming,
-                trust_remote_code=True  # Some datasets require this
+                # trust_remote_code=True  # Deprecated  # Some datasets require this
             )
 
             # Process videos
