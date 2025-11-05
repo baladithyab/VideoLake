@@ -73,7 +73,7 @@ def create_error_response(
         extra={
             "request_id": request_id,
             "error_type": error_type,
-            "message": message,
+            "error_message": message,
             "status_code": status_code,
             "path": request.url.path,
             "method": request.method
