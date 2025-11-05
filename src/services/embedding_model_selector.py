@@ -111,14 +111,26 @@ class EmbeddingModelSelector:
             logger.info("Initialized with Marengo (multi-vector approach)")
 
         elif model == EmbeddingModel.NOVA:
-            # Get Nova configuration from config
-            nova_config = self.config_manager.config.nova
+            # Get Nova configuration from config (with fallback to defaults)
+            try:
+                nova_config = self.config_manager.config.nova
+                model_id = model_kwargs.get('model_id', nova_config.model_id)
+                embedding_dimension = model_kwargs.get('embedding_dimension', nova_config.default_dimension)
+                embedding_purpose = model_kwargs.get('embedding_purpose', nova_config.embedding_purpose)
+                region_name = nova_config.region
+            except AttributeError:
+                # Fallback to defaults if nova not in config
+                model_id = model_kwargs.get('model_id', 'amazon.nova-2-multimodal-embeddings-v1:0')
+                embedding_dimension = model_kwargs.get('embedding_dimension', 1024)
+                embedding_purpose = model_kwargs.get('embedding_purpose', 'GENERIC_INDEX')
+                region_name = model_kwargs.get('region_name', 'us-east-1')
+                nova_config = None
 
             self.service = NovaEmbeddingService(
-                model_id=model_kwargs.get('model_id', nova_config.model_id),
-                embedding_dimension=model_kwargs.get('embedding_dimension', nova_config.default_dimension),
-                embedding_purpose=model_kwargs.get('embedding_purpose', nova_config.embedding_purpose),
-                region_name=nova_config.region
+                model_id=model_id,
+                embedding_dimension=embedding_dimension,
+                embedding_purpose=embedding_purpose,
+                region_name=region_name
             )
             self.model_config = nova_config
             logger.info(
