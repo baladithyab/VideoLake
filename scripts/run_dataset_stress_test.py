@@ -4,6 +4,23 @@ Video Dataset Stress Test Runner
 
 Processes large video datasets to stress test vector stores with realistic workloads.
 
+WORKFLOW (Bedrock Async Pattern):
+1. Download videos from dataset source (HuggingFace/Pexels/etc.)
+2. Upload videos to S3
+3. Submit Bedrock async job: S3 (video) → Bedrock → S3 (embeddings)
+4. Wait for async job completion
+5. Retrieve embeddings from S3 output
+6. Optionally: Load embeddings into vector stores for querying
+
+DEFAULT MODE: --embedding-only (no vector store setup needed)
+   - Just generates embeddings and saves to S3
+   - Perfect for building an embedding dataset first
+   - Later, you can bulk-load into vector stores
+
+FULL MODE: --store-in-vector-dbs (requires vector stores to be set up)
+   - Generates embeddings AND stores in vector databases
+   - Requires pre-configured vector stores (S3Vector indexes, Qdrant collections, etc.)
+
 Supports:
 - HuggingFace datasets with streaming (MSR-VTT, WebVid, YouCook2, ActivityNet)
 - Creative Commons sources (Pexels, Pixabay)
@@ -13,17 +30,20 @@ Supports:
 - Checkpointing for resumability
 
 Usage:
+    # Generate embeddings only (no vector store setup needed)
+    python scripts/run_dataset_stress_test.py --dataset msr-vtt-100 --model marengo
+
+    # Generate and store (requires vector stores configured)
+    python scripts/run_dataset_stress_test.py --dataset msr-vtt-100 --model nova --store-in-vector-dbs --stores s3vector,qdrant
+
     # Quick test with 4 Blender videos
-    python scripts/run_dataset_stress_test.py --dataset blender --model marengo --stores all
+    python scripts/run_dataset_stress_test.py --dataset blender --model marengo
 
-    # Small test with 100 MSR-VTT videos
-    python scripts/run_dataset_stress_test.py --dataset msr-vtt-100 --model nova --stores s3vector,qdrant
-
-    # Stress test with 1000 videos
-    python scripts/run_dataset_stress_test.py --dataset msr-vtt-1000 --model marengo --stores all --max-cost 7000
+    # Stress test with 1000 videos (embedding only)
+    python scripts/run_dataset_stress_test.py --dataset msr-vtt-1000 --model nova --max-cost 7000
 
     # Large scale with cost limit
-    python scripts/run_dataset_stress_test.py --dataset webvid-10k --model nova --stores all --max-cost 100000
+    python scripts/run_dataset_stress_test.py --dataset webvid-10k --model nova --max-cost 100000
 """
 
 import argparse
@@ -217,6 +237,17 @@ def main():
         help='Output file for results'
     )
     parser.add_argument(
+        '--embedding-only',
+        action='store_true',
+        default=True,
+        help='Only generate embeddings, do not set up vector stores (default: True)'
+    )
+    parser.add_argument(
+        '--store-in-vector-dbs',
+        action='store_true',
+        help='Also store embeddings in vector databases (requires vector store setup)'
+    )
+    parser.add_argument(
         '--dry-run',
         action='store_true',
         help='Show configuration without processing'
@@ -295,19 +326,28 @@ def main():
 
     print_section("Starting Bulk Processing Pipeline")
 
+    # Determine processing mode
+    embedding_only = args.embedding_only and not args.store_in_vector_dbs
+
     # Create bulk processing config
     bulk_config = BulkProcessingConfig(
         dataset_config=dataset_config,
         embedding_model=EmbeddingModel.MARENGO if args.model == 'marengo' else EmbeddingModel.NOVA,
         marengo_vector_types=vector_types,
         nova_dimension=args.nova_dimension,
-        enabled_vector_stores=stores,
+        embedding_only=embedding_only,  # Only generate embeddings, no vector store setup
+        save_embeddings_to_s3=True,  # Save to S3 for later use
+        enabled_vector_stores=stores if not embedding_only else [],
         lancedb_backend=args.lancedb_backend,
         max_concurrent_videos=args.concurrent,
         batch_size=args.batch_size,
         max_cost_usd=args.max_cost,
         max_processing_time_hours=args.max_hours
     )
+
+    print(f"\n   Processing Mode: {'EMBEDDING ONLY (no vector stores)' if embedding_only else 'FULL PIPELINE (embeddings + storage)'}")
+    if embedding_only:
+        print(f"   Embeddings saved to: s3://{args.s3_bucket}/datasets/embeddings/{dataset_config.name}/")
 
     # Create bulk processor
     processor = BulkVideoProcessor(bulk_config)

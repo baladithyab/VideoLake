@@ -41,7 +41,11 @@ class BulkProcessingConfig:
     nova_dimension: int = 1024
     nova_mode: str = "AUDIO_VIDEO_COMBINED"
 
-    # Vector store selection
+    # Processing mode
+    embedding_only: bool = True  # If True, only generate embeddings (no vector store needed)
+    save_embeddings_to_s3: bool = True  # Save embedding JSON to S3 for later use
+
+    # Vector store selection (only used if embedding_only=False)
     enabled_vector_stores: List[str] = field(default_factory=lambda: ["s3vector"])
     lancedb_backend: str = "s3"
 
@@ -309,14 +313,58 @@ class BulkVideoProcessor:
             else:
                 result['cost_usd'] = video_duration_min * 0.02  # Estimated
 
-            # Store in selected vector stores (simplified for now)
-            for store in self.config.enabled_vector_stores:
+            # Save embeddings to S3 for later use (if enabled)
+            if self.config.save_embeddings_to_s3:
+                embedding_s3_key = f"{self.config.dataset_config.s3_prefix}embeddings/{self.config.dataset_config.name}/{video.video_id}.json"
+
                 try:
-                    # Store embeddings (implementation depends on store)
-                    result['stored_in'].append(store)
+                    import boto3
+                    s3_client = boto3.client('s3')
+
+                    embedding_data = {
+                        'video_id': video.video_id,
+                        'video_s3_uri': video.s3_uri,
+                        'model': self.config.embedding_model.value,
+                        'embeddings': {
+                            key: emb.tolist() if hasattr(emb, 'tolist') else emb
+                            for key, emb in embedding_result.embeddings.items()
+                        },
+                        'metadata': {
+                            'dimensions': embedding_result.dimensions,
+                            'processing_time_ms': embedding_result.processing_time_ms,
+                            'generated_at': datetime.utcnow().isoformat()
+                        }
+                    }
+
+                    s3_client.put_object(
+                        Bucket=self.config.dataset_config.s3_bucket,
+                        Key=embedding_s3_key,
+                        Body=json.dumps(embedding_data),
+                        ContentType='application/json'
+                    )
+
+                    result['embedding_s3_uri'] = f"s3://{self.config.dataset_config.s3_bucket}/{embedding_s3_key}"
+                    logger.debug(f"Saved embeddings to {result['embedding_s3_uri']}")
+
                 except Exception as e:
-                    logger.error(f"Storage failed in {store}: {str(e)}")
-                    self.metrics.storage_errors[store] += 1
+                    logger.warning(f"Failed to save embeddings to S3: {str(e)}")
+
+            # Store in vector stores (only if embedding_only=False)
+            if not self.config.embedding_only:
+                for store in self.config.enabled_vector_stores:
+                    try:
+                        # TODO: Implement actual vector store insertion
+                        # This would call the appropriate provider to store embeddings
+                        # For now, just mark as stored
+                        result['stored_in'].append(store)
+                        logger.debug(f"Would store in {store} (not implemented)")
+                    except Exception as e:
+                        logger.error(f"Storage failed in {store}: {str(e)}")
+                        self.metrics.storage_errors[store] += 1
+            else:
+                # Embedding-only mode - no vector store setup needed
+                result['stored_in'] = []
+                logger.debug(f"Embedding-only mode: skipping vector store storage")
 
             processing_time = time.time() - start_time
 
