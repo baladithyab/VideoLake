@@ -12,7 +12,6 @@ from botocore.exceptions import ClientError
 
 from ...exceptions import OpenSearchIntegrationError
 from ...utils.logging_config import get_structured_logger
-from ...utils.resource_registry import resource_registry
 
 
 class OpenSearchResourceManager:
@@ -43,7 +42,7 @@ class OpenSearchResourceManager:
         """
         self.region_name = region_name
         self.logger = get_structured_logger(__name__)
-        self.resource_registry = resource_registry
+        # resource_registry deprecated - using Terraform tfstate
 
         # Use provided config or create default
         self.boto_config = boto_config or Config(
@@ -86,14 +85,8 @@ class OpenSearchResourceManager:
     def get_opensearch_resource_summary(self) -> Dict[str, Any]:
         """Get comprehensive summary of all OpenSearch-related resources."""
         try:
-            resource_summary = self.resource_registry.get_resource_summary()
 
             # Add OpenSearch-specific details
-            collections = self.resource_registry.list_opensearch_collections()
-            domains = self.resource_registry.list_opensearch_domains()
-            pipelines = self.resource_registry.list_opensearch_pipelines()
-            indexes = self.resource_registry.list_opensearch_indexes()
-            roles = self.resource_registry.list_iam_roles()
 
             # Filter active resources
             active_collections = [c for c in collections if c.get('status') == 'created']
@@ -161,7 +154,6 @@ class OpenSearchResourceManager:
             # Delete OSI pipeline
             try:
                 self.osis_client.delete_pipeline(PipelineName=export_id)
-                self.resource_registry.log_opensearch_pipeline_deleted(
                     pipeline_name=export_id,
                     source="cleanup"
                 )
@@ -172,7 +164,6 @@ class OpenSearchResourceManager:
 
             # Optionally delete collection (usually kept for other exports)
             if cleanup_collection:
-                pipelines = self.resource_registry.list_opensearch_pipelines()
                 target_collection = None
                 for pipeline in pipelines:
                     if pipeline.get('name') == export_id:
@@ -182,7 +173,6 @@ class OpenSearchResourceManager:
                 if target_collection:
                     try:
                         self.opensearch_serverless_client.delete_collection(id=target_collection)
-                        self.resource_registry.log_opensearch_collection_deleted(
                             collection_name=target_collection,
                             source="cleanup"
                         )
@@ -194,7 +184,6 @@ class OpenSearchResourceManager:
             # Clean up IAM role if created specifically for this export
             if cleanup_iam_role:
                 # Find associated IAM role from resource registry
-                roles = self.resource_registry.list_iam_roles()
                 export_roles = [r for r in roles if 'export' in r.get('source', '') and
                                export_id in r.get('name', '')]
 
@@ -254,7 +243,6 @@ class OpenSearchResourceManager:
 
             # Optionally cleanup indexes
             if cleanup_indexes:
-                indexes = self.resource_registry.list_opensearch_indexes()
                 domain_indexes = [i for i in indexes if domain_name in i.get('endpoint', '')]
 
                 for index in domain_indexes:
@@ -310,7 +298,6 @@ class OpenSearchResourceManager:
 
         try:
             # Clean up pipelines
-            pipelines = self.resource_registry.list_opensearch_pipelines()
             active_pipelines = [p for p in pipelines if p.get('status') == 'created']
 
             for pipeline in active_pipelines:
@@ -332,7 +319,6 @@ class OpenSearchResourceManager:
 
             # Disable S3 vectors on domains (if not preserving)
             if not preserve_domains:
-                domains = self.resource_registry.list_opensearch_domains()
                 active_domains = [d for d in domains if d.get('status') == 'created']
 
                 for domain in active_domains:

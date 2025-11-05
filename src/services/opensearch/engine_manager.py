@@ -15,7 +15,6 @@ from botocore.exceptions import ClientError
 from ...exceptions import OpenSearchIntegrationError
 from ...utils.logging_config import get_structured_logger
 from ...utils.timing_tracker import TimingTracker
-from ...utils.resource_registry import resource_registry
 from ...utils.aws_retry import AWSRetryHandler
 
 
@@ -49,7 +48,7 @@ class OpenSearchEngineManager:
         self.region_name = region_name
         self.logger = get_structured_logger(__name__)
         self.timing_tracker = TimingTracker("opensearch_engine")
-        self.resource_registry = resource_registry
+        # resource_registry deprecated - using Terraform tfstate
 
         # Use provided config or create default
         self.boto_config = boto_config or Config(
@@ -185,7 +184,6 @@ class OpenSearchEngineManager:
             domain_status = updated_domain['DomainStatus']
             domain_arn = domain_status.get('ARN', f'arn:aws:es:{self.region_name}:123456789012:domain/{domain_name}')
             engine_version = domain_status.get('EngineVersion', 'OpenSearch_2.19')
-            self.resource_registry.log_opensearch_domain_created(
                 domain_name=domain_name,
                 domain_arn=domain_arn,
                 region=self.region_name,
@@ -329,7 +327,6 @@ class OpenSearchEngineManager:
             }
 
             # Log index creation in resource registry
-            self.resource_registry.log_opensearch_index_created(
                 index_name=index_name,
                 opensearch_endpoint=opensearch_endpoint,
                 vector_field_name=vector_field_name,

@@ -19,7 +19,6 @@ from botocore.exceptions import ClientError
 from ...exceptions import OpenSearchIntegrationError
 from ...utils.logging_config import get_structured_logger
 from ...utils.timing_tracker import TimingTracker
-from ...utils.resource_registry import resource_registry
 from ...utils.aws_retry import AWSRetryHandler
 
 
@@ -67,7 +66,7 @@ class OpenSearchExportManager:
         self.region_name = region_name
         self.logger = get_structured_logger(__name__)
         self.timing_tracker = TimingTracker("opensearch_export")
-        self.resource_registry = resource_registry
+        # resource_registry deprecated - using Terraform tfstate
 
         # Use provided config or create default
         self.boto_config = boto_config or Config(
@@ -151,7 +150,6 @@ class OpenSearchExportManager:
             collection_arn = self._ensure_serverless_collection(collection_name)
 
             # Log collection creation in resource registry
-            self.resource_registry.log_opensearch_collection_created(
                 collection_name=collection_name,
                 collection_arn=collection_arn,
                 region=self.region_name,
@@ -168,7 +166,6 @@ class OpenSearchExportManager:
 
                 # Log IAM role creation in resource registry
                 role_name = iam_role_arn.split('/')[-1]
-                self.resource_registry.log_iam_role_created(
                     role_name=role_name,
                     role_arn=iam_role_arn,
                     purpose="opensearch_ingestion",
@@ -210,7 +207,6 @@ class OpenSearchExportManager:
             export_id = pipeline_arn.split('/')[-1]
 
             # Log pipeline creation in resource registry
-            self.resource_registry.log_opensearch_pipeline_created(
                 pipeline_name=export_id,
                 pipeline_arn=pipeline_arn,
                 source_index_arn=vector_index_arn,
@@ -336,7 +332,6 @@ class OpenSearchExportManager:
             collection_arn = create_response['createCollectionDetail']['arn']
 
             # Log new collection creation in resource registry
-            self.resource_registry.log_opensearch_collection_created(
                 collection_name=collection_name,
                 collection_arn=collection_arn,
                 region=self.region_name,
