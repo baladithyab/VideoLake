@@ -441,42 +441,77 @@ class NovaEmbeddingService:
         self,
         video_uri: str,
         embedding_mode: VideoEmbeddingMode,
-        segment_duration_sec: int
-    ) -> str:
+        segment_duration_sec: Optional[int] = None,
+        timeout_sec: int = 1800
+    ) -> NovaEmbeddingResult:
         """
-        Generate segmented video embeddings asynchronously.
+        Generate video embeddings asynchronously with polling and retrieval.
+
+        Uses Bedrock async invocation pattern:
+        1. Submit async job
+        2. Poll for completion
+        3. Retrieve embeddings from S3 output
+        4. Parse and return NovaEmbeddingResult
 
         Args:
             video_uri: S3 URI of video
             embedding_mode: AUDIO_VIDEO_COMBINED, AUDIO_ONLY, or VIDEO_ONLY
-            segment_duration_sec: Segment duration in seconds
+            segment_duration_sec: Optional segment duration (for SEGMENTED_EMBEDDING)
+            timeout_sec: Max wait time for completion (default: 30 min)
 
         Returns:
-            Invocation ARN for status polling
+            NovaEmbeddingResult with embeddings from S3 output
         """
-        request_body = {
-            "taskType": "SEGMENTED_EMBEDDING",
-            "segmentedEmbeddingParams": {
-                "embeddingPurpose": self.embedding_purpose,
-                "embeddingDimension": self.embedding_dimension,
-                "video": {
-                    "format": "mp4",
-                    "embeddingMode": embedding_mode,
-                    "source": {
-                        "s3Location": {"uri": video_uri}
-                    },
-                    "segmentationConfig": {
-                        "durationSeconds": segment_duration_sec
+        start_time = time.time()
+
+        # Extract video format from URI
+        video_format = "mp4"
+        if video_uri.endswith('.webm'):
+            video_format = "webm"
+        elif video_uri.endswith('.mkv'):
+            video_format = "mkv"
+        elif video_uri.endswith('.avi'):
+            video_format = "avi"
+        elif video_uri.endswith('.mov'):
+            video_format = "mov"
+
+        # Build request based on whether segmentation is requested
+        if segment_duration_sec:
+            task_type = "SEGMENTED_EMBEDDING"
+            request_body = {
+                "taskType": task_type,
+                "segmentedEmbeddingParams": {
+                    "embeddingPurpose": self.embedding_purpose,
+                    "embeddingDimension": self.embedding_dimension,
+                    "video": {
+                        "format": video_format,
+                        "embeddingMode": embedding_mode,
+                        "source": {"s3Location": {"uri": video_uri}},
+                        "segmentationConfig": {"durationSeconds": segment_duration_sec}
                     }
                 }
             }
-        }
+        else:
+            task_type = "SINGLE_EMBEDDING"
+            request_body = {
+                "taskType": task_type,
+                "singleEmbeddingParams": {
+                    "embeddingPurpose": self.embedding_purpose,
+                    "embeddingDimension": self.embedding_dimension,
+                    "video": {
+                        "format": video_format,
+                        "embeddingMode": embedding_mode,
+                        "source": {"s3Location": {"uri": video_uri}}
+                    }
+                }
+            }
 
         try:
             # Extract S3 output path from video URI
             bucket = video_uri.split('/')[2]
             output_s3_uri = f"s3://{bucket}/nova-embeddings/"
 
+            # Submit async job
             response = self.bedrock_client.start_async_invoke(
                 modelId=self.model_id,
                 modelInput=request_body,
@@ -490,14 +525,112 @@ class NovaEmbeddingService:
             invocation_arn = response['invocationArn']
 
             logger.info(
-                f"Started async Nova video embedding: ARN={invocation_arn}, "
-                f"segments={segment_duration_sec}s"
+                f"Started async Nova embedding: ARN={invocation_arn}, mode={embedding_mode}"
             )
 
-            return invocation_arn
+            # Poll for completion
+            poll_start = time.time()
+            poll_interval = 30  # Poll every 30 seconds
+
+            while time.time() - poll_start < timeout_sec:
+                try:
+                    status_response = self.bedrock_client.get_async_invoke(
+                        invocationArn=invocation_arn
+                    )
+
+                    status = status_response.get('status', 'Unknown')
+
+                    if status == 'Completed':
+                        logger.info(f"Async job completed in {time.time() - poll_start:.1f}s")
+
+                        # Retrieve embeddings from S3 output
+                        output_location = status_response.get('outputDataConfig', {}).get('s3OutputDataConfig', {}).get('s3Uri', output_s3_uri)
+
+                        embeddings = self._retrieve_embeddings_from_s3(output_location, invocation_arn)
+
+                        processing_time_ms = int((time.time() - start_time) * 1000)
+
+                        return NovaEmbeddingResult(
+                            embedding=embeddings,
+                            input_type='video',
+                            input_source=video_uri,
+                            model_id=self.model_id,
+                            embedding_dimension=len(embeddings),
+                            embedding_purpose=self.embedding_purpose,
+                            processing_time_ms=processing_time_ms,
+                            unified_space=True
+                        )
+
+                    elif status == 'Failed':
+                        error_msg = status_response.get('failureMessage', 'Unknown error')
+                        raise VectorEmbeddingError(f"Async job failed: {error_msg}")
+
+                    # Still in progress, wait and retry
+                    time.sleep(poll_interval)
+
+                except ClientError as e:
+                    if e.response['Error']['Code'] != 'ResourceNotFoundException':
+                        raise
+                    # Job not found yet, wait and retry
+                    time.sleep(poll_interval)
+
+            raise VectorEmbeddingError(f"Async job timeout after {timeout_sec}s")
 
         except ClientError as e:
             self._handle_bedrock_error(e, "async video embedding")
+
+    def _retrieve_embeddings_from_s3(self, s3_output_uri: str, invocation_arn: str) -> List[float]:
+        """
+        Retrieve Nova embeddings from S3 output location.
+
+        Args:
+            s3_output_uri: S3 URI where Bedrock wrote output
+            invocation_arn: Invocation ARN to find specific output file
+
+        Returns:
+            List of embedding floats
+        """
+        import boto3
+
+        try:
+            s3_client = boto3.client('s3')
+
+            # Parse S3 URI
+            s3_parts = s3_output_uri.replace('s3://', '').split('/', 1)
+            bucket = s3_parts[0]
+            prefix = s3_parts[1] if len(s3_parts) > 1 else ''
+
+            # Extract invocation ID from ARN
+            invocation_id = invocation_arn.split('/')[-1]
+
+            # List objects to find output file
+            response = s3_client.list_objects_v2(
+                Bucket=bucket,
+                Prefix=f"{prefix}{invocation_id}"
+            )
+
+            if 'Contents' not in response or not response['Contents']:
+                raise VectorEmbeddingError(f"No output found in {s3_output_uri} for {invocation_id}")
+
+            # Get first output file (should be only one for single embedding)
+            output_key = response['Contents'][0]['Key']
+
+            # Download and parse
+            obj_response = s3_client.get_object(Bucket=bucket, Key=output_key)
+            output_data = json.loads(obj_response['Body'].read())
+
+            # Parse Nova output format
+            if 'embeddings' in output_data and len(output_data['embeddings']) > 0:
+                embedding = output_data['embeddings'][0]['embedding']
+            else:
+                raise VectorEmbeddingError("Unexpected Nova output format")
+
+            logger.info(f"Retrieved Nova embeddings from S3: {len(embedding)}D")
+
+            return embedding
+
+        except Exception as e:
+            raise VectorEmbeddingError(f"Failed to retrieve embeddings from S3: {str(e)}")
 
     def _handle_bedrock_error(self, e: ClientError, operation: str) -> None:
         """Handle Bedrock API errors."""
