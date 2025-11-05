@@ -172,6 +172,7 @@ async def health_check():
 
 # Import routers
 from .routers import (
+from src.api.routers import infrastructure
     resources,
     processing,
     search,
@@ -185,4 +186,5 @@ app.include_router(processing.router, prefix="/api/processing", tags=["processin
 app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(embeddings.router, prefix="/api/embeddings", tags=["embeddings"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
+app.include_router(infrastructure.router, prefix="/api", tags=["infrastructure"])
 
