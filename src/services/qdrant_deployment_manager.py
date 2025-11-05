@@ -19,7 +19,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from src.exceptions import VectorStoreError
+from src.exceptions import VectorStorageError
 from src.utils.logging_config import get_logger
 from src.utils.resource_registry import resource_registry
 from src.utils.aws_retry import AWSRetryHandler
@@ -249,7 +249,7 @@ class QdrantDeploymentManager:
 
         except Exception as e:
             logger.error(f"Qdrant EC2 deployment failed: {str(e)}")
-            raise VectorStoreError(f"Failed to deploy Qdrant on EC2: {str(e)}")
+            raise VectorStorageError(f"Failed to deploy Qdrant on EC2: {str(e)}")
 
     def cleanup_deployment(
         self,
@@ -351,7 +351,7 @@ class QdrantDeploymentManager:
             return sg_id
 
         except Exception as e:
-            raise VectorStoreError(f"Failed to create security group: {str(e)}")
+            raise VectorStorageError(f"Failed to create security group: {str(e)}")
 
     def _create_ebs_volume(
         self,
@@ -386,7 +386,7 @@ class QdrantDeploymentManager:
             return response['VolumeId']
 
         except Exception as e:
-            raise VectorStoreError(f"Failed to create EBS volume: {str(e)}")
+            raise VectorStorageError(f"Failed to create EBS volume: {str(e)}")
 
     def _launch_qdrant_instance(
         self,
@@ -453,7 +453,7 @@ yum install -y amazon-cloudwatch-agent
             return response['Instances'][0]['InstanceId']
 
         except Exception as e:
-            raise VectorStoreError(f"Failed to launch EC2 instance: {str(e)}")
+            raise VectorStorageError(f"Failed to launch EC2 instance: {str(e)}")
 
     def _get_amazon_linux_ami(self) -> str:
         """Get latest Amazon Linux 2023 AMI."""

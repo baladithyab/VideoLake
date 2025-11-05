@@ -20,7 +20,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from src.exceptions import VectorStoreError
+from src.exceptions import VectorStorageError
 from src.utils.logging_config import get_logger
 from src.utils.resource_registry import resource_registry
 from src.utils.aws_retry import AWSRetryHandler
@@ -209,7 +209,7 @@ class LanceDBBackendManager:
             return deployment_info
 
         except Exception as e:
-            raise VectorStoreError(f"Failed to deploy LanceDB S3 backend: {str(e)}")
+            raise VectorStorageError(f"Failed to deploy LanceDB S3 backend: {str(e)}")
 
     def deploy_efs_backend(
         self,
@@ -297,7 +297,7 @@ class LanceDBBackendManager:
             return deployment_info
 
         except Exception as e:
-            raise VectorStoreError(f"Failed to deploy LanceDB EFS backend: {str(e)}")
+            raise VectorStorageError(f"Failed to deploy LanceDB EFS backend: {str(e)}")
 
     def deploy_ebs_backend(
         self,
@@ -391,7 +391,7 @@ class LanceDBBackendManager:
             return deployment_info
 
         except Exception as e:
-            raise VectorStoreError(f"Failed to deploy LanceDB EBS backend: {str(e)}")
+            raise VectorStorageError(f"Failed to deploy LanceDB EBS backend: {str(e)}")
 
     def cleanup_backend(
         self,
@@ -504,7 +504,7 @@ class LanceDBBackendManager:
 
             time.sleep(10)
 
-        raise VectorStoreError(f"EFS creation timeout: {efs_id}")
+        raise VectorStorageError(f"EFS creation timeout: {efs_id}")
 
     def _create_efs_mount_targets(self, efs_id: str) -> List[str]:
         """Create EFS mount targets in all AZs."""
@@ -514,7 +514,7 @@ class LanceDBBackendManager:
             # Get default VPC and subnets
             vpcs = self.ec2_client.describe_vpcs(Filters=[{'Name': 'is-default', 'Values': ['true']}])
             if not vpcs['Vpcs']:
-                raise VectorStoreError("No default VPC found")
+                raise VectorStorageError("No default VPC found")
 
             vpc_id = vpcs['Vpcs'][0]['VpcId']
 

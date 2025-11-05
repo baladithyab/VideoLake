@@ -24,7 +24,7 @@ from src.services.vector_store_s3vector_provider import S3VectorProvider
 from src.services.vector_store_opensearch_provider import OpenSearchProvider
 from src.services.vector_store_qdrant_provider import QdrantProvider
 from src.services.vector_store_lancedb_provider import LanceDBProvider
-from src.exceptions import VectorStoreError
+from src.exceptions import VectorStorageError
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
