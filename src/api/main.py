@@ -172,12 +172,12 @@ async def health_check():
 
 # Import routers
 from .routers import (
-from src.api.routers import infrastructure
     resources,
     processing,
     search,
     embeddings,
-    analytics
+    analytics,
+    infrastructure
 )
 
 # Include routers
