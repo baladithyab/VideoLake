@@ -621,9 +621,17 @@ export default function InfrastructureDashboard() {
       </Dialog>
 
       {/* Terraform Log Viewer Dialog */}
-      {activeOperation && (
-        <Dialog open={true} onOpenChange={() => setActiveOperation(null)}>
-          <DialogContent className="max-w-5xl">
+      <Dialog
+        open={activeOperation !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setActiveOperation(null);
+            queryClient.invalidateQueries({ queryKey: ['infrastructure-status'] });
+          }
+        }}
+      >
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden p-0">
+          {activeOperation && (
             <TerraformLogViewer
               operationId={activeOperation.operationId}
               vectorStore={activeOperation.vectorStore}
@@ -633,9 +641,9 @@ export default function InfrastructureDashboard() {
                 queryClient.invalidateQueries({ queryKey: ['infrastructure-status'] });
               }}
             />
-          </DialogContent>
-        </Dialog>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Loader2, CheckCircle2, XCircle, Terminal, X } from 'lucide-react';
@@ -119,34 +118,35 @@ export default function TerraformLogViewer({
   };
 
   return (
-    <Card className="w-full max-w-4xl">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Terminal className="h-5 w-5" />
-            <div>
-              <CardTitle>
-                {operationType === 'deploy' ? 'Deploying' : 'Destroying'} {vectorStore}
-              </CardTitle>
-              <CardDescription>
-                Real-time Terraform output
-              </CardDescription>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {getStatusBadge()}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              disabled={status === 'running'}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+    <div className="w-full">
+      {/* Header */}
+      <div className="flex items-center justify-between p-6 pb-4">
+        <div className="flex items-center gap-3">
+          <Terminal className="h-5 w-5" />
+          <div>
+            <h2 className="text-lg font-semibold">
+              {operationType === 'deploy' ? 'Deploying' : 'Destroying'} {vectorStore}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Real-time Terraform output
+            </p>
           </div>
         </div>
-      </CardHeader>
-      <CardContent>
+        <div className="flex items-center gap-2">
+          {getStatusBadge()}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            disabled={status === 'running'}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="px-6 pb-6">
         {/* Log output */}
         <div className="bg-gray-900 rounded-lg p-4 font-mono text-sm h-96 overflow-y-auto">
           {logs.length === 0 && status === 'running' && (
@@ -194,8 +194,8 @@ export default function TerraformLogViewer({
             </div>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
