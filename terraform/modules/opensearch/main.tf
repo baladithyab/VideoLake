@@ -9,6 +9,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -76,6 +80,45 @@ resource "aws_opensearch_domain" "s3vector_backend" {
   })
 
   depends_on = [aws_iam_service_linked_role.opensearch]
+}
+
+# Enable S3 Vectors engine for OpenSearch domain
+# Note: This must be done AFTER domain creation via AWS CLI
+# Terraform AWS provider doesn't support this yet (preview feature)
+resource "null_resource" "enable_s3vector_engine" {
+  count = var.enable_s3vector_engine ? 1 : 0
+
+  depends_on = [aws_opensearch_domain.s3vector_backend]
+
+  # Enable S3 Vector engine
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Waiting for OpenSearch domain to be active..."
+      aws opensearch wait domain-available \
+        --domain-name "${var.domain_name}" \
+        --region ${var.region}
+
+      echo "Enabling S3 Vectors engine for domain: ${var.domain_name}"
+      aws opensearch update-domain-config \
+        --domain-name "${var.domain_name}" \
+        --region ${var.region} \
+        --advanced-options '{"s3vectors.enabled":"true"}' \
+        --output json
+
+      echo "S3 Vectors engine enabled. Waiting for domain update to complete..."
+      aws opensearch wait domain-available \
+        --domain-name "${var.domain_name}" \
+        --region ${var.region}
+
+      echo "S3 Vectors engine configuration complete"
+    EOT
+  }
+
+  triggers = {
+    domain_name = var.domain_name
+    region      = var.region
+    enabled     = var.enable_s3vector_engine
+  }
 }
 
 # Service-linked role for OpenSearch

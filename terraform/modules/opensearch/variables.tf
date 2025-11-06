@@ -5,10 +5,22 @@ variable "domain_name" {
   type        = string
 }
 
+variable "region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-east-1"
+}
+
 variable "engine_version" {
   description = "OpenSearch engine version (must be >= 2.19 for S3Vector)"
   type        = string
   default     = "OpenSearch_2.19"
+}
+
+variable "enable_s3vector_engine" {
+  description = "Enable S3 Vectors as storage engine (requires OpenSearch 2.19+ and OR1 instances)"
+  type        = bool
+  default     = true
 }
 
 variable "instance_type" {
