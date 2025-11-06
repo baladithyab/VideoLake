@@ -101,7 +101,7 @@ class TerraformInfrastructureManager:
         self,
         vector_store: str,
         wait_for_completion: bool = True,
-        timeout_sec: int = 1800,
+        timeout_sec: int = 3600,  # Increased to 1 hour for S3 Vectors (preview service may be slow)
         operation_id: Optional[str] = None
     ) -> DeploymentStatus:
         """

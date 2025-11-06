@@ -28,20 +28,32 @@ resource "null_resource" "s3vector_bucket" {
   # Create vector bucket
   provisioner "local-exec" {
     command = <<-EOT
+      set -e  # Exit on error
+
+      echo "[S3Vector] Checking if vector bucket exists: ${var.bucket_name}"
+
       # Check if vector bucket already exists
       if aws s3vectors get-vector-bucket \
         --vector-bucket-name "${var.bucket_name}" \
         --region ${var.region} 2>/dev/null; then
-        echo "Vector bucket ${var.bucket_name} already exists"
-      else
-        echo "Creating S3 Vector bucket: ${var.bucket_name}"
-        aws s3vectors create-vector-bucket \
-          --vector-bucket-name "${var.bucket_name}" \
-          --region ${var.region} \
-          ${var.kms_key_id != null ? "--encryption-configuration sseType=aws:kms,kmsKeyArn=${var.kms_key_id}" : ""}
-        echo "Vector bucket created successfully"
+        echo "[S3Vector] Vector bucket ${var.bucket_name} already exists"
+        exit 0
       fi
+
+      echo "[S3Vector] Creating S3 Vector bucket: ${var.bucket_name}"
+
+      # Create vector bucket
+      aws s3vectors create-vector-bucket \
+        --vector-bucket-name "${var.bucket_name}" \
+        --region ${var.region} \
+        ${var.kms_key_id != null ? "--encryption-configuration sseType=aws:kms,kmsKeyArn=${var.kms_key_id}" : ""} \
+        --output json
+
+      echo "[S3Vector] Vector bucket created successfully"
     EOT
+
+    # Add interpreter to ensure bash is used
+    interpreter = ["bash", "-c"]
   }
 
   # Destroy vector bucket
@@ -89,24 +101,39 @@ resource "null_resource" "s3vector_index" {
   # Create vector index
   provisioner "local-exec" {
     command = <<-EOT
+      set -e  # Exit on error
+
+      echo "[S3Vector] Checking if index exists: ${var.default_index_name}"
+
       # Check if index already exists
       if aws s3vectors get-index \
         --vector-bucket-name "${var.bucket_name}" \
         --index-name "${var.default_index_name}" \
         --region ${var.region} 2>/dev/null; then
-        echo "Index ${var.default_index_name} already exists"
-      else
-        echo "Creating vector index: ${var.default_index_name}"
-        aws s3vectors create-index \
-          --vector-bucket-name "${var.bucket_name}" \
-          --index-name "${var.default_index_name}" \
-          --data-type "${var.vector_data_type}" \
-          --dimension ${var.vector_dimension} \
-          --distance-metric "${var.distance_metric}" \
-          --region ${var.region}
-        echo "Vector index created successfully"
+        echo "[S3Vector] Index ${var.default_index_name} already exists"
+        exit 0
       fi
+
+      echo "[S3Vector] Creating vector index: ${var.default_index_name}"
+      echo "[S3Vector]   Dimension: ${var.vector_dimension}"
+      echo "[S3Vector]   Data type: ${var.vector_data_type}"
+      echo "[S3Vector]   Distance metric: ${var.distance_metric}"
+
+      # Create vector index
+      aws s3vectors create-index \
+        --vector-bucket-name "${var.bucket_name}" \
+        --index-name "${var.default_index_name}" \
+        --data-type "${var.vector_data_type}" \
+        --dimension ${var.vector_dimension} \
+        --distance-metric "${var.distance_metric}" \
+        --region ${var.region} \
+        --output json
+
+      echo "[S3Vector] Vector index created successfully"
     EOT
+
+    # Add interpreter to ensure bash is used
+    interpreter = ["bash", "-c"]
   }
 
   triggers = {
@@ -162,21 +189,28 @@ resource "aws_iam_policy" "s3vector_access" {
 }
 
 # Data source to get vector bucket info (for outputs)
+# Note: This runs during terraform plan/apply, so it needs to handle the case
+# where the bucket doesn't exist yet
 data "external" "s3vector_info" {
   depends_on = [null_resource.s3vector_bucket]
 
   program = ["bash", "-c", <<-EOT
-    # Get vector bucket info
+    set -e
+
+    # Get AWS account ID
+    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "unknown")
+
+    # Try to get vector bucket info (may fail if bucket doesn't exist yet)
     BUCKET_INFO=$(aws s3vectors get-vector-bucket \
       --vector-bucket-name "${var.bucket_name}" \
       --region ${var.region} \
-      --output json 2>/dev/null || echo '{}')
+      --output json 2>/dev/null || echo '{"vectorBucket":{}}')
 
-    # Extract ARN and creation time
-    ARN=$(echo "$BUCKET_INFO" | jq -r '.vectorBucket.arn // "arn:aws:s3vectors:${var.region}:unknown:bucket/${var.bucket_name}"')
-    CREATED=$(echo "$BUCKET_INFO" | jq -r '.vectorBucket.creationDate // "unknown"')
+    # Extract ARN and creation time with fallbacks
+    ARN=$(echo "$BUCKET_INFO" | jq -r '.vectorBucket.arn // "arn:aws:s3vectors:${var.region}:'$ACCOUNT_ID':bucket/${var.bucket_name}"')
+    CREATED=$(echo "$BUCKET_INFO" | jq -r '.vectorBucket.creationDate // "pending"')
 
-    # Return as JSON
+    # Return as JSON (must be valid JSON)
     jq -n \
       --arg arn "$ARN" \
       --arg created "$CREATED" \
