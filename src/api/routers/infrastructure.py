@@ -206,45 +206,59 @@ async def deploy_single_store(
         vector_store: Store to deploy (qdrant, lancedb_s3, etc.)
 
     Returns:
-        Deployment result with operation_id for log streaming
+        Operation ID for real-time log streaming (deployment runs in background)
     """
     # Start operation tracking
     operation_id = operation_tracker.start_operation("deploy", vector_store)
 
-    try:
-        status = terraform_manager.deploy_vector_store(
-            vector_store=vector_store,
-            wait_for_completion=True,
-            operation_id=operation_id
-        )
+    logger.info(f"Starting background deployment for {vector_store} with operation_id: {operation_id}")
 
-        # Mark operation as complete
-        operation_tracker.complete_operation(
-            operation_id,
-            success=status.deployed,
-            error=status.error_message
-        )
+    # Define background task
+    def deploy_task():
+        try:
+            logger.info(f"[{operation_id}] Background deployment started for {vector_store}")
 
-        return {
-            "success": status.deployed,
-            "vector_store": vector_store,
-            "endpoint": status.endpoint,
-            "deployment_time_sec": status.deployment_time_sec,
-            "estimated_cost_monthly": status.estimated_cost_monthly,
-            "error": status.error_message,
-            "operation_id": operation_id  # For log streaming
-        }
+            status = terraform_manager.deploy_vector_store(
+                vector_store=vector_store,
+                wait_for_completion=True,
+                operation_id=operation_id
+            )
 
-    except Exception as e:
-        logger.error(f"Failed to deploy {vector_store}: {str(e)}")
-        operation_tracker.complete_operation(operation_id, success=False, error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+            # Mark operation as complete
+            operation_tracker.complete_operation(
+                operation_id,
+                success=status.deployed,
+                error=status.error_message
+            )
+
+            logger.info(f"[{operation_id}] Background deployment completed for {vector_store}: success={status.deployed}")
+
+        except Exception as e:
+            logger.error(f"[{operation_id}] Background deployment failed for {vector_store}: {e}")
+            operation_tracker.complete_operation(
+                operation_id,
+                success=False,
+                error=str(e)
+            )
+
+    # Add task to background
+    background_tasks.add_task(deploy_task)
+
+    # Return immediately with operation_id
+    return {
+        "success": True,
+        "message": f"Deployment started for {vector_store}",
+        "vector_store": vector_store,
+        "operation_id": operation_id,  # Frontend uses this to stream logs
+        "status": "running"
+    }
 
 
 @router.delete("/destroy/{vector_store}")
 async def destroy_single_store(
     vector_store: str,
-    confirm: bool = False
+    confirm: bool = False,
+    background_tasks: BackgroundTasks = None
 ):
     """
     Destroy a single vector store with real-time log streaming.
@@ -254,7 +268,7 @@ async def destroy_single_store(
         confirm: Must be true to proceed
 
     Returns:
-        Destruction result with operation_id for log streaming
+        Operation ID for real-time log streaming (destruction runs in background)
     """
     if not confirm:
         raise HTTPException(
@@ -265,29 +279,51 @@ async def destroy_single_store(
     # Start operation tracking
     operation_id = operation_tracker.start_operation("destroy", vector_store)
 
-    try:
-        result = terraform_manager.destroy_vector_store(
-            vector_store,
-            operation_id=operation_id
-        )
+    logger.info(f"Starting background destruction for {vector_store} with operation_id: {operation_id}")
 
-        # Mark operation as complete
-        operation_tracker.complete_operation(
-            operation_id,
-            success=result["success"],
-            error=result.get("error")
-        )
+    # Define background task
+    def destroy_task():
+        try:
+            logger.info(f"[{operation_id}] Background destruction started for {vector_store}")
 
-        if result["success"]:
-            result["operation_id"] = operation_id  # Add operation_id to response
-            return result
-        else:
-            raise HTTPException(status_code=500, detail=result.get("error"))
+            result = terraform_manager.destroy_vector_store(
+                vector_store,
+                operation_id=operation_id
+            )
 
-    except Exception as e:
-        logger.error(f"Failed to destroy {vector_store}: {str(e)}")
-        operation_tracker.complete_operation(operation_id, success=False, error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+            # Mark operation as complete
+            operation_tracker.complete_operation(
+                operation_id,
+                success=result["success"],
+                error=result.get("error")
+            )
+
+            logger.info(f"[{operation_id}] Background destruction completed for {vector_store}: success={result['success']}")
+
+        except Exception as e:
+            logger.error(f"[{operation_id}] Background destruction failed for {vector_store}: {e}")
+            operation_tracker.complete_operation(
+                operation_id,
+                success=False,
+                error=str(e)
+            )
+
+    # Add task to background
+    if background_tasks:
+        background_tasks.add_task(destroy_task)
+    else:
+        # Fallback: run in thread if no background_tasks available
+        import threading
+        threading.Thread(target=destroy_task, daemon=True).start()
+
+    # Return immediately with operation_id
+    return {
+        "success": True,
+        "message": f"Destruction started for {vector_store}",
+        "vector_store": vector_store,
+        "operation_id": operation_id,  # Frontend uses this to stream logs
+        "status": "running"
+    }
 
 
 @router.get("/logs/{operation_id}")
