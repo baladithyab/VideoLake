@@ -198,7 +198,7 @@ cd frontend
 npm run dev
 ```
 
-Frontend will be available at: http://localhost:5173
+Frontend will be available at: http://localhost:5174
 
 ## Benefits of the Refactor
 

@@ -35,7 +35,7 @@ variable "enable_web_upload" {
 variable "web_allowed_origins" {
   description = "Allowed origins for web uploads"
   type        = list(string)
-  default     = ["http://localhost:5173"]
+  default     = ["http://localhost:5174"]
 }
 
 #------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide helps resolve Cross-Origin Resource Sharing (CORS) issues between the React frontend (http://localhost:5173) and FastAPI backend (http://localhost:8000).
+This guide helps resolve Cross-Origin Resource Sharing (CORS) issues between the React frontend (http://localhost:5174) and FastAPI backend (http://localhost:8000).
 
 ## CORS Configuration
 
@@ -13,8 +13,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",  # React dev server (alternative port)
-        "http://localhost:5173",  # Vite dev server (default)
-        "http://127.0.0.1:5173",  # Alternative localhost
+        "http://localhost:5174",  # Vite dev server (default)
+        "http://127.0.0.1:5174",  # Alternative localhost
         "http://127.0.0.1:3000",  # Alternative localhost
     ],
     allow_credentials=True,
@@ -60,7 +60,7 @@ Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remot
    ```bash
    ./test_cors.sh
    ```
-   Should show `access-control-allow-origin: http://localhost:5173`
+   Should show `access-control-allow-origin: http://localhost:5174`
 
 ### Error 2: "Preflight request didn't succeed"
 
@@ -78,7 +78,7 @@ Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remot
 1. **Test OPTIONS request manually**:
    ```bash
    curl -X OPTIONS http://localhost:8000/api/resources/registry \
-     -H "Origin: http://localhost:5173" \
+     -H "Origin: http://localhost:5174" \
      -H "Access-Control-Request-Method: GET" \
      -v
    ```
@@ -115,12 +115,12 @@ Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remot
    ```bash
    # Test GET request
    curl -X GET http://localhost:8000/api/resources/registry \
-     -H "Origin: http://localhost:5173" \
+     -H "Origin: http://localhost:5174" \
      -v 2>&1 | grep -i "access-control"
    
    # Test OPTIONS preflight
    curl -X OPTIONS http://localhost:8000/api/resources/registry \
-     -H "Origin: http://localhost:5173" \
+     -H "Origin: http://localhost:5174" \
      -H "Access-Control-Request-Method: GET" \
      -v 2>&1 | grep -i "access-control"
    ```
@@ -142,7 +142,7 @@ Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remot
 A successful CORS response should include:
 
 ```
-access-control-allow-origin: http://localhost:5173
+access-control-allow-origin: http://localhost:5174
 access-control-allow-credentials: true
 access-control-allow-methods: GET, POST, PUT, DELETE, PATCH, OPTIONS
 access-control-allow-headers: *
@@ -172,7 +172,7 @@ python run_api.py
 
 # Look for lines like:
 # INFO: Request: GET /api/resources/registry
-# INFO: Origin: http://localhost:5173
+# INFO: Origin: http://localhost:5174
 # INFO: Response: 200 (took 0.05s)
 ```
 
@@ -226,9 +226,9 @@ async def log_requests(request: Request, call_next):
 
 ### Test with Different Origins
 
-If `http://localhost:5173` doesn't work, try:
+If `http://localhost:5174` doesn't work, try:
 
-1. `http://127.0.0.1:5173`
+1. `http://127.0.0.1:5174`
 2. `http://localhost:3000`
 3. Add your specific origin to `allow_origins` in `src/api/main.py`
 
@@ -279,9 +279,9 @@ For production deployment:
 ## Quick Fix Checklist
 
 - [ ] Backend server is running on http://localhost:8000
-- [ ] Frontend is running on http://localhost:5173
+- [ ] Frontend is running on http://localhost:5174
 - [ ] CORS middleware is configured in `src/api/main.py`
-- [ ] `allow_origins` includes `http://localhost:5173`
+- [ ] `allow_origins` includes `http://localhost:5174`
 - [ ] `allow_credentials=True` is set
 - [ ] `allow_methods` includes the HTTP method you're using
 - [ ] Backend has been restarted after CORS configuration changes

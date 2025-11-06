@@ -40,18 +40,27 @@ export default function TerraformLogViewer({
   // Connect to SSE endpoint
   useEffect(() => {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    const eventSource = new EventSource(
-      `${apiUrl}/api/infrastructure/logs/${operationId}`
-    );
+    const sseUrl = `${apiUrl}/api/infrastructure/logs/${operationId}`;
+
+    console.log(`[TerraformLogViewer] Connecting to SSE: ${sseUrl}`);
+
+    const eventSource = new EventSource(sseUrl);
 
     eventSourceRef.current = eventSource;
 
+    eventSource.onopen = () => {
+      console.log('[TerraformLogViewer] SSE connection opened');
+    };
+
     eventSource.onmessage = (event) => {
+      console.log('[TerraformLogViewer] Received SSE message:', event.data);
+
       try {
         const logEntry: LogEntry = JSON.parse(event.data);
 
         // Check if this is a completion event
         if (logEntry.level === 'COMPLETE') {
+          console.log('[TerraformLogViewer] Operation completed:', logEntry.status);
           setStatus(logEntry.status as 'completed' | 'failed');
           if (logEntry.error) {
             setError(logEntry.error);
@@ -59,15 +68,16 @@ export default function TerraformLogViewer({
           eventSource.close();
         } else {
           // Add log entry
+          console.log('[TerraformLogViewer] Adding log:', logEntry.message);
           setLogs((prev) => [...prev, logEntry]);
         }
       } catch (err) {
-        console.error('Failed to parse log entry:', err);
+        console.error('Failed to parse log entry:', err, event.data);
       }
     };
 
     eventSource.onerror = (err) => {
-      console.error('SSE error:', err);
+      console.error('[TerraformLogViewer] SSE error:', err);
       setStatus('failed');
       setError('Connection to log stream lost');
       eventSource.close();

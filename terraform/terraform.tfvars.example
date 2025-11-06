@@ -14,7 +14,7 @@ environment = "dev"
 
 data_bucket_name    = "s3vector-demo-data-dev"
 enable_web_upload   = true  # Enable for UI uploads
-web_allowed_origins = ["http://localhost:5173", "http://localhost:8501"]
+web_allowed_origins = ["http://localhost:5174", "http://localhost:8501"]
 
 #------------------------------------------------------------------------------
 # S3VECTOR (DIRECT)

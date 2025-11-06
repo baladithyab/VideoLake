@@ -69,11 +69,11 @@ You should see:
 ```
   VITE v7.1.11  ready in 204 ms
 
-  ➜  Local:   http://localhost:5173/
+  ➜  Local:   http://localhost:5174/
   ➜  Network: use --host to expose
 ```
 
-**Frontend Application**: http://localhost:5173/
+**Frontend Application**: http://localhost:5174/
 
 ## First Steps
 
@@ -232,7 +232,7 @@ npm run preview                      # Preview production build
 ```
 ┌─────────────────────┐         ┌─────────────────────┐
 │  React Frontend     │  HTTP   │  FastAPI Backend    │
-│  localhost:5173     │◄───────►│  localhost:8000     │
+│  localhost:5174     │◄───────►│  localhost:8000     │
 │                     │  REST   │                     │
 │  - Resource Mgmt    │         │  - API Routers      │
 │  - Media Processing │         │  - Services         │

@@ -304,13 +304,18 @@ async def stream_operation_logs(operation_id: str):
     Returns:
         SSE stream of log messages
     """
+    logger.info(f"SSE connection established for operation {operation_id}")
+
     operation = operation_tracker.get_operation(operation_id)
 
     if not operation:
+        logger.error(f"Operation {operation_id} not found")
         raise HTTPException(
             status_code=404,
             detail=f"Operation {operation_id} not found"
         )
+
+    logger.info(f"Streaming logs for {operation.operation_type} operation on {operation.vector_store}")
 
     async def event_generator():
         """Generate SSE events from operation logs."""
