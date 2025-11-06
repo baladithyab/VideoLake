@@ -177,21 +177,22 @@ export default function InfrastructureDashboard() {
     },
   });
 
-  // Destroy mutation (for future batch destroy feature)
-  // const destroyMutation = useMutation({
-  //   mutationFn: (stores: string[]) =>
-  //     infrastructureAPI.destroy({
-  //       vector_stores: stores,
-  //       confirm: true
-  //     }),
-  //   onSuccess: (_, stores) => {
-  //     toast.success(`Destroyed ${stores.length} vector store(s)`);
-  //     queryClient.invalidateQueries({ queryKey: ['infrastructure-status'] });
-  //   },
-  //   onError: (error: any) => {
-  //     toast.error(`Destruction failed: ${error.response?.data?.detail || error.message}`);
-  //   },
-  // });
+  // Batch destroy mutation
+  const destroyMutation = useMutation({
+    mutationFn: (stores: string[]) =>
+      infrastructureAPI.destroy({
+        vector_stores: stores,
+        confirm: true
+      }),
+    onSuccess: (_, stores) => {
+      toast.success(`Destroying ${stores.length} vector store(s) in background`);
+      queryClient.invalidateQueries({ queryKey: ['infrastructure-status'] });
+      setSelectedStores([]);
+    },
+    onError: (error: any) => {
+      toast.error(`Destruction failed: ${error.response?.data?.detail || error.message}`);
+    },
+  });
 
   // Destroy single store mutation
   const destroySingleMutation = useMutation({
@@ -238,6 +239,28 @@ export default function InfrastructureDashboard() {
     }
     // Open configuration dialog for batch deployment
     setConfigDialogOpen(true);
+  };
+
+  const handleBatchDestroy = () => {
+    if (selectedStores.length === 0) {
+      toast.error('Please select at least one vector store');
+      return;
+    }
+
+    const deployedStores = selectedStores.filter(isStoreDeployed);
+    if (deployedStores.length === 0) {
+      toast.error('None of the selected stores are deployed');
+      return;
+    }
+
+    const storeNames = deployedStores.join(', ');
+    if (window.confirm(
+      `⚠️ DESTROY ${deployedStores.length} vector store(s)?\n\n` +
+      `Stores: ${storeNames}\n\n` +
+      `This will DELETE all data and resources. This action cannot be undone.`
+    )) {
+      destroyMutation.mutate(deployedStores);
+    }
   };
 
   const getStoreStatus = (storeId: string): VectorStore | undefined => {
@@ -369,11 +392,26 @@ export default function InfrastructureDashboard() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Vector Stores</h2>
           {selectedStores.length > 0 && (
-            <Button onClick={handleBatchDeploy} disabled={deployMutation.isPending}>
-              {deployMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              <Rocket className="h-4 w-4 mr-2" />
-              Deploy Selected ({selectedStores.length})
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleBatchDeploy}
+                disabled={deployMutation.isPending}
+                variant="default"
+              >
+                {deployMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <Rocket className="h-4 w-4 mr-2" />
+                Deploy Selected ({selectedStores.length})
+              </Button>
+              <Button
+                onClick={handleBatchDestroy}
+                disabled={destroyMutation.isPending}
+                variant="destructive"
+              >
+                {destroyMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <Trash2 className="h-4 w-4 mr-2" />
+                Destroy Selected ({selectedStores.filter(isStoreDeployed).length})
+              </Button>
+            </div>
           )}
         </div>
 
@@ -438,7 +476,7 @@ export default function InfrastructureDashboard() {
                         className="h-4 w-4"
                       />
                       <label htmlFor={`select-${store.id}`} className="text-sm text-muted-foreground">
-                        Select for batch deployment
+                        Select for batch operations
                       </label>
                     </div>
                   )}
