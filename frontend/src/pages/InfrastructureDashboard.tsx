@@ -30,6 +30,7 @@ import {
   Settings
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import TerraformLogViewer from '@/components/TerraformLogViewer';
 
 interface VectorStore {
   name: string;
@@ -104,6 +105,13 @@ export default function InfrastructureDashboard() {
     aws_region: 'us-east-1',
   });
 
+  // Log viewer state
+  const [activeOperation, setActiveOperation] = useState<{
+    operationId: string;
+    vectorStore: string;
+    operationType: 'deploy' | 'destroy';
+  } | null>(null);
+
   // Query infrastructure status
   const { data: statusData, isLoading: statusLoading, error: statusError } = useQuery<InfrastructureStatus>({
     queryKey: ['infrastructure-status'],
@@ -146,8 +154,22 @@ export default function InfrastructureDashboard() {
   // Deploy single store mutation
   const deploySingleMutation = useMutation({
     mutationFn: (store: string) => infrastructureAPI.deploySingle(store),
-    onSuccess: (_, store) => {
-      toast.success(`${store} deployed successfully`);
+    onSuccess: (response, store) => {
+      // Show log viewer if operation_id is returned
+      if (response.data.operation_id) {
+        setActiveOperation({
+          operationId: response.data.operation_id,
+          vectorStore: store,
+          operationType: 'deploy'
+        });
+      }
+
+      if (response.data.success) {
+        toast.success(`${store} deployed successfully`);
+      } else {
+        toast.error(`${store} deployment failed`);
+      }
+
       queryClient.invalidateQueries({ queryKey: ['infrastructure-status'] });
     },
     onError: (error: any) => {
@@ -174,8 +196,22 @@ export default function InfrastructureDashboard() {
   // Destroy single store mutation
   const destroySingleMutation = useMutation({
     mutationFn: (store: string) => infrastructureAPI.destroySingle(store, true),
-    onSuccess: (_, store) => {
-      toast.success(`${store} destroyed successfully`);
+    onSuccess: (response, store) => {
+      // Show log viewer if operation_id is returned
+      if (response.data.operation_id) {
+        setActiveOperation({
+          operationId: response.data.operation_id,
+          vectorStore: store,
+          operationType: 'destroy'
+        });
+      }
+
+      if (response.data.success) {
+        toast.success(`${store} destroyed successfully`);
+      } else {
+        toast.error(`${store} destruction failed`);
+      }
+
       queryClient.invalidateQueries({ queryKey: ['infrastructure-status'] });
     },
     onError: (error: any) => {
@@ -583,6 +619,23 @@ export default function InfrastructureDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Terraform Log Viewer Dialog */}
+      {activeOperation && (
+        <Dialog open={true} onOpenChange={() => setActiveOperation(null)}>
+          <DialogContent className="max-w-5xl">
+            <TerraformLogViewer
+              operationId={activeOperation.operationId}
+              vectorStore={activeOperation.vectorStore}
+              operationType={activeOperation.operationType}
+              onClose={() => {
+                setActiveOperation(null);
+                queryClient.invalidateQueries({ queryKey: ['infrastructure-status'] });
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

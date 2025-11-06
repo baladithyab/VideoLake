@@ -38,6 +38,7 @@ from enum import Enum
 from src.utils.terraform_state_parser import TerraformStateParser
 from src.utils.resource_registry import resource_registry
 from src.utils.logging_config import get_logger
+from src.services.terraform_operation_tracker import operation_tracker
 
 logger = get_logger(__name__)
 
@@ -100,7 +101,8 @@ class TerraformInfrastructureManager:
         self,
         vector_store: str,
         wait_for_completion: bool = True,
-        timeout_sec: int = 1800
+        timeout_sec: int = 1800,
+        operation_id: Optional[str] = None
     ) -> DeploymentStatus:
         """
         Deploy a specific vector store module.
@@ -109,6 +111,7 @@ class TerraformInfrastructureManager:
             vector_store: Which store to deploy (s3vector, qdrant, opensearch, etc.)
             wait_for_completion: Wait for deployment to finish
             timeout_sec: Max wait time
+            operation_id: Optional operation ID for real-time log streaming
 
         Returns:
             DeploymentStatus with deployment result
@@ -123,7 +126,8 @@ class TerraformInfrastructureManager:
 
             result = self._run_terraform_command(
                 ["apply", "-target", target, "-auto-approve"],
-                timeout=timeout_sec if wait_for_completion else None
+                timeout=timeout_sec if wait_for_completion else None,
+                operation_id=operation_id
             )
 
             deployment_time = time.time() - start_time
@@ -165,7 +169,8 @@ class TerraformInfrastructureManager:
     def destroy_vector_store(
         self,
         vector_store: str,
-        wait_for_completion: bool = True
+        wait_for_completion: bool = True,
+        operation_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Destroy a specific vector store.
@@ -173,6 +178,7 @@ class TerraformInfrastructureManager:
         Args:
             vector_store: Which store to destroy
             wait_for_completion: Wait for destruction to finish
+            operation_id: Optional operation ID for real-time log streaming
 
         Returns:
             Destruction result
@@ -184,7 +190,8 @@ class TerraformInfrastructureManager:
 
             result = self._run_terraform_command(
                 ["destroy", "-target", target, "-auto-approve"],
-                timeout=1800 if wait_for_completion else None
+                timeout=1800 if wait_for_completion else None,
+                operation_id=operation_id
             )
 
             # Sync state
@@ -302,14 +309,16 @@ class TerraformInfrastructureManager:
     def _run_terraform_command(
         self,
         args: List[str],
-        timeout: Optional[int] = None
+        timeout: Optional[int] = None,
+        operation_id: Optional[str] = None
     ) -> subprocess.CompletedProcess:
         """
-        Run terraform command.
+        Run terraform command with optional real-time log streaming.
 
         Args:
             args: Terraform command arguments
             timeout: Command timeout in seconds
+            operation_id: Optional operation ID for log streaming
 
         Returns:
             CompletedProcess with result
@@ -318,16 +327,127 @@ class TerraformInfrastructureManager:
 
         logger.debug(f"Running terraform command: {' '.join(cmd)}")
 
-        result = subprocess.run(
+        if operation_id:
+            # Stream output in real-time
+            return self._run_terraform_with_streaming(cmd, timeout, operation_id)
+        else:
+            # Original behavior - capture all output
+            result = subprocess.run(
+                cmd,
+                cwd=self.terraform_dir,
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+
+            if result.returncode != 0:
+                logger.error(f"Terraform command failed: {result.stderr}")
+                raise RuntimeError(f"Terraform error: {result.stderr}")
+
+            return result
+
+    def _run_terraform_with_streaming(
+        self,
+        cmd: List[str],
+        timeout: Optional[int],
+        operation_id: str
+    ) -> subprocess.CompletedProcess:
+        """
+        Run terraform command and stream output to operation tracker.
+
+        Args:
+            cmd: Full command to run
+            timeout: Command timeout in seconds
+            operation_id: Operation ID for log streaming
+
+        Returns:
+            CompletedProcess with result
+        """
+        import select
+
+        operation_tracker.add_log(
+            operation_id,
+            f"$ {' '.join(cmd)}",
+            level="INFO"
+        )
+
+        # Start process with pipes
+        process = subprocess.Popen(
             cmd,
             cwd=self.terraform_dir,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout
+            bufsize=1  # Line buffered
+        )
+
+        stdout_lines = []
+        stderr_lines = []
+        start_time = time.time()
+
+        # Read output in real-time
+        while True:
+            # Check timeout
+            if timeout and (time.time() - start_time) > timeout:
+                process.kill()
+                raise subprocess.TimeoutExpired(cmd, timeout)
+
+            # Check if process finished
+            if process.poll() is not None:
+                break
+
+            # Read available output (non-blocking)
+            try:
+                # Read stdout
+                line = process.stdout.readline()
+                if line:
+                    line = line.rstrip()
+                    stdout_lines.append(line)
+                    operation_tracker.add_log(operation_id, line, level="INFO")
+
+                # Read stderr
+                line = process.stderr.readline()
+                if line:
+                    line = line.rstrip()
+                    stderr_lines.append(line)
+                    # Terraform outputs progress to stderr, not always errors
+                    level = "WARNING" if "error" in line.lower() else "INFO"
+                    operation_tracker.add_log(operation_id, line, level=level)
+
+            except Exception as e:
+                logger.error(f"Error reading process output: {e}")
+                break
+
+        # Read any remaining output
+        remaining_stdout, remaining_stderr = process.communicate()
+
+        if remaining_stdout:
+            for line in remaining_stdout.splitlines():
+                line = line.rstrip()
+                if line:
+                    stdout_lines.append(line)
+                    operation_tracker.add_log(operation_id, line, level="INFO")
+
+        if remaining_stderr:
+            for line in remaining_stderr.splitlines():
+                line = line.rstrip()
+                if line:
+                    stderr_lines.append(line)
+                    level = "WARNING" if "error" in line.lower() else "INFO"
+                    operation_tracker.add_log(operation_id, line, level=level)
+
+        # Create CompletedProcess result
+        result = subprocess.CompletedProcess(
+            args=cmd,
+            returncode=process.returncode,
+            stdout='\n'.join(stdout_lines),
+            stderr='\n'.join(stderr_lines)
         )
 
         if result.returncode != 0:
-            logger.error(f"Terraform command failed: {result.stderr}")
+            error_msg = f"Terraform command failed with exit code {result.returncode}"
+            logger.error(error_msg)
+            operation_tracker.add_log(operation_id, error_msg, level="ERROR")
             raise RuntimeError(f"Terraform error: {result.stderr}")
 
         return result
