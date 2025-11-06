@@ -188,9 +188,12 @@ class TerraformInfrastructureManager:
         try:
             target = f"module.{vector_store}"
 
+            # S3 Vector destroy can take longer due to index deletion waits
+            timeout = 3600 if wait_for_completion else None  # 1 hour for destroy operations
+
             result = self._run_terraform_command(
                 ["destroy", "-target", target, "-auto-approve"],
-                timeout=1800 if wait_for_completion else None,
+                timeout=timeout,
                 operation_id=operation_id
             )
 

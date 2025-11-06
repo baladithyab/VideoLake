@@ -125,29 +125,65 @@ async def deploy_infrastructure(
         try:
             logger.info(f"[{operation_id}] Batch deployment started for: {stores_str}")
 
-            # Deploy each store sequentially, logging to the same operation
-            for store in request.vector_stores:
-                operation_tracker.add_log(operation_id, f"\n{'='*60}", level="INFO")
-                operation_tracker.add_log(operation_id, f"Deploying {store}...", level="INFO")
-                operation_tracker.add_log(operation_id, f"{'='*60}\n", level="INFO")
+            # Import threading for parallel deployment
+            import threading
+            from queue import Queue
 
+            # Queue to collect results
+            results_queue = Queue()
+
+            # Function to deploy a single store in a thread
+            def deploy_store_thread(store_name):
                 try:
+                    operation_tracker.add_log(operation_id, f"\n{'='*60}", level="INFO")
+                    operation_tracker.add_log(operation_id, f"[{store_name}] Starting deployment...", level="INFO")
+                    operation_tracker.add_log(operation_id, f"{'='*60}\n", level="INFO")
+
                     status = terraform_manager.deploy_vector_store(
-                        vector_store=store,
+                        vector_store=store_name,
                         wait_for_completion=True,
                         operation_id=operation_id  # Use same operation_id for all stores
                     )
 
                     if status.deployed:
-                        operation_tracker.add_log(operation_id, f"✅ {store} deployed successfully", level="INFO")
+                        operation_tracker.add_log(operation_id, f"✅ [{store_name}] Deployed successfully", level="INFO")
+                        results_queue.put((store_name, True, None))
                     else:
-                        operation_tracker.add_log(operation_id, f"❌ {store} deployment failed: {status.error_message}", level="ERROR")
+                        operation_tracker.add_log(operation_id, f"❌ [{store_name}] Deployment failed: {status.error_message}", level="ERROR")
+                        results_queue.put((store_name, False, status.error_message))
 
                 except Exception as e:
-                    operation_tracker.add_log(operation_id, f"❌ {store} deployment error: {str(e)}", level="ERROR")
+                    operation_tracker.add_log(operation_id, f"❌ [{store_name}] Deployment error: {str(e)}", level="ERROR")
+                    results_queue.put((store_name, False, str(e)))
+
+            # Start all deployment threads in parallel
+            operation_tracker.add_log(operation_id, f"🚀 Starting parallel deployment of {len(request.vector_stores)} store(s)...\n", level="INFO")
+
+            threads = []
+            for store in request.vector_stores:
+                thread = threading.Thread(target=deploy_store_thread, args=(store,), daemon=True)
+                thread.start()
+                threads.append(thread)
+                operation_tracker.add_log(operation_id, f"[{store}] Deployment thread started", level="INFO")
+
+            # Wait for all threads to complete
+            for thread in threads:
+                thread.join()
+
+            # Collect results
+            all_success = True
+            while not results_queue.empty():
+                store_name, success, error = results_queue.get()
+                if not success:
+                    all_success = False
 
             # Mark operation as complete
-            operation_tracker.complete_operation(operation_id, success=True)
+            if all_success:
+                operation_tracker.add_log(operation_id, f"\n✅ All {len(request.vector_stores)} store(s) deployed successfully!", level="INFO")
+            else:
+                operation_tracker.add_log(operation_id, f"\n⚠️ Batch deployment completed with some failures", level="WARNING")
+
+            operation_tracker.complete_operation(operation_id, success=all_success)
             logger.info(f"[{operation_id}] Batch deployment completed")
 
         except Exception as e:
@@ -200,28 +236,65 @@ async def destroy_infrastructure(
         try:
             logger.info(f"[{operation_id}] Batch destruction started for: {stores_str}")
 
-            # Destroy each store sequentially, logging to the same operation
-            for store in request.vector_stores:
-                operation_tracker.add_log(operation_id, f"\n{'='*60}", level="INFO")
-                operation_tracker.add_log(operation_id, f"Destroying {store}...", level="INFO")
-                operation_tracker.add_log(operation_id, f"{'='*60}\n", level="INFO")
+            # Import threading for parallel destruction
+            import threading
+            from queue import Queue
 
+            # Queue to collect results
+            results_queue = Queue()
+
+            # Function to destroy a single store in a thread
+            def destroy_store_thread(store_name):
                 try:
+                    operation_tracker.add_log(operation_id, f"\n{'='*60}", level="INFO")
+                    operation_tracker.add_log(operation_id, f"[{store_name}] Starting destruction...", level="INFO")
+                    operation_tracker.add_log(operation_id, f"{'='*60}\n", level="INFO")
+
                     result = terraform_manager.destroy_vector_store(
-                        store,
+                        store_name,
                         operation_id=operation_id  # Use same operation_id for all stores
                     )
 
                     if result["success"]:
-                        operation_tracker.add_log(operation_id, f"✅ {store} destroyed successfully", level="INFO")
+                        operation_tracker.add_log(operation_id, f"✅ [{store_name}] Destroyed successfully", level="INFO")
+                        results_queue.put((store_name, True, None))
                     else:
-                        operation_tracker.add_log(operation_id, f"❌ {store} destruction failed: {result.get('error')}", level="ERROR")
+                        error_msg = result.get('error', 'Unknown error')
+                        operation_tracker.add_log(operation_id, f"❌ [{store_name}] Destruction failed: {error_msg}", level="ERROR")
+                        results_queue.put((store_name, False, error_msg))
 
                 except Exception as e:
-                    operation_tracker.add_log(operation_id, f"❌ {store} destruction error: {str(e)}", level="ERROR")
+                    operation_tracker.add_log(operation_id, f"❌ [{store_name}] Destruction error: {str(e)}", level="ERROR")
+                    results_queue.put((store_name, False, str(e)))
+
+            # Start all destruction threads in parallel
+            operation_tracker.add_log(operation_id, f"🚀 Starting parallel destruction of {len(request.vector_stores)} store(s)...\n", level="INFO")
+
+            threads = []
+            for store in request.vector_stores:
+                thread = threading.Thread(target=destroy_store_thread, args=(store,), daemon=True)
+                thread.start()
+                threads.append(thread)
+                operation_tracker.add_log(operation_id, f"[{store}] Destruction thread started", level="INFO")
+
+            # Wait for all threads to complete
+            for thread in threads:
+                thread.join()
+
+            # Collect results
+            all_success = True
+            while not results_queue.empty():
+                store_name, success, error = results_queue.get()
+                if not success:
+                    all_success = False
 
             # Mark operation as complete
-            operation_tracker.complete_operation(operation_id, success=True)
+            if all_success:
+                operation_tracker.add_log(operation_id, f"\n✅ All {len(request.vector_stores)} store(s) destroyed successfully!", level="INFO")
+            else:
+                operation_tracker.add_log(operation_id, f"\n⚠️ Batch destruction completed with some failures", level="WARNING")
+
+            operation_tracker.complete_operation(operation_id, success=all_success)
             logger.info(f"[{operation_id}] Batch destruction completed")
 
         except Exception as e:

@@ -60,10 +60,11 @@ resource "null_resource" "s3vector_bucket" {
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
-      echo "Deleting S3 Vector bucket: ${self.triggers.bucket_name}"
+      set -e
+      echo "[S3Vector Destroy] Starting deletion of bucket: ${self.triggers.bucket_name}"
 
       # First, delete all indexes in the bucket
-      echo "Listing indexes to delete..."
+      echo "[S3Vector Destroy] Listing indexes to delete..."
       INDEXES=$(aws s3vectors list-indexes \
         --vector-bucket-name "${self.triggers.bucket_name}" \
         --region ${self.triggers.region} \
@@ -72,19 +73,48 @@ resource "null_resource" "s3vector_bucket" {
 
       if [ -n "$INDEXES" ]; then
         for index in $INDEXES; do
-          echo "Deleting index: $index"
+          echo "[S3Vector Destroy] Deleting index: $index"
           aws s3vectors delete-index \
             --vector-bucket-name "${self.triggers.bucket_name}" \
             --index-name "$index" \
-            --region ${self.triggers.region} || true
+            --region ${self.triggers.region} 2>&1 || echo "Index may not exist"
+
+          # Wait for index deletion to complete (max 5 minutes)
+          echo "[S3Vector Destroy] Waiting for index $index to be deleted..."
+          WAIT_COUNT=0
+          MAX_WAIT=60  # 60 * 5 seconds = 5 minutes
+
+          while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+            if ! aws s3vectors get-index \
+              --vector-bucket-name "${self.triggers.bucket_name}" \
+              --index-name "$index" \
+              --region ${self.triggers.region} 2>/dev/null; then
+              echo "[S3Vector Destroy] Index $index deleted successfully"
+              break
+            fi
+            echo "[S3Vector Destroy] Still waiting for index deletion... ($WAIT_COUNT/$MAX_WAIT)"
+            sleep 5
+            WAIT_COUNT=$((WAIT_COUNT + 1))
+          done
         done
+      else
+        echo "[S3Vector Destroy] No indexes found to delete"
       fi
 
       # Delete the vector bucket
-      aws s3vectors delete-vector-bucket \
+      echo "[S3Vector Destroy] Deleting vector bucket..."
+      if aws s3vectors delete-vector-bucket \
         --vector-bucket-name "${self.triggers.bucket_name}" \
-        --region ${self.triggers.region} || echo "Bucket may not exist"
+        --region ${self.triggers.region} 2>&1; then
+        echo "[S3Vector Destroy] Vector bucket deleted successfully"
+      else
+        echo "[S3Vector Destroy] Bucket may not exist or already deleted"
+      fi
+
+      echo "[S3Vector Destroy] Cleanup complete"
     EOT
+
+    interpreter = ["bash", "-c"]
   }
 
   triggers = {
@@ -190,33 +220,45 @@ resource "aws_iam_policy" "s3vector_access" {
 
 # Data source to get vector bucket info (for outputs)
 # Note: This runs during terraform plan/apply, so it needs to handle the case
-# where the bucket doesn't exist yet
+# where the bucket doesn't exist yet or is being destroyed
 data "external" "s3vector_info" {
   depends_on = [null_resource.s3vector_bucket]
 
   program = ["bash", "-c", <<-EOT
     set -e
 
-    # Get AWS account ID
-    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "unknown")
+    # Timeout after 30 seconds to prevent hanging
+    timeout 30s bash -c '
+      # Get AWS account ID
+      ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "unknown")
 
-    # Try to get vector bucket info (may fail if bucket doesn't exist yet)
-    BUCKET_INFO=$(aws s3vectors get-vector-bucket \
-      --vector-bucket-name "${var.bucket_name}" \
-      --region ${var.region} \
-      --output json 2>/dev/null || echo '{"vectorBucket":{}}')
+      # Try to get vector bucket info (may fail if bucket doesn'\''t exist yet or is being destroyed)
+      BUCKET_INFO=$(aws s3vectors get-vector-bucket \
+        --vector-bucket-name "${var.bucket_name}" \
+        --region ${var.region} \
+        --output json 2>/dev/null || echo '\''{"vectorBucket":{}}'\'')
 
-    # Extract ARN and creation time with fallbacks
-    ARN=$(echo "$BUCKET_INFO" | jq -r '.vectorBucket.arn // "arn:aws:s3vectors:${var.region}:'$ACCOUNT_ID':bucket/${var.bucket_name}"')
-    CREATED=$(echo "$BUCKET_INFO" | jq -r '.vectorBucket.creationDate // "pending"')
+      # Extract ARN and creation time with fallbacks
+      ARN=$(echo "$BUCKET_INFO" | jq -r '\''.vectorBucket.arn // "arn:aws:s3vectors:${var.region}:'\''$ACCOUNT_ID'\'':bucket/${var.bucket_name}"'\'')
+      CREATED=$(echo "$BUCKET_INFO" | jq -r '\''.vectorBucket.creationDate // "pending"'\'')
 
-    # Return as JSON (must be valid JSON)
-    jq -n \
-      --arg arn "$ARN" \
-      --arg created "$CREATED" \
-      --arg bucket "${var.bucket_name}" \
-      --arg region "${var.region}" \
-      '{"arn": $arn, "created": $created, "bucket": $bucket, "region": $region}'
+      # Return as JSON (must be valid JSON)
+      jq -n \
+        --arg arn "$ARN" \
+        --arg created "$CREATED" \
+        --arg bucket "${var.bucket_name}" \
+        --arg region "${var.region}" \
+        '\''{"arn": $arn, "created": $created, "bucket": $bucket, "region": $region}'\''
+    ' || {
+      # If timeout or error, return default values
+      ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "unknown")
+      jq -n \
+        --arg arn "arn:aws:s3vectors:${var.region}:$ACCOUNT_ID:bucket/${var.bucket_name}" \
+        --arg created "unknown" \
+        --arg bucket "${var.bucket_name}" \
+        --arg region "${var.region}" \
+        '{"arn": $arn, "created": $created, "bucket": $bucket, "region": $region}'
+    }
   EOT
   ]
 }
