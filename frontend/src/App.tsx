@@ -1,8 +1,9 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
+import InfrastructureDashboard from './pages/InfrastructureDashboard';
 import ResourceManagement from './pages/ResourceManagement';
 import MediaProcessing from './pages/MediaProcessing';
 import QuerySearch from './pages/QuerySearch';
@@ -17,14 +18,6 @@ const queryClient = new QueryClient({
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
-      onError: (error: any) => {
-        console.error('Query error:', error);
-      },
-    },
-    mutations: {
-      onError: (error: any) => {
-        console.error('Mutation error:', error);
-      },
     },
   },
 });
@@ -36,7 +29,8 @@ function App() {
         <Router>
           <Layout>
             <Routes>
-              <Route path="/" element={<Navigate to="/resources" replace />} />
+              <Route path="/" element={<InfrastructureDashboard />} />
+              <Route path="/infrastructure" element={<InfrastructureDashboard />} />
               <Route path="/resources" element={<ResourceManagement />} />
               <Route path="/processing" element={<MediaProcessing />} />
               <Route path="/search" element={<QuerySearch />} />

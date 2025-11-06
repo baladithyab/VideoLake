@@ -1,5 +1,11 @@
 # LanceDB ECS Module Variables
 
+variable "aws_region" {
+  description = "AWS region for deployment"
+  type        = string
+  default     = "us-east-1"
+}
+
 variable "deployment_name" {
   description = "Name for LanceDB deployment"
   type        = string

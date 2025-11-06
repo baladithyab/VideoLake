@@ -23,12 +23,7 @@ export default function EmbeddingVisualization() {
 
   // Visualize embeddings mutation
   const visualizeMutation = useMutation({
-    mutationFn: (data: {
-      method: string;
-      dimensions: number;
-      vector_type: string;
-      limit?: number;
-    }) => embeddingsAPI.visualize(data),
+    mutationFn: (data: any) => embeddingsAPI.visualize(data),
     onSuccess: (response) => {
       setVisualizationData(response.data);
     },
@@ -36,7 +31,7 @@ export default function EmbeddingVisualization() {
 
   // Analyze embeddings mutation
   const analyzeMutation = useMutation({
-    mutationFn: (data: { vector_type: string }) => embeddingsAPI.analyze(data),
+    mutationFn: (data: any) => embeddingsAPI.analyze(data),
   });
 
   const handleVisualize = () => {

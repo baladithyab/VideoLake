@@ -91,61 +91,71 @@ module "opensearch" {
   }
 }
 
-# 3. Qdrant - High-performance HNSW indexing
+# 3. Qdrant - High-performance HNSW indexing (ECS Fargate)
 module "qdrant" {
-  source = "./modules/qdrant"
+  source = "./modules/qdrant_ecs"
 
-  deployment_name   = var.qdrant_deployment_name
-  instance_type     = var.qdrant_instance_type
-  availability_zone = data.aws_availability_zones.available.names[0]
-  ebs_volume_size_gb = var.qdrant_storage_gb
-  qdrant_version    = var.qdrant_version
+  aws_region      = var.aws_region
+  deployment_name = var.qdrant_deployment_name
+  task_cpu        = 2048  # 2 vCPU
+  task_memory_mb  = 4096  # 4 GB
+  qdrant_version  = var.qdrant_version
 
   tags = {
     VectorStore = "Qdrant"
+    Deployment  = "ECS-Fargate"
   }
 }
 
-# 4. LanceDB - Flexible backends
+# 4. LanceDB - ECS Fargate with multiple backend options
 
-# LanceDB S3 Backend (Serverless, cost-effective)
+# LanceDB S3 Backend (serverless, cost-effective)
 module "lancedb_s3" {
-  source = "./modules/lancedb"
+  source = "./modules/lancedb_ecs"
 
+  aws_region      = var.aws_region
   deployment_name = "${var.lancedb_deployment_name}-s3"
   backend_type    = "s3"
+  task_cpu        = 2048
+  task_memory_mb  = 4096
 
   tags = {
     VectorStore = "LanceDB"
+    Deployment  = "ECS-Fargate"
     Backend     = "S3"
   }
 }
 
-# LanceDB EFS Backend (Shared, multi-AZ)
+# LanceDB EFS Backend (shared, multi-AZ)
 module "lancedb_efs" {
-  source = "./modules/lancedb"
+  source = "./modules/lancedb_ecs"
 
-  deployment_name      = "${var.lancedb_deployment_name}-efs"
-  backend_type         = "efs"
-  efs_performance_mode = "generalPurpose"
+  aws_region      = var.aws_region
+  deployment_name = "${var.lancedb_deployment_name}-efs"
+  backend_type    = "efs"
+  task_cpu        = 2048
+  task_memory_mb  = 4096
 
   tags = {
     VectorStore = "LanceDB"
+    Deployment  = "ECS-Fargate"
     Backend     = "EFS"
   }
 }
 
-# LanceDB EBS Backend (Single instance, fastest)
+# LanceDB EBS Backend (single-AZ, fast local storage)
 module "lancedb_ebs" {
-  source = "./modules/lancedb"
+  source = "./modules/lancedb_ecs"
 
-  deployment_name   = "${var.lancedb_deployment_name}-ebs"
-  backend_type      = "ebs"
-  availability_zone = data.aws_availability_zones.available.names[0]
-  ebs_volume_size_gb = var.lancedb_storage_gb
+  aws_region      = var.aws_region
+  deployment_name = "${var.lancedb_deployment_name}-ebs"
+  backend_type    = "ebs"
+  task_cpu        = 2048
+  task_memory_mb  = 4096
 
   tags = {
     VectorStore = "LanceDB"
+    Deployment  = "ECS-Fargate"
     Backend     = "EBS"
   }
 }

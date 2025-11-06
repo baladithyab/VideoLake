@@ -58,6 +58,24 @@ cleanup() {
 
 trap cleanup SIGINT SIGTERM
 
+# Initialize Terraform
+echo -e "${BLUE}🏗️  Initializing Terraform...${NC}"
+cd terraform
+
+# Run terraform init if not already initialized
+if [ ! -d ".terraform" ]; then
+    echo "Running terraform init..."
+    terraform init > /dev/null 2>&1 || {
+        echo -e "${YELLOW}⚠️  Terraform init had warnings (this is usually okay)${NC}"
+    }
+    echo -e "${GREEN}✅ Terraform initialized${NC}"
+else
+    echo -e "${GREEN}✅ Terraform already initialized${NC}"
+fi
+
+cd ..
+echo ""
+
 # Start backend
 echo -e "${BLUE}📡 Starting FastAPI Backend...${NC}"
 python3 run_api.py &

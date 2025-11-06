@@ -1,4 +1,5 @@
-import { Component, ErrorInfo, ReactNode } from 'react';
+import { Component } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 interface Props {
@@ -52,7 +53,7 @@ class ErrorBoundary extends Component<Props, State> {
                 Try Again
               </button>
             </div>
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <details className="mt-4">
                 <summary className="text-xs text-gray-500 cursor-pointer">
                   Error Details (Development Only)

@@ -257,7 +257,7 @@ resource "aws_ecs_task_definition" "lancedb" {
       logDriver = "awslogs"
       options = {
         "awslogs-group"         = aws_cloudwatch_log_group.lancedb.name
-        "awslogs-region"        = data.aws_vpc.default.region
+        "awslogs-region"        = var.aws_region
         "awslogs-stream-prefix" = "lancedb"
       }
     }
@@ -296,7 +296,7 @@ resource "aws_ecs_service" "lancedb" {
     assign_public_ip = true
   }
 
-  depends_on = var.backend_type != "s3" ? [aws_efs_mount_target.lancedb[0]] : []
+  # Dependencies are automatically handled through task definition volume mounts
 
   tags = merge(var.tags, {
     Service   = "LanceDB"

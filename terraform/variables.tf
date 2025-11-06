@@ -23,7 +23,7 @@ variable "environment" {
 variable "data_bucket_name" {
   description = "S3 bucket for videos, embeddings, datasets"
   type        = string
-  default     = "s3vector-demo-data"
+  default     = "media-lake-demo-data"
 }
 
 variable "enable_web_upload" {
@@ -90,8 +90,9 @@ variable "opensearch_master_user" {
 }
 
 variable "opensearch_master_password" {
-  description = "OpenSearch master password"
+  description = "OpenSearch master password (min 8 chars, must include uppercase, lowercase, number, and special char)"
   type        = string
+  default     = "MediaLake-Demo-2024!"
   sensitive   = true
 }
 

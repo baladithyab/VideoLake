@@ -643,7 +643,7 @@ export default function MediaProcessing() {
         <div className="space-y-3">
           {jobs?.jobs && jobs.jobs.length > 0 ? (
             jobs.jobs.map((job: any) => {
-              const statusIconMap: Record<string, JSX.Element> = {
+              const statusIconMap: Record<string, React.ReactElement> = {
                 processing: <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />,
                 completed: <CheckCircle className="w-5 h-5 text-green-500" />,
                 failed: <XCircle className="w-5 h-5 text-red-500" />,

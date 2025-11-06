@@ -166,6 +166,35 @@ export const embeddingsAPI = {
   getMethods: () => apiClient.get('/api/embeddings/methods'),
 };
 
+// Infrastructure API (Terraform-based deployment)
+export const infrastructureAPI = {
+  // Initialize Terraform
+  init: () => apiClient.post('/api/infrastructure/init'),
+
+  // Get deployment status
+  getStatus: () => apiClient.get('/api/infrastructure/status'),
+
+  // Deploy vector stores
+  deploy: (data: {
+    vector_stores: string[];  // ["qdrant", "lancedb_s3", "opensearch", etc.]
+    wait_for_completion?: boolean;
+  }) => apiClient.post('/api/infrastructure/deploy', data),
+
+  // Deploy single vector store
+  deploySingle: (vectorStore: string) =>
+    apiClient.post(`/api/infrastructure/deploy/${vectorStore}`),
+
+  // Destroy vector stores
+  destroy: (data: {
+    vector_stores: string[];
+    confirm: boolean;
+  }) => apiClient.delete('/api/infrastructure/destroy', { data }),
+
+  // Destroy single vector store
+  destroySingle: (vectorStore: string, confirm: boolean = true) =>
+    apiClient.delete(`/api/infrastructure/destroy/${vectorStore}`, { params: { confirm } }),
+};
+
 // Analytics API
 export const analyticsAPI = {
   getPerformance: () => apiClient.get('/api/analytics/performance'),

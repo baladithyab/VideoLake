@@ -1,5 +1,10 @@
 # Qdrant Module Variables
 
+variable "aws_region" {
+  description = "AWS region for deployment"
+  type        = string
+}
+
 variable "deployment_name" {
   description = "Name for this Qdrant deployment"
   type        = string

@@ -77,7 +77,7 @@ output "deployment_info" {
     port                    = 6333
     grpc_port               = 6334
     status                  = "running"
-    region                  = data.aws_ami.amazon_linux_2023.region
+    region                  = var.aws_region
     instance_id             = aws_instance.qdrant.id
     instance_arn            = aws_instance.qdrant.arn
     ebs_volume_id           = aws_ebs_volume.qdrant_data.id

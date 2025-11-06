@@ -1,11 +1,13 @@
-import { ReactNode, useState } from 'react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  Wrench, 
-  Film, 
-  Search, 
-  Target, 
-  BarChart3, 
+import {
+  Server,
+  Wrench,
+  Film,
+  Search,
+  Target,
+  BarChart3,
   Settings,
   Menu,
   X
@@ -16,6 +18,7 @@ interface LayoutProps {
 }
 
 const navigation = [
+  { name: 'Infrastructure', href: '/infrastructure', icon: Server },
   { name: 'Resource Management', href: '/resources', icon: Wrench },
   { name: 'Media Processing', href: '/processing', icon: Film },
   { name: 'Query & Search', href: '/search', icon: Search },
