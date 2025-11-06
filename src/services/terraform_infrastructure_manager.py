@@ -166,6 +166,62 @@ class TerraformInfrastructureManager:
                 error_message=str(e)
             )
 
+    def deploy_multiple_stores(
+        self,
+        vector_stores: List[str],
+        wait_for_completion: bool = True,
+        timeout_sec: int = 3600,
+        operation_id: Optional[str] = None
+    ) -> DeploymentStatus:
+        """
+        Deploy multiple vector stores in a single Terraform command.
+
+        Uses multiple -target flags, allowing Terraform to parallelize internally.
+        This is more efficient than running separate Terraform processes.
+
+        Args:
+            vector_stores: List of stores to deploy
+            wait_for_completion: Wait for deployment to finish
+            timeout_sec: Timeout in seconds
+            operation_id: Optional operation ID for real-time log streaming
+
+        Returns:
+            Deployment status
+        """
+        logger.info(f"Deploying multiple vector stores: {', '.join(vector_stores)}")
+
+        try:
+            # Build command with multiple -target flags
+            cmd = ["apply", "-auto-approve"]
+            for store in vector_stores:
+                cmd.extend(["-target", f"module.{store}"])
+
+            result = self._run_terraform_command(
+                cmd,
+                timeout=timeout_sec if wait_for_completion else None,
+                operation_id=operation_id
+            )
+
+            # Sync state
+            if self.tfstate_path.exists():
+                self._sync_state_to_registry()
+
+            return DeploymentStatus(
+                deployed=result["success"],
+                endpoint=None,  # Multiple stores don't have a single endpoint
+                deployment_time_sec=result.get("duration", 0),
+                error_message=result.get("error")
+            )
+
+        except Exception as e:
+            logger.error(f"Batch deployment failed: {str(e)}")
+            return DeploymentStatus(
+                deployed=False,
+                endpoint=None,
+                deployment_time_sec=0,
+                error_message=str(e)
+            )
+
     def destroy_vector_store(
         self,
         vector_store: str,
@@ -213,6 +269,56 @@ class TerraformInfrastructureManager:
                 "vector_store": vector_store,
                 "status": "failed",
                 "success": False,
+                "error": str(e)
+            }
+
+    def destroy_multiple_stores(
+        self,
+        vector_stores: List[str],
+        operation_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Destroy multiple vector stores in a single Terraform command.
+
+        Uses multiple -target flags, allowing Terraform to parallelize internally.
+        This is more efficient than running separate Terraform processes.
+
+        Args:
+            vector_stores: List of stores to destroy
+            operation_id: Optional operation ID for real-time log streaming
+
+        Returns:
+            Destruction result
+        """
+        logger.info(f"Destroying multiple vector stores: {', '.join(vector_stores)}")
+
+        try:
+            # Build command with multiple -target flags
+            cmd = ["destroy", "-auto-approve"]
+            for store in vector_stores:
+                cmd.extend(["-target", f"module.{store}"])
+
+            result = self._run_terraform_command(
+                cmd,
+                timeout=3600,  # 1 hour for batch destroy
+                operation_id=operation_id
+            )
+
+            # Sync state
+            if self.tfstate_path.exists():
+                self._sync_state_to_registry()
+
+            return {
+                "success": result["success"],
+                "stores": vector_stores,
+                "error": result.get("error")
+            }
+
+        except Exception as e:
+            logger.error(f"Batch destruction failed: {str(e)}")
+            return {
+                "success": False,
+                "stores": vector_stores,
                 "error": str(e)
             }
 
