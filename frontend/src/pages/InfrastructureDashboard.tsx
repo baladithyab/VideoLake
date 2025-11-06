@@ -49,7 +49,7 @@ interface InfrastructureStatus {
 // Vector store configuration
 const VECTOR_STORES = [
   {
-    id: 's3_vector',
+    id: 's3vector',
     name: 'S3 Vector Direct',
     description: 'AWS-native vector storage with S3 Metadata integration',
     icon: Database,
