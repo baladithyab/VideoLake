@@ -353,7 +353,7 @@ class TerraformInfrastructureManager:
         operation_id: str
     ) -> subprocess.CompletedProcess:
         """
-        Run terraform command and stream output to operation tracker.
+        Run terraform command and stream output to operation tracker in real-time.
 
         Args:
             cmd: Full command to run
@@ -364,6 +364,8 @@ class TerraformInfrastructureManager:
             CompletedProcess with result
         """
         import select
+        import os
+        import fcntl
 
         operation_tracker.add_log(
             operation_id,
@@ -371,21 +373,28 @@ class TerraformInfrastructureManager:
             level="INFO"
         )
 
-        # Start process with pipes
+        # Start process with pipes (unbuffered)
         process = subprocess.Popen(
             cmd,
             cwd=self.terraform_dir,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1  # Line buffered
+            bufsize=0,  # Unbuffered for real-time output
+            env={**os.environ, 'PYTHONUNBUFFERED': '1'}  # Force unbuffered output
         )
+
+        # Make stdout and stderr non-blocking
+        for pipe in [process.stdout, process.stderr]:
+            fd = pipe.fileno()
+            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
         stdout_lines = []
         stderr_lines = []
         start_time = time.time()
 
-        # Read output in real-time
+        # Read output in real-time with select
         while True:
             # Check timeout
             if timeout and (time.time() - start_time) > timeout:
@@ -393,30 +402,42 @@ class TerraformInfrastructureManager:
                 raise subprocess.TimeoutExpired(cmd, timeout)
 
             # Check if process finished
-            if process.poll() is not None:
+            poll_result = process.poll()
+            if poll_result is not None and not select.select([process.stdout, process.stderr], [], [], 0)[0]:
+                # Process finished and no more data to read
                 break
 
-            # Read available output (non-blocking)
-            try:
-                # Read stdout
-                line = process.stdout.readline()
-                if line:
-                    line = line.rstrip()
-                    stdout_lines.append(line)
-                    operation_tracker.add_log(operation_id, line, level="INFO")
+            # Use select to wait for data (with 0.05s timeout for responsiveness)
+            readable, _, _ = select.select([process.stdout, process.stderr], [], [], 0.05)
 
-                # Read stderr
-                line = process.stderr.readline()
-                if line:
-                    line = line.rstrip()
-                    stderr_lines.append(line)
-                    # Terraform outputs progress to stderr, not always errors
-                    level = "WARNING" if "error" in line.lower() else "INFO"
-                    operation_tracker.add_log(operation_id, line, level=level)
+            for pipe in readable:
+                try:
+                    # Read all available data from this pipe
+                    data = pipe.read()
+                    if data:
+                        # Split into lines but keep incomplete lines for next iteration
+                        lines = data.splitlines(keepends=True)
 
-            except Exception as e:
-                logger.error(f"Error reading process output: {e}")
-                break
+                        for line in lines:
+                            line = line.rstrip()
+                            if not line:
+                                continue
+
+                            if pipe == process.stdout:
+                                stdout_lines.append(line)
+                                operation_tracker.add_log(operation_id, line, level="INFO")
+                            else:  # stderr
+                                stderr_lines.append(line)
+                                # Terraform outputs progress to stderr, not always errors
+                                level = "ERROR" if "error" in line.lower() and "│" not in line else "INFO"
+                                operation_tracker.add_log(operation_id, line, level=level)
+
+                except (IOError, OSError):
+                    # No data available right now, continue
+                    pass
+                except Exception as e:
+                    logger.error(f"Error reading process output: {e}")
+                    break
 
         # Read any remaining output
         remaining_stdout, remaining_stderr = process.communicate()

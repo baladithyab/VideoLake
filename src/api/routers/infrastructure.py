@@ -346,8 +346,8 @@ async def stream_operation_logs(operation_id: str):
                     yield f"data: {completion_data}\n\n"
                     break
 
-                # Wait before checking for new logs
-                await asyncio.sleep(0.1)
+                # Wait before checking for new logs (50ms for real-time feel)
+                await asyncio.sleep(0.05)
 
         except Exception as e:
             logger.error(f"Error streaming logs for {operation_id}: {e}")
