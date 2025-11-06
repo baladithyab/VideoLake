@@ -106,52 +106,65 @@ async def deploy_infrastructure(
     background_tasks: BackgroundTasks
 ):
     """
-    Deploy selected vector stores.
-
-    If wait_for_completion=False, deployment happens in background.
+    Deploy selected vector stores with real-time log streaming.
 
     Args:
         request: Deployment request with selected stores
 
     Returns:
-        Deployment status or background task ID
+        Operation ID for real-time log streaming (deployment runs in background)
     """
-    try:
-        if request.wait_for_completion:
-            # Synchronous deployment
-            results = terraform_manager.deploy_all(request.vector_stores)
+    # Start operation tracking for batch deployment
+    stores_str = ", ".join(request.vector_stores)
+    operation_id = operation_tracker.start_operation("deploy", f"batch: {stores_str}")
 
-            return {
-                "success": True,
-                "mode": "synchronous",
-                "results": {
-                    name: {
-                        "deployed": s.deployed,
-                        "endpoint": s.endpoint,
-                        "deployment_time_sec": s.deployment_time_sec,
-                        "error": s.error_message
-                    }
-                    for name, s in results.items()
-                }
-            }
+    logger.info(f"Starting batch deployment for {len(request.vector_stores)} stores with operation_id: {operation_id}")
 
-        else:
-            # Asynchronous deployment
-            background_tasks.add_task(
-                terraform_manager.deploy_all,
-                request.vector_stores
-            )
+    # Define background task
+    def deploy_batch_task():
+        try:
+            logger.info(f"[{operation_id}] Batch deployment started for: {stores_str}")
 
-            return {
-                "success": True,
-                "mode": "asynchronous",
-                "message": f"Deploying {len(request.vector_stores)} vector stores in background",
-                "stores": request.vector_stores
-            }
+            # Deploy each store sequentially, logging to the same operation
+            for store in request.vector_stores:
+                operation_tracker.add_log(operation_id, f"\n{'='*60}", level="INFO")
+                operation_tracker.add_log(operation_id, f"Deploying {store}...", level="INFO")
+                operation_tracker.add_log(operation_id, f"{'='*60}\n", level="INFO")
 
-    except Exception as e:
-        logger.error(f"Deployment failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+                try:
+                    status = terraform_manager.deploy_vector_store(
+                        vector_store=store,
+                        wait_for_completion=True,
+                        operation_id=operation_id  # Use same operation_id for all stores
+                    )
+
+                    if status.deployed:
+                        operation_tracker.add_log(operation_id, f"✅ {store} deployed successfully", level="INFO")
+                    else:
+                        operation_tracker.add_log(operation_id, f"❌ {store} deployment failed: {status.error_message}", level="ERROR")
+
+                except Exception as e:
+                    operation_tracker.add_log(operation_id, f"❌ {store} deployment error: {str(e)}", level="ERROR")
+
+            # Mark operation as complete
+            operation_tracker.complete_operation(operation_id, success=True)
+            logger.info(f"[{operation_id}] Batch deployment completed")
+
+        except Exception as e:
+            logger.error(f"[{operation_id}] Batch deployment failed: {e}")
+            operation_tracker.complete_operation(operation_id, success=False, error=str(e))
+
+    # Add task to background
+    background_tasks.add_task(deploy_batch_task)
+
+    # Return immediately with operation_id
+    return {
+        "success": True,
+        "message": f"Batch deployment started for {len(request.vector_stores)} store(s)",
+        "stores": request.vector_stores,
+        "operation_id": operation_id,  # Frontend uses this to stream logs
+        "status": "running"
+    }
 
 
 @router.delete("/destroy")
@@ -160,7 +173,7 @@ async def destroy_infrastructure(
     background_tasks: BackgroundTasks
 ):
     """
-    Destroy selected vector stores.
+    Destroy selected vector stores with real-time log streaming.
 
     Requires confirm=True for safety.
 
@@ -168,7 +181,7 @@ async def destroy_infrastructure(
         request: Destroy request with selected stores
 
     Returns:
-        Destruction status
+        Operation ID for real-time log streaming (destruction runs in background)
     """
     if not request.confirm:
         raise HTTPException(
@@ -176,22 +189,56 @@ async def destroy_infrastructure(
             detail="Must set confirm=True to destroy resources"
         )
 
-    try:
-        results = {}
+    # Start operation tracking for batch destruction
+    stores_str = ", ".join(request.vector_stores)
+    operation_id = operation_tracker.start_operation("destroy", f"batch: {stores_str}")
 
-        for store in request.vector_stores:
-            result = terraform_manager.destroy_vector_store(store)
-            results[store] = result
+    logger.info(f"Starting batch destruction for {len(request.vector_stores)} stores with operation_id: {operation_id}")
 
-        return {
-            "success": True,
-            "destroyed_stores": request.vector_stores,
-            "results": results
-        }
+    # Define background task
+    def destroy_batch_task():
+        try:
+            logger.info(f"[{operation_id}] Batch destruction started for: {stores_str}")
 
-    except Exception as e:
-        logger.error(f"Destruction failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+            # Destroy each store sequentially, logging to the same operation
+            for store in request.vector_stores:
+                operation_tracker.add_log(operation_id, f"\n{'='*60}", level="INFO")
+                operation_tracker.add_log(operation_id, f"Destroying {store}...", level="INFO")
+                operation_tracker.add_log(operation_id, f"{'='*60}\n", level="INFO")
+
+                try:
+                    result = terraform_manager.destroy_vector_store(
+                        store,
+                        operation_id=operation_id  # Use same operation_id for all stores
+                    )
+
+                    if result["success"]:
+                        operation_tracker.add_log(operation_id, f"✅ {store} destroyed successfully", level="INFO")
+                    else:
+                        operation_tracker.add_log(operation_id, f"❌ {store} destruction failed: {result.get('error')}", level="ERROR")
+
+                except Exception as e:
+                    operation_tracker.add_log(operation_id, f"❌ {store} destruction error: {str(e)}", level="ERROR")
+
+            # Mark operation as complete
+            operation_tracker.complete_operation(operation_id, success=True)
+            logger.info(f"[{operation_id}] Batch destruction completed")
+
+        except Exception as e:
+            logger.error(f"[{operation_id}] Batch destruction failed: {e}")
+            operation_tracker.complete_operation(operation_id, success=False, error=str(e))
+
+    # Add task to background
+    background_tasks.add_task(destroy_batch_task)
+
+    # Return immediately with operation_id
+    return {
+        "success": True,
+        "message": f"Batch destruction started for {len(request.vector_stores)} store(s)",
+        "stores": request.vector_stores,
+        "operation_id": operation_id,  # Frontend uses this to stream logs
+        "status": "running"
+    }
 
 
 @router.post("/deploy/{vector_store}")

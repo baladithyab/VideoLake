@@ -134,15 +134,24 @@ export default function InfrastructureDashboard() {
     },
   });
 
-  // Deploy mutation
+  // Batch deploy mutation
   const deployMutation = useMutation({
     mutationFn: (stores: string[]) =>
       infrastructureAPI.deploy({
         vector_stores: stores,
         wait_for_completion: false
       }),
-    onSuccess: (_, stores) => {
-      toast.success(`Deploying ${stores.length} vector store(s) in background`);
+    onSuccess: (response, stores) => {
+      // Show log viewer if operation_id is returned
+      if (response.data.operation_id) {
+        setActiveOperation({
+          operationId: response.data.operation_id,
+          vectorStore: `batch: ${stores.join(', ')}`,
+          operationType: 'deploy'
+        });
+      }
+
+      toast.success(`Batch deployment started for ${stores.length} store(s)`);
       queryClient.invalidateQueries({ queryKey: ['infrastructure-status'] });
       setSelectedStores([]);
     },
@@ -184,8 +193,17 @@ export default function InfrastructureDashboard() {
         vector_stores: stores,
         confirm: true
       }),
-    onSuccess: (_, stores) => {
-      toast.success(`Destroying ${stores.length} vector store(s) in background`);
+    onSuccess: (response, stores) => {
+      // Show log viewer if operation_id is returned
+      if (response.data.operation_id) {
+        setActiveOperation({
+          operationId: response.data.operation_id,
+          vectorStore: `batch: ${stores.join(', ')}`,
+          operationType: 'destroy'
+        });
+      }
+
+      toast.success(`Batch destruction started for ${stores.length} store(s)`);
       queryClient.invalidateQueries({ queryKey: ['infrastructure-status'] });
       setSelectedStores([]);
     },
@@ -393,24 +411,31 @@ export default function InfrastructureDashboard() {
           <h2 className="text-xl font-semibold">Vector Stores</h2>
           {selectedStores.length > 0 && (
             <div className="flex gap-2">
-              <Button
-                onClick={handleBatchDeploy}
-                disabled={deployMutation.isPending}
-                variant="default"
-              >
-                {deployMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                <Rocket className="h-4 w-4 mr-2" />
-                Deploy Selected ({selectedStores.length})
-              </Button>
-              <Button
-                onClick={handleBatchDestroy}
-                disabled={destroyMutation.isPending}
-                variant="destructive"
-              >
-                {destroyMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                <Trash2 className="h-4 w-4 mr-2" />
-                Destroy Selected ({selectedStores.filter(isStoreDeployed).length})
-              </Button>
+              {/* Show Deploy button only if there are undeployed stores selected */}
+              {selectedStores.some(store => !isStoreDeployed(store)) && (
+                <Button
+                  onClick={handleBatchDeploy}
+                  disabled={deployMutation.isPending}
+                  variant="default"
+                >
+                  {deployMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  <Rocket className="h-4 w-4 mr-2" />
+                  Deploy Selected ({selectedStores.filter(s => !isStoreDeployed(s)).length})
+                </Button>
+              )}
+
+              {/* Show Destroy button only if there are deployed stores selected */}
+              {selectedStores.some(isStoreDeployed) && (
+                <Button
+                  onClick={handleBatchDestroy}
+                  disabled={destroyMutation.isPending}
+                  variant="destructive"
+                >
+                  {destroyMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Destroy Selected ({selectedStores.filter(isStoreDeployed).length})
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -460,26 +485,25 @@ export default function InfrastructureDashboard() {
                     </>
                   )}
 
-                  {!deployed && (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id={`select-${store.id}`}
-                        checked={selectedStores.includes(store.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedStores([...selectedStores, store.id]);
-                          } else {
-                            setSelectedStores(selectedStores.filter(s => s !== store.id));
-                          }
-                        }}
-                        className="h-4 w-4"
-                      />
-                      <label htmlFor={`select-${store.id}`} className="text-sm text-muted-foreground">
-                        Select for batch operations
-                      </label>
-                    </div>
-                  )}
+                  {/* Checkbox for batch operations (deploy or destroy) */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`select-${store.id}`}
+                      checked={selectedStores.includes(store.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedStores([...selectedStores, store.id]);
+                        } else {
+                          setSelectedStores(selectedStores.filter(s => s !== store.id));
+                        }
+                      }}
+                      className="h-4 w-4"
+                    />
+                    <label htmlFor={`select-${store.id}`} className="text-sm text-muted-foreground">
+                      Select for batch {deployed ? 'destroy' : 'deploy'}
+                    </label>
+                  </div>
                 </CardContent>
 
                 <CardFooter className="flex gap-2">
@@ -648,7 +672,13 @@ export default function InfrastructureDashboard() {
                 deploySingleMutation.mutate(pendingStore);
                 setPendingStore(null);
               } else if (selectedStores.length > 0) {
-                deployMutation.mutate(selectedStores);
+                // Only deploy stores that are not already deployed
+                const undeployedStores = selectedStores.filter(s => !isStoreDeployed(s));
+                if (undeployedStores.length > 0) {
+                  deployMutation.mutate(undeployedStores);
+                } else {
+                  toast.error('All selected stores are already deployed');
+                }
               }
             }}>
               <Rocket className="h-4 w-4 mr-2" />
