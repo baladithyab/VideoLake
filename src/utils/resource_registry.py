@@ -53,9 +53,21 @@ class ResourceRegistryStub:
 
     def list_vector_buckets(self):
         return []
+    
+    def list_s3_buckets(self):
+        return []
 
     def list_indexes(self):
         return []
+    
+    def log_index_created(self, *args, **kwargs):
+        pass
+    
+    def log_index_deleted(self, *args, **kwargs):
+        pass
+    
+    def log_vector_bucket_deleted(self, *args, **kwargs):
+        pass
 
     def get_registry(self):
         return {

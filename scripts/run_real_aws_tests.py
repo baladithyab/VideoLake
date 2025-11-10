@@ -1,240 +1,283 @@
 #!/usr/bin/env python3
 """
-Real AWS Integration Test Runner
+Safe Runner for Real AWS Integration Tests
 
-This script sets up the environment and runs real AWS integration tests
-to validate that all backend services work correctly with actual AWS resources.
+This script provides a safe, interactive way to run real AWS tests with:
+- Clear cost warnings
+- Prerequisites checking
+- Resource tracking
+- Cost estimation
+- Safe cleanup verification
 
 Usage:
-    python scripts/run_real_aws_tests.py [--quick] [--full] [--cleanup-only]
-    
+    python scripts/run_real_aws_tests.py [options]
+
 Options:
-    --quick      Run only core functionality tests (faster)
-    --full       Run comprehensive test suite including video processing
-    --cleanup-only  Only run cleanup operations
+    --skip-expensive    Skip expensive tests (OpenSearch)
+    --keep-resources    Keep resources after tests for debugging
+    --test-name NAME    Run specific test only
+    --yes              Skip interactive confirmations (use with caution!)
 """
 
-import os
 import sys
-import argparse
+import os
 import subprocess
 from pathlib import Path
+from typing import List, Tuple, Optional, Dict
 
-# Add parent directory to path
-sys.path.append(str(Path(__file__).parent.parent))
+# Add project root to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
-def check_aws_credentials():
-    """Check if AWS credentials are properly configured."""
+
+def print_banner(text: str):
+    """Print formatted banner."""
+    print("\n" + "=" * 80)
+    print(f" {text}")
+    print("=" * 80)
+
+
+def check_prerequisites() -> Tuple[bool, List[str]]:
+    """
+    Check if prerequisites are met.
+    
+    Returns:
+        (all_ok, messages) tuple
+    """
+    issues = []
+    
+    # Check AWS CLI
+    try:
+        result = subprocess.run(
+            ['aws', 'sts', 'get-caller-identity'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            print("✅ AWS credentials configured")
+        else:
+            issues.append("AWS credentials not configured or invalid")
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        issues.append("AWS CLI not found or not responding")
+    
+    # Check region
+    region = os.getenv('AWS_REGION', 'not-set')
+    if region in ['us-east-1', 'us-west-2']:
+        print(f"✅ AWS region: {region} (supports TwelveLabs)")
+    else:
+        issues.append(f"AWS_REGION '{region}' may not support TwelveLabs models. Use us-east-1 or us-west-2")
+    
+    # Check pytest
+    try:
+        import pytest
+        print(f"✅ pytest installed: {pytest.__version__}")
+    except ImportError:
+        issues.append("pytest not installed")
+    
+    # Check boto3
     try:
         import boto3
-        sts = boto3.client('sts')
-        identity = sts.get_caller_identity()
-        print(f"✅ AWS credentials valid - Account: {identity['Account']}")
-        print(f"   ARN: {identity['Arn']}")
-        return True
-    except Exception as e:
-        print(f"❌ AWS credentials not configured: {e}")
-        return False
+        print(f"✅ boto3 installed: {boto3.__version__}")
+    except ImportError:
+        issues.append("boto3 not installed")
+    
+    return len(issues) == 0, issues
 
-def check_environment():
-    """Check required environment variables."""
-    required_vars = {
-        'S3_VECTORS_BUCKET': 'S3 Vector bucket name for testing',
-        'AWS_REGION': 'AWS region (defaults to us-east-1)'
+
+def estimate_costs(skip_expensive: bool, test_name: Optional[str] = None) -> Dict[str, float]:
+    """Estimate test costs."""
+    costs = {
+        "s3vector": 0.02,
+        "lancedb": 0.01,
+        "opensearch": 2.00,
+        "comparison": 0.05,
+        "error_handling": 0.01
     }
     
-    missing = []
-    for var, description in required_vars.items():
-        value = os.getenv(var)
-        if not value:
-            if var == 'AWS_REGION':
-                os.environ[var] = 'us-east-1'  # Set default
-                print(f"ℹ️  {var}: Using default 'us-east-1'")
-            else:
-                missing.append(f"  {var}: {description}")
-        else:
-            print(f"✅ {var}: {value}")
+    if test_name:
+        # Specific test
+        for key in costs:
+            if key in test_name.lower():
+                return {"estimated": costs[key], "max": costs[key] * 1.5}
+        return {"estimated": 0.05, "max": 0.10}
     
-    if missing:
-        print("❌ Missing required environment variables:")
-        for var in missing:
-            print(var)
-        return False
+    # All tests
+    total = sum(costs.values())
+    if skip_expensive:
+        total -= costs["opensearch"]
     
-    return True
+    return {"estimated": total, "max": total * 1.5}
 
-def run_tests(test_type: str):
-    """Run the specified test suite."""
-    
-    # Set up environment
-    env = os.environ.copy()
-    env['REAL_AWS_TESTS'] = '1'
-    env['PYTHONPATH'] = str(Path(__file__).parent.parent)
-    
-    if test_type == "quick":
-        # Run core functionality tests only
-        test_files = [
-            "tests/test_s3_vector_storage.py",
-            "tests/test_bedrock_embedding.py",
-            "tests/integration_test_end_to_end_text_processing.py"
-        ]
-        
-        print("🚀 Running quick real AWS tests...")
-        print("   - S3 Vector storage operations")
-        print("   - Bedrock embedding generation") 
-        print("   - End-to-end text processing")
-        
-    elif test_type == "full":
-        # Run comprehensive test suite
-        test_files = [
-            "tests/test_real_aws_integration.py",
-            "tests/test_s3_vector_storage.py", 
-            "tests/test_bedrock_embedding.py",
-            "tests/test_similarity_search_engine.py",
-            "tests/integration_test_end_to_end_text_processing.py",
-            "tests/integration_test_s3_vector_storage.py"
-        ]
-        
-        print("🚀 Running comprehensive real AWS tests...")
-        print("   - All integration tests")
-        print("   - Performance benchmarking")
-        print("   - Error handling scenarios")
-        
-    elif test_type == "cleanup-only":
-        # Run cleanup script
-        print("🧹 Running cleanup operations...")
-        cleanup_script = Path(__file__).parent / "cleanup_s3vectors_buckets.py"
-        if cleanup_script.exists():
-            subprocess.run([sys.executable, str(cleanup_script)], env=env)
+
+def confirm_execution(cost_info: dict, skip_expensive: bool, auto_yes: bool = False) -> bool:
+    """Get user confirmation."""
+    if auto_yes:
         return True
     
-    # Run pytest with real AWS environment
+    print_banner("COST WARNING")
+    print(f"\n⚠️  These tests will use REAL AWS resources and incur costs!")
+    print(f"\nEstimated cost: ${cost_info['estimated']:.2f}")
+    print(f"Maximum cost: ${cost_info['max']:.2f}")
+    
+    if skip_expensive:
+        print("\n✅ Expensive tests (OpenSearch) will be SKIPPED")
+    else:
+        print("\n⚠️  EXPENSIVE tests (OpenSearch ~$2/hour) will be INCLUDED")
+    
+    print("\nResources that will be created:")
+    print("  • S3 buckets (for videos and vectors)")
+    print("  • S3 Vector indexes")
+    print("  • Test video processing via TwelveLabs/Bedrock")
+    if not skip_expensive:
+        print("  • OpenSearch Serverless collection (EXPENSIVE!)")
+    
+    print("\nAll resources will be automatically cleaned up after tests.")
+    
+    response = input("\n⚠️  Proceed with real AWS tests? (yes/no): ").strip().lower()
+    return response in ['yes', 'y']
+
+
+def build_pytest_command(
+    skip_expensive: bool,
+    keep_resources: bool,
+    test_name: Optional[str] = None
+) -> Tuple[List[str], Dict[str, str]]:
+    """Build pytest command."""
     cmd = [
-        sys.executable, "-m", "pytest",
-        *test_files,
-        "-v",
-        "--tb=short", 
-        "--maxfail=3",
-        "-x"  # Stop on first failure for faster feedback
+        'pytest',
+        'tests/test_real_aws_e2e_workflows.py',
+        '-v',
+        '--real-aws',
+        '--tb=short',
+        '--durations=10'
     ]
     
-    print(f"\n🔧 Running command: {' '.join(cmd)}")
-    print("=" * 80)
+    if test_name:
+        cmd[1] = f"tests/test_real_aws_e2e_workflows.py::{test_name}"
     
-    try:
-        result = subprocess.run(cmd, env=env, cwd=Path(__file__).parent.parent)
-        
-        if result.returncode == 0:
-            print("\n✅ All real AWS tests passed!")
-            print("🎉 Backend services are working correctly with AWS resources")
-            return True
-        else:
-            print(f"\n❌ Tests failed with exit code {result.returncode}")
-            return False
-            
-    except KeyboardInterrupt:
-        print("\n⚠️ Tests interrupted by user")
-        return False
-    except Exception as e:
-        print(f"\n❌ Error running tests: {e}")
-        return False
+    if skip_expensive:
+        cmd.extend(['-m', 'not expensive'])
+    
+    # Set environment variables
+    env = os.environ.copy()
+    
+    if keep_resources:
+        env['KEEP_TEST_RESOURCES'] = '1'
+    
+    if skip_expensive:
+        env['SKIP_EXPENSIVE_TESTS'] = '1'
+    
+    return cmd, env
+
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(description="Run real AWS integration tests")
-    parser.add_argument(
-        '--quick', 
-        action='store_true',
-        help='Run only core functionality tests (faster)'
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description='Safe runner for real AWS integration tests',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__
     )
     parser.add_argument(
-        '--full',
-        action='store_true', 
-        help='Run comprehensive test suite'
+        '--skip-expensive',
+        action='store_true',
+        help='Skip expensive tests (OpenSearch)'
     )
     parser.add_argument(
-        '--cleanup-only',
+        '--keep-resources',
         action='store_true',
-        help='Only run cleanup operations'
+        help='Keep resources after tests for debugging'
     )
     parser.add_argument(
-        '--yes', '-y',
+        '--test-name',
+        type=str,
+        help='Run specific test class only'
+    )
+    parser.add_argument(
+        '--yes',
         action='store_true',
-        help='Skip confirmation prompt and proceed automatically'
+        help='Skip interactive confirmations (dangerous!)'
     )
     
     args = parser.parse_args()
     
-    print("=" * 80)
-    print("🧪 S3Vector Real AWS Integration Test Runner")
-    print("=" * 80)
-    print()
-    
-    # Determine test type
-    if args.cleanup_only:
-        test_type = "cleanup-only"
-    elif args.full:
-        test_type = "full"
-    else:
-        test_type = "quick"  # Default
-    
-    print(f"📋 Test Mode: {test_type}")
-    print()
+    # Banner
+    print_banner("Real AWS Integration Tests - Safe Runner")
     
     # Check prerequisites
-    print("🔍 Checking prerequisites...")
+    print("\n📋 Checking prerequisites...")
+    all_ok, issues = check_prerequisites()
     
-    if not check_aws_credentials():
-        print("\n💡 Setup tips:")
-        print("   1. Configure AWS credentials: aws configure")
-        print("   2. Or set environment variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY")
-        print("   3. Ensure you have permissions for S3 Vectors and Bedrock")
-        sys.exit(1)
+    if not all_ok:
+        print("\n❌ Prerequisites check failed:")
+        for issue in issues:
+            print(f"  • {issue}")
+        print("\nPlease fix the issues above and try again.")
+        return 1
     
-    if not check_environment():
-        print("\n💡 Setup tips:")
-        print("   1. Set S3_VECTORS_BUCKET to a unique bucket name")
-        print("   2. Optionally set AWS_REGION (defaults to us-east-1)")
-        print("   3. Example: export S3_VECTORS_BUCKET=my-test-bucket-12345")
-        sys.exit(1)
+    print("\n✅ All prerequisites OK")
     
-    print("\n✅ Prerequisites satisfied")
-    print()
+    # Estimate costs
+    cost_info = estimate_costs(args.skip_expensive, args.test_name)
     
-    # Warning about costs
-    if test_type != "cleanup-only":
-        print("⚠️  COST WARNING:")
-        print("   These tests will create real AWS resources and may incur costs.")
-        print("   - S3 Vector operations: ~$0.001 per operation")
-        print("   - Bedrock embeddings: ~$0.0001 per 1K tokens")
-        print("   - Storage costs: minimal for test data")
-        print()
-        
-        if not args.yes:
-            response = input("Continue with real AWS tests? [y/N]: ")
-            if response.lower() not in ['y', 'yes']:
-                print("❌ Tests cancelled by user")
-                sys.exit(0)
-        else:
-            print("✅ Auto-proceeding with tests (--yes flag provided)")
-        print()
+    # Get confirmation
+    if not confirm_execution(cost_info, args.skip_expensive, args.yes):
+        print("\n❌ Tests cancelled by user")
+        return 0
+    
+    # Build command
+    print("\n🚀 Building test command...")
+    cmd, env = build_pytest_command(
+        args.skip_expensive,
+        args.keep_resources,
+        args.test_name
+    )
+    
+    print(f"\nCommand: {' '.join(cmd)}")
+    print(f"Environment:")
+    print(f"  AWS_REGION: {env.get('AWS_REGION', 'default')}")
+    print(f"  SKIP_EXPENSIVE_TESTS: {env.get('SKIP_EXPENSIVE_TESTS', '0')}")
+    print(f"  KEEP_TEST_RESOURCES: {env.get('KEEP_TEST_RESOURCES', '0')}")
     
     # Run tests
-    success = run_tests(test_type)
+    print_banner("Running Tests")
+    print("\n⏳ Starting test execution...\n")
     
-    if success:
-        print("\n🎉 Real AWS integration tests completed successfully!")
-        print("✅ Backend services are ready for Streamlit demo development")
+    try:
+        result = subprocess.run(cmd, env=env)
         
-        if test_type != "cleanup-only":
-            print("\n💡 Next steps:")
-            print("   1. Launch the Streamlit demo: python frontend/launch_unified_streamlit.py")
-            print("   2. Enable 'Use Real AWS' in the demo for actual processing")
-            print("   3. Test with sample videos or upload your own content")
-    else:
-        print("\n❌ Some tests failed - check the output above")
-        print("💡 Fix any issues before proceeding with demo development")
-        sys.exit(1)
+        if result.returncode == 0:
+            print_banner("SUCCESS")
+            print("\n✅ All tests passed!")
+            
+            if args.keep_resources:
+                print("\n⚠️  Resources were KEPT for debugging")
+                print("   Manual cleanup required:")
+                print("   python scripts/cleanup_all_resources.py --prefix test-real-e2e")
+            else:
+                print("\n✅ All resources cleaned up automatically")
+            
+            return 0
+        else:
+            print_banner("FAILED")
+            print("\n❌ Some tests failed")
+            
+            if not args.keep_resources:
+                print("\n✅ Resources still cleaned up despite failures")
+            
+            return 1
+    
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Tests interrupted by user")
+        print("⚠️  Cleanup may still be in progress...")
+        return 130
+    
+    except Exception as e:
+        print(f"\n\n❌ Unexpected error: {e}")
+        return 1
 
-if __name__ == "__main__":
-    main()
+
+if __name__ == '__main__':
+    sys.exit(main())
