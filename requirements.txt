@@ -37,6 +37,7 @@ umap-learn>=0.5.0
 lancedb>=0.3.0
 pyarrow>=14.0.0
 qdrant-client>=1.7.0
+opensearch-py>=2.3.0
 
 # Removed Gradio (migrated to Streamlit)
 pillow>=10.0.0
