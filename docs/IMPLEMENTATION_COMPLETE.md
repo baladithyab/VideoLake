@@ -497,7 +497,7 @@ cd frontend && npm run dev
 ```
 
 ### Access Points
-- **Frontend**: http://localhost:5174
+- **Frontend**: http://localhost:5172
 - **Backend API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
 
