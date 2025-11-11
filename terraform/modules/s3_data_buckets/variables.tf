@@ -32,7 +32,7 @@ variable "enable_web_upload" {
 variable "allowed_origins" {
   description = "Allowed origins for CORS (if web upload enabled)"
   type        = list(string)
-  default     = ["http://localhost:5174", "http://localhost:8501"]
+  default     = ["http://localhost:5172", "http://localhost:8501"]
 }
 
 variable "tags" {

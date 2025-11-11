@@ -1,74 +1,128 @@
-# Example Terraform Variables
-# Copy to terraform.tfvars and customize
+# Terraform Variables Example
+# Copy this file to terraform.tfvars and customize for your deployment
 
 #------------------------------------------------------------------------------
-# GENERAL
+# GENERAL CONFIGURATION
 #------------------------------------------------------------------------------
 
-aws_region  = "us-east-1"
-environment = "dev"
+project_name = "s3vector-demo"
+aws_region   = "us-east-1"
+environment  = "dev"
 
 #------------------------------------------------------------------------------
-# DATA STORAGE
+# CONDITIONAL DEPLOYMENT FLAGS
+#------------------------------------------------------------------------------
+# Control which vector stores get deployed
+# Default: Only S3Vector (cheap and serverless)
+
+# S3Vector - Native AWS vector storage (recommended, cheap)
+deploy_s3vector = true
+
+# OpenSearch - Hybrid search with S3Vector backend (EXPENSIVE!)
+# Only enable if you need full-text + vector hybrid search
+deploy_opensearch = false
+
+# Qdrant - High-performance HNSW indexing
+deploy_qdrant = false
+
+# LanceDB - Multiple backend options
+deploy_lancedb_s3  = false  # S3 backend (serverless)
+deploy_lancedb_efs = false  # EFS backend (shared, multi-AZ)
+deploy_lancedb_ebs = false  # EBS backend (single-AZ, fast)
+
+#------------------------------------------------------------------------------
+# SHARED MEDIA BUCKET (Always Created)
+#------------------------------------------------------------------------------
+# This bucket is always created for videos, TwelveLabs I/O, datasets, etc.
+
+# Use default name (${project_name}-shared-media) or specify custom:
+# shared_bucket_name = "my-custom-shared-bucket"
+
+shared_bucket_enable_versioning  = true
+shared_bucket_lifecycle_enabled  = true
+
+# Enable CORS for web uploads (optional)
+enable_web_upload = false
+web_allowed_origins = [
+  "http://localhost:5172",
+  "http://localhost:8501"
+]
+
+#------------------------------------------------------------------------------
+# S3VECTOR CONFIGURATION
 #------------------------------------------------------------------------------
 
-data_bucket_name    = "s3vector-demo-data-dev"
-enable_web_upload   = true  # Enable for UI uploads
-web_allowed_origins = ["http://localhost:5174", "http://localhost:8501"]
+s3vector_bucket_name = "s3vector-demo-vectors"
+
+# Default index configuration (created automatically)
+# vector_dimension = 1536      # For OpenAI embeddings
+# distance_metric = "cosine"   # cosine, euclidean, or dot_product
+# vector_data_type = "float32" # float32, float16, or int8
 
 #------------------------------------------------------------------------------
-# S3VECTOR (DIRECT)
+# OPENSEARCH CONFIGURATION (if deploy_opensearch = true)
 #------------------------------------------------------------------------------
 
-s3vector_bucket_name = "s3vector-demo-vectors-dev"
+opensearch_domain_name = "s3vector-demo"
 
-#------------------------------------------------------------------------------
-# OPENSEARCH (WITH S3VECTOR BACKEND)
-#------------------------------------------------------------------------------
+# Instance configuration
+opensearch_instance_type  = "or1.medium.search"  # OR1 required for S3Vector
+opensearch_instance_count = 2
+opensearch_multi_az       = false  # Set true for production
 
-opensearch_domain_name     = "s3vector-demo-dev"
-opensearch_instance_type   = "or1.medium.search" # OR1 for S3Vector engine
-opensearch_instance_count  = 2
-opensearch_multi_az        = false  # Set true for production
+# Authentication
 opensearch_enable_auth     = true
 opensearch_master_user     = "admin"
-opensearch_master_password = "ChangeMe123!" # CHANGE IN PRODUCTION!
+opensearch_master_password = "MediaLake-Demo-2024!"  # CHANGE IN PRODUCTION!
 
 #------------------------------------------------------------------------------
-# QDRANT
+# QDRANT CONFIGURATION (if deploy_qdrant = true)
 #------------------------------------------------------------------------------
 
-qdrant_deployment_name = "s3vector-demo-qdrant-dev"
-qdrant_instance_type   = "t3.xlarge"  # 4 vCPU, 16 GB RAM
-qdrant_storage_gb      = 100
-qdrant_version         = "v1.7.4"  # Or "latest"
+qdrant_deployment_name = "s3vector-demo-qdrant"
+qdrant_version = "latest"
+
+# ECS Task sizing
+# task_cpu = 2048       # 2 vCPU
+# task_memory_mb = 4096 # 4 GB
 
 #------------------------------------------------------------------------------
-# LANCEDB
+# LANCEDB CONFIGURATION (if deploy_lancedb_* = true)
 #------------------------------------------------------------------------------
 
-lancedb_deployment_name = "s3vector-demo-lancedb-dev"
-lancedb_storage_gb      = 100
+lancedb_deployment_name = "s3vector-demo-lancedb"
+lancedb_storage_gb = 100
+
+# ECS Task sizing (applies to all LanceDB variants)
+# task_cpu = 2048       # 2 vCPU
+# task_memory_mb = 4096 # 4 GB
 
 #------------------------------------------------------------------------------
-# DEPLOYMENT NOTES
+# LEGACY CONFIGURATION (Deprecated)
+#------------------------------------------------------------------------------
+# These variables are kept for backward compatibility
+# New deployments should use shared_bucket_name instead
+
+# data_bucket_name = "media-lake-demo-data"  # Use shared_bucket_name instead
+
+#------------------------------------------------------------------------------
+# EXAMPLE CONFIGURATIONS
 #------------------------------------------------------------------------------
 
-# Expected Monthly Costs (dev environment):
-# - Qdrant (t3.xlarge):        ~$138/month
-# - OpenSearch (2x or1.medium): ~$250/month
-# - LanceDB S3:                ~$2/month (100GB)
-# - LanceDB EFS:               ~$30/month (100GB)
-# - LanceDB EBS:               ~$8/month (100GB)
-# - Data S3 bucket:            ~$5/month (varies by usage)
-# TOTAL:                       ~$433/month for full demo setup
+# Example 1: Minimal Cost (Development)
+# deploy_s3vector = true
+# All others = false
+# Estimated cost: ~$5-10/month
 
-# To deploy:
-# 1. cp terraform.tfvars.example terraform.tfvars
-# 2. Edit terraform.tfvars with your values
-# 3. terraform init
-# 4. terraform plan
-# 5. terraform apply
+# Example 2: Full Demo (All Stores)
+# deploy_s3vector = true
+# deploy_opensearch = true
+# deploy_qdrant = true
+# deploy_lancedb_s3 = true
+# Estimated cost: ~$200-500/month
 
-# To destroy:
-# terraform destroy
+# Example 3: Production S3Vector Only
+# deploy_s3vector = true
+# opensearch_multi_az = true (if enabled)
+# shared_bucket_lifecycle_enabled = true
+# Estimated cost: ~$10-50/month depending on usage

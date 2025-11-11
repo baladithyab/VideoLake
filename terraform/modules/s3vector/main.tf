@@ -227,8 +227,8 @@ data "external" "s3vector_info" {
   program = ["bash", "-c", <<-EOT
     set -e
 
-    # Timeout after 30 seconds to prevent hanging
-    timeout 30s bash -c '
+    # Timeout after 20 minutes (S3 Vectors is a preview service and may be slow)
+    timeout 1200s bash -c '
       # Get AWS account ID
       ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "unknown")
 

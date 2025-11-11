@@ -16,14 +16,82 @@ variable "environment" {
   default     = "dev"
 }
 
+variable "project_name" {
+  description = "Project name prefix for resources"
+  type        = string
+  default     = "s3vector-demo"
+}
+
 #------------------------------------------------------------------------------
-# DATA STORAGE
+# CONDITIONAL DEPLOYMENT FLAGS
+#------------------------------------------------------------------------------
+
+variable "deploy_s3vector" {
+  description = "Deploy S3Vector (always recommended, it's cheap)"
+  type        = bool
+  default     = true
+}
+
+variable "deploy_opensearch" {
+  description = "Deploy OpenSearch with S3Vector backend (expensive)"
+  type        = bool
+  default     = false
+}
+
+variable "deploy_qdrant" {
+  description = "Deploy Qdrant on ECS Fargate"
+  type        = bool
+  default     = false
+}
+
+variable "deploy_lancedb_s3" {
+  description = "Deploy LanceDB with S3 backend"
+  type        = bool
+  default     = false
+}
+
+variable "deploy_lancedb_efs" {
+  description = "Deploy LanceDB with EFS backend"
+  type        = bool
+  default     = false
+}
+
+variable "deploy_lancedb_ebs" {
+  description = "Deploy LanceDB with EBS backend"
+  type        = bool
+  default     = false
+}
+
+#------------------------------------------------------------------------------
+# SHARED MEDIA STORAGE (Always Created)
+#------------------------------------------------------------------------------
+
+variable "shared_bucket_name" {
+  description = "Shared S3 bucket for videos, TwelveLabs I/O, datasets, and async artifacts (always created)"
+  type        = string
+  default     = null # Will use "${project_name}-shared-media" if not specified
+}
+
+variable "shared_bucket_enable_versioning" {
+  description = "Enable versioning on shared bucket"
+  type        = bool
+  default     = true
+}
+
+variable "shared_bucket_lifecycle_enabled" {
+  description = "Enable lifecycle rules on shared bucket"
+  type        = bool
+  default     = true
+}
+
+#------------------------------------------------------------------------------
+# LEGACY DATA STORAGE (Deprecated - Use shared_bucket_name instead)
 #------------------------------------------------------------------------------
 
 variable "data_bucket_name" {
-  description = "S3 bucket for videos, embeddings, datasets"
+  description = "[DEPRECATED] S3 bucket for videos, embeddings, datasets - use shared_bucket_name instead"
   type        = string
-  default     = "media-lake-demo-data"
+  default     = null
 }
 
 variable "enable_web_upload" {
@@ -35,7 +103,7 @@ variable "enable_web_upload" {
 variable "web_allowed_origins" {
   description = "Allowed origins for web uploads"
   type        = list(string)
-  default     = ["http://localhost:5174"]
+  default     = ["http://localhost:5172"]
 }
 
 #------------------------------------------------------------------------------
