@@ -4,6 +4,19 @@ A comprehensive, production-ready vector embedding platform that integrates AWS 
 
 ![S3Vector Architecture](https://img.shields.io/badge/AWS-S3%20Vectors-orange) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Tests](https://img.shields.io/badge/tests-134%2B-brightgreen) ![Cost Savings](https://img.shields.io/badge/savings-90%25%2B-gold)
 
+## 🆕 Recent Major Update: Terraform-First Architecture
+
+**Resource Management has been completely refactored** from a CRUD interface to a **read-only Terraform state viewer**. This architectural shift provides:
+
+✅ **Single Source of Truth**: Terraform state is now the definitive infrastructure record
+✅ **Zero Drift**: Application always reflects actual AWS resources
+✅ **92% Code Reduction**: Frontend simplified from 1,091 → 85 lines
+✅ **Better Reliability**: No conflicts between app-level and infrastructure operations
+
+**Important**: All infrastructure changes now go through Terraform - use the Infrastructure Dashboard (`/infrastructure`) or Terraform CLI. The Resource Management page (`/resource-management`) is view-only with real-time health monitoring.
+
+📖 **[Read the complete refactoring documentation](docs/RESOURCE_MANAGEMENT_REFACTOR.md)**
+
 ## Project Structure
 
 ```
@@ -86,6 +99,8 @@ See [REFACTORING_ARCHITECTURE.md](docs/REFACTORING_ARCHITECTURE.md) for detailed
 - **TwelveLabs Video Processing**: End-to-end video embedding generation with Marengo model
 - **Video Similarity Search**: Enterprise-grade video segment search with temporal filtering
 - **Text Embedding Integration**: Natural language search across stored text embeddings
+- **Terraform-First Infrastructure**: All infrastructure managed via Terraform for consistency and reliability
+- **Real-Time Health Monitoring**: Live connectivity checks with response time tracking for all backends
 - **Cost Optimization**: Real-time cost tracking and optimization strategies
 - **Production Monitoring**: Comprehensive logging, error handling, and performance metrics
 
@@ -138,6 +153,8 @@ STRUCTURED_LOGGING=true
 
 ## Quick Start
 
+### Infrastructure Setup (First Time)
+
 1. **Install Dependencies**:
    ```bash
    pip install -r requirements.txt
@@ -155,12 +172,27 @@ STRUCTURED_LOGGING=true
    # or use IAM roles, environment variables, etc.
    ```
 
-4. **Run Text Embedding Demo**:
+4. **Deploy Infrastructure via Terraform**:
+   ```bash
+   cd terraform
+   terraform init
+   terraform apply -var="deploy_s3vector=true"
+   # Or use the Infrastructure Dashboard at http://localhost:3000/infrastructure
+   ```
+
+5. **Verify Deployment**:
+   - Open Resource Management page: `http://localhost:3000/resource-management`
+   - Check that backends show "healthy" status with response times
+   - All resources should be visible in the tree view
+
+### Running Demos
+
+1. **Run Text Embedding Demo**:
    ```bash
    python examples/vector_operations_demo.py
    ```
 
-5. **Run Complete Video Pipeline Demo** ⭐:
+2. **Run Complete Video Pipeline Demo** ⭐:
    ```bash
    export REAL_AWS_DEMO=1  # Enable real AWS operations
    python examples/real_video_processing_demo.py
@@ -168,10 +200,27 @@ STRUCTURED_LOGGING=true
 
    This demonstrates the complete end-to-end video embedding pipeline:
    - Downloads Creative Commons sample video
-   - Processes with TwelveLabs Marengo model  
+   - Processes with TwelveLabs Marengo model
    - Stores embeddings in S3 Vector storage
    - Demonstrates similarity search capabilities
    - **Cost**: ~$0.01 for 15-second video processing
+
+### Infrastructure Management
+
+**View Resources**: Navigate to `/resource-management` to see all deployed infrastructure with real-time health status
+
+**Deploy/Modify Resources**:
+- **Option 1 (UI)**: Use Infrastructure Dashboard at `/infrastructure`
+- **Option 2 (CLI)**: Use Terraform commands:
+  ```bash
+  cd terraform
+  terraform plan    # Preview changes
+  terraform apply   # Apply changes
+  ```
+
+**Important**: Resource Management page is **view-only**. All infrastructure changes must go through Terraform (via UI or CLI).
+
+📖 **[Full Infrastructure Guide](docs/RESOURCE_MANAGEMENT_REFACTOR.md)**
 
 ## Core Components
 
