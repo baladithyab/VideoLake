@@ -58,8 +58,25 @@ export const resourcesAPI = {
     apiClient.delete(`/api/resources/vector-bucket/${bucketName}`),
 
   // Vector Index operations
-  createVectorIndex: (data: { bucket_name: string; index_name: string; dimension: number; similarity_function?: string }) =>
-    apiClient.post('/api/resources/vector-index', data),
+  listVectorIndexes: (bucketName: string) =>
+    apiClient.get(`/api/resources/vector-indexes/${bucketName}`),
+  createVectorIndex: (data: {
+    bucket_name: string;
+    index_name: string;
+    dimension: number;
+    distance_metric?: string;
+    data_type?: string;
+  }) =>
+    apiClient.post('/api/resources/create-vector-index', data),
+  deleteVectorIndex: (bucketName: string, indexName: string) =>
+    apiClient.delete(`/api/resources/delete-vector-index/${bucketName}/${indexName}`),
+  getVectorIndexStatus: (indexArn: string) =>
+    apiClient.get('/api/resources/vector-index/status', { params: { index_arn: indexArn } }),
+  storeEmbeddingsToIndex: (data: {
+    job_id: string;
+    index_arn: string;
+    backend?: string;
+  }) => apiClient.post('/api/resources/store-embeddings-to-index', data),
 
   // OpenSearch Domain operations
   createOpenSearchDomain: (data: { domain_name: string; instance_type?: string; instance_count?: number }) =>
@@ -92,6 +109,9 @@ export const resourcesAPI = {
     opensearch_instance_type?: string;
     opensearch_instance_count?: number;
   }) => apiClient.post('/api/resources/stack/create', data),
+
+  // Deployed resources tree
+  getDeployedResourcesTree: () => apiClient.get('/api/resources/deployed-resources-tree'),
 
   // Legacy endpoints
   cleanup: (resourceType?: string) => apiClient.delete('/api/resources/cleanup', { params: { resource_type: resourceType } }),
