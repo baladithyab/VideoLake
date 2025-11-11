@@ -1,7 +1,21 @@
 """
-Resource Management API Router.
+Resource Management Router - READ-ONLY Resource Viewer
 
-Handles AWS resource creation, scanning, and cleanup.
+This router provides READ-ONLY access to view deployed infrastructure from Terraform state.
+All resource creation and deletion is now handled via:
+  1. Infrastructure Dashboard (/infrastructure) for deployment operations
+  2. Terraform CLI for direct infrastructure management
+
+Key endpoints:
+  - GET /deployed-resources-tree: View complete infrastructure from tfstate
+  - GET /validate-backend/{type}: Check backend connectivity
+  - GET /vector-indexes/{bucket}: List vector indexes in a bucket
+  - POST /store-embeddings-to-index: Store embeddings (workflow operation, not CRUD)
+  
+For creating/deleting resources, use the Infrastructure Dashboard or Terraform directly.
+
+Note: The legacy /scan, /registry, and /active endpoints are maintained for backward compatibility
+but will be deprecated in future versions in favor of /deployed-resources-tree.
 """
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -12,17 +26,7 @@ import logging
 from src.services.aws_resource_scanner import AWSResourceScanner
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.opensearch_integration import OpenSearchIntegrationManager
-from src.services.resource_lifecycle_manager import (
-    ResourceLifecycleManager,
-    ResourceType,
-    ResourceState
-)
 from src.core.dependencies import get_storage_manager
-from src.api.validators import (
-    validate_bucket_name,
-    validate_index_name,
-    validate_domain_name
-)
 from src.utils.resource_registry import resource_registry
 from src.utils.logging_config import get_logger
 
@@ -31,96 +35,33 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-class CreateMediaBucketRequest(BaseModel):
-    """Request model for creating media bucket with validation."""
-    bucket_name: str = Field(..., description="S3 bucket name", min_length=3, max_length=63)
+# ==================== Request Models for Workflow Operations ====================
 
-    @validator('bucket_name')
-    def validate_name(cls, v):
-        return validate_bucket_name(v)
+class StoreEmbeddingsToIndexRequest(BaseModel):
+    """Request model for storing embeddings to index."""
+    job_id: str = Field(..., description="Processing job ID", min_length=1)
+    index_arn: str = Field(..., description="S3 Vector index ARN")
+    backend: str = Field(default="s3_vector", description="Backend type (s3_vector, opensearch, etc.)")
 
-
-class CreateVectorBucketRequest(BaseModel):
-    """Request model for creating vector bucket with validation."""
-    bucket_name: str = Field(..., description="S3 bucket name", min_length=3, max_length=63)
-    encryption_type: str = Field(default="SSE-S3", description="Encryption type")
-    kms_key_arn: Optional[str] = Field(None, description="KMS key ARN for SSE-KMS encryption")
-
-    @validator('bucket_name')
-    def validate_name(cls, v):
-        return validate_bucket_name(v)
+    @validator('backend')
+    def validate_backend(cls, v):
+        valid_backends = ["s3_vector", "opensearch", "qdrant", "lancedb"]
+        if v not in valid_backends:
+            raise ValueError(f"Invalid backend. Must be one of: {', '.join(valid_backends)}")
+        return v
 
 
-class CreateIndexRequest(BaseModel):
-    """Request model for creating vector index with validation."""
-    bucket_name: str = Field(..., description="S3 bucket name", min_length=3, max_length=63)
-    index_name: str = Field(..., description="Index name", min_length=1, max_length=255)
-    dimension: int = Field(..., description="Vector dimension", ge=1, le=4096)
-    similarity_function: str = Field(default="cosine", description="Similarity function")
-
-    @validator('bucket_name')
-    def validate_bucket(cls, v):
-        return validate_bucket_name(v)
-
-    @validator('index_name')
-    def validate_index(cls, v):
-        return validate_index_name(v)
-
-
-class CreateOpenSearchDomainRequest(BaseModel):
-    """Request model for creating OpenSearch domain with validation."""
-    domain_name: str = Field(..., description="OpenSearch domain name", min_length=3, max_length=28)
-    instance_type: str = Field(default="t3.small.search", description="Instance type")
-    instance_count: int = Field(default=1, ge=1, le=10, description="Number of instances")
-
-    @validator('domain_name')
-    def validate_name(cls, v):
-        return validate_domain_name(v)
-
-
-class DeleteResourceRequest(BaseModel):
-    """Request model for deleting resources."""
-    resource_id: str
-    force: bool = False  # For buckets that need to be emptied first
-
-
-class BatchCreateMediaBucketsRequest(BaseModel):
-    """Request model for batch creating media buckets."""
-    bucket_names: List[str]
-
-
-class BatchCreateVectorBucketsRequest(BaseModel):
-    """Request model for batch creating vector buckets."""
-    bucket_names: List[str]
-    encryption_type: str = "SSE-S3"
-    kms_key_arn: Optional[str] = None
-
-
-class BatchCreateOpenSearchDomainsRequest(BaseModel):
-    """Request model for batch creating OpenSearch domains."""
-    domain_names: List[str]
-    instance_type: str = "t3.small.search"
-    instance_count: int = 1
-
-
-class BatchDeleteRequest(BaseModel):
-    """Request model for batch deleting resources."""
-    resource_type: str  # 'media', 'vector', or 'opensearch'
-    resource_names: List[str]
-    force: bool = False  # For media buckets that need to be emptied first
-
-
-class CreateStackRequest(BaseModel):
-    """Request model for creating a complete S3Vector stack."""
-    project_name: str  # Base name for all resources (e.g., 'my-project')
-    create_vector_bucket: bool = True
-    create_media_bucket: bool = True
-    create_opensearch_domain: bool = True
-    # Optional configurations
-    encryption_type: str = "SSE-S3"
-    kms_key_arn: Optional[str] = None
-    opensearch_instance_type: str = "t3.small.search"
-    opensearch_instance_count: int = 1
+class VectorIndexInfo(BaseModel):
+    """Vector index information model."""
+    index_name: str
+    index_arn: str
+    dimension: int
+    distance_metric: str
+    data_type: str
+    vector_count: int = 0
+    status: str
+    created_at: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 @router.get("/scan")
@@ -161,85 +102,12 @@ async def get_resource_registry():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/vector-bucket")
-async def create_vector_bucket(request: CreateVectorBucketRequest):
-    """Create a new S3 vector bucket with lifecycle management."""
-    try:
-        lifecycle_manager = ResourceLifecycleManager()
-        status = lifecycle_manager.create_vector_bucket(
-            bucket_name=request.bucket_name,
-            encryption_type=request.encryption_type,
-            kms_key_arn=request.kms_key_arn
-        )
-
-        return {
-            "success": status.state == ResourceState.ACTIVE,
-            "status": {
-                "resource_id": status.resource_id,
-                "resource_type": status.resource_type.value,
-                "state": status.state.value,
-                "arn": status.arn,
-                "region": status.region,
-                "progress_percentage": status.progress_percentage,
-                "error_message": status.error_message,
-                "metadata": status.metadata
-            }
-        }
-    except Exception as e:
-        logger.error(f"Failed to create vector bucket: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/vector-index")
-async def create_vector_index(
-    request: CreateIndexRequest,
-    storage_manager: S3VectorStorageManager = Depends(get_storage_manager)
-):
-    """Create a new vector index."""
-    try:
-        result = storage_manager.create_index(
-            bucket_name=request.bucket_name,
-            index_name=request.index_name,
-            dimension=request.dimension,
-            similarity_function=request.similarity_function
-        )
-        return {
-            "success": True,
-            "result": result
-        }
-    except Exception as e:
-        logger.error(f"Failed to create vector index: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/opensearch-domain")
-async def create_opensearch_domain(request: CreateOpenSearchDomainRequest):
-    """Create a new OpenSearch domain with lifecycle management."""
-    try:
-        lifecycle_manager = ResourceLifecycleManager()
-        status = lifecycle_manager.create_opensearch_domain(
-            domain_name=request.domain_name,
-            instance_type=request.instance_type,
-            instance_count=request.instance_count
-        )
-
-        return {
-            "success": status.state in [ResourceState.CREATING, ResourceState.ACTIVE],
-            "status": {
-                "resource_id": status.resource_id,
-                "resource_type": status.resource_type.value,
-                "state": status.state.value,
-                "arn": status.arn,
-                "region": status.region,
-                "progress_percentage": status.progress_percentage,
-                "estimated_time_remaining": status.estimated_time_remaining,
-                "error_message": status.error_message,
-                "metadata": status.metadata
-            }
-        }
-    except Exception as e:
-        logger.error(f"Failed to create OpenSearch domain: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# ====================DEPRECATED ENDPOINTS REMOVED ====================
+# The following endpoints have been removed as part of the Terraform-first architecture:
+# - POST /vector-bucket (create vector bucket)
+# - POST /vector-index (create vector index - old endpoint)
+# - POST /opensearch-domain (create OpenSearch domain)
+# All resource creation now happens via Terraform. Use the Infrastructure Dashboard.
 
 
 @router.delete("/cleanup")
@@ -285,502 +153,960 @@ async def set_active_resource(resource_type: str, resource_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== New Lifecycle Management Endpoints ====================
+# ==================== DEPRECATED ENDPOINTS REMOVED ====================
+# The following endpoints have been removed as part of the Terraform-first architecture:
+# - POST /media-bucket (create media bucket)
+# - DELETE /media-bucket/{bucket_name} (delete media bucket)
+# - DELETE /vector-bucket/{bucket_name} (delete vector bucket)
+# - DELETE /opensearch-domain/{domain_name} (delete OpenSearch domain)
+# - GET /status/{resource_type}/{resource_id} (get resource status)
+# - POST /batch/media-buckets (batch create media buckets)
+# - POST /batch/vector-buckets (batch create vector buckets)
+# - POST /batch/opensearch-domains (batch create OpenSearch domains)
+# - POST /batch/delete (batch delete resources)
+# - POST /stack/create (create complete stack)
+# All resource creation/deletion now happens via Terraform. Use the Infrastructure Dashboard.
 
-@router.post("/media-bucket")
-async def create_media_bucket(request: CreateMediaBucketRequest):
-    """Create a new S3 media bucket."""
+
+# ==================== Backend Connectivity Validation ====================
+
+@router.get("/validate-backend/{backend_type}")
+async def validate_backend_connectivity(backend_type: str):
+    """
+    Validate that a vector store backend is accessible.
+    
+    Tests actual connectivity to the backend service and returns
+    detailed health information including response time.
+    
+    Args:
+        backend_type: Type of backend (s3_vector, opensearch, qdrant, lancedb)
+    
+    Returns:
+        Connectivity validation result with:
+        - accessible: Whether backend is accessible
+        - endpoint: Backend endpoint/URL
+        - response_time_ms: Response time in milliseconds
+        - health_status: Health status (healthy, degraded, unhealthy)
+        - error_message: Error message if not accessible
+        - details: Additional backend-specific details
+    """
     try:
-        lifecycle_manager = ResourceLifecycleManager()
-        status = lifecycle_manager.create_media_bucket(request.bucket_name)
-
-        return {
-            "success": status.state == ResourceState.ACTIVE,
-            "status": {
-                "resource_id": status.resource_id,
-                "resource_type": status.resource_type.value,
-                "state": status.state.value,
-                "arn": status.arn,
-                "region": status.region,
-                "progress_percentage": status.progress_percentage,
-                "error_message": status.error_message,
-                "metadata": status.metadata
-            }
+        from src.services.vector_store_provider import (
+            VectorStoreType,
+            VectorStoreProviderFactory
+        )
+        
+        # Map string to VectorStoreType enum
+        backend_type_lower = backend_type.lower()
+        type_map = {
+            "s3_vector": VectorStoreType.S3_VECTOR,
+            "opensearch": VectorStoreType.OPENSEARCH,
+            "qdrant": VectorStoreType.QDRANT,
+            "lancedb": VectorStoreType.LANCEDB
         }
-    except Exception as e:
-        logger.error(f"Failed to create media bucket: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.delete("/media-bucket/{bucket_name}")
-async def delete_media_bucket(bucket_name: str, force: bool = False):
-    """Delete a media bucket."""
-    try:
-        lifecycle_manager = ResourceLifecycleManager()
-        status = lifecycle_manager.delete_media_bucket(bucket_name, force_empty=force)
-
-        return {
-            "success": status.state == ResourceState.DELETED,
-            "status": {
-                "resource_id": status.resource_id,
-                "resource_type": status.resource_type.value,
-                "state": status.state.value,
-                "progress_percentage": status.progress_percentage,
-                "error_message": status.error_message,
-                "metadata": status.metadata
-            }
-        }
-    except Exception as e:
-        logger.error(f"Failed to delete media bucket: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.delete("/vector-bucket/{bucket_name}")
-async def delete_vector_bucket(bucket_name: str):
-    """Delete a vector bucket."""
-    try:
-        lifecycle_manager = ResourceLifecycleManager()
-        status = lifecycle_manager.delete_vector_bucket(bucket_name)
-
-        return {
-            "success": status.state == ResourceState.DELETED,
-            "status": {
-                "resource_id": status.resource_id,
-                "resource_type": status.resource_type.value,
-                "state": status.state.value,
-                "progress_percentage": status.progress_percentage,
-                "error_message": status.error_message
-            }
-        }
-    except Exception as e:
-        logger.error(f"Failed to delete vector bucket: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.delete("/opensearch-domain/{domain_name}")
-async def delete_opensearch_domain(domain_name: str):
-    """Delete an OpenSearch domain."""
-    try:
-        lifecycle_manager = ResourceLifecycleManager()
-        status = lifecycle_manager.delete_opensearch_domain(domain_name)
-
-        return {
-            "success": status.state in [ResourceState.DELETING, ResourceState.DELETED],
-            "status": {
-                "resource_id": status.resource_id,
-                "resource_type": status.resource_type.value,
-                "state": status.state.value,
-                "progress_percentage": status.progress_percentage,
-                "estimated_time_remaining": status.estimated_time_remaining,
-                "error_message": status.error_message
-            }
-        }
-    except Exception as e:
-        logger.error(f"Failed to delete OpenSearch domain: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/status/{resource_type}/{resource_id}")
-async def get_resource_status(resource_type: str, resource_id: str):
-    """Get current status of a resource."""
-    try:
-        lifecycle_manager = ResourceLifecycleManager()
-
-        # Convert string to ResourceType enum
+        
+        if backend_type_lower not in type_map:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid backend type: {backend_type}. "
+                       f"Valid types: {', '.join(type_map.keys())}"
+            )
+        
+        store_type = type_map[backend_type_lower]
+        
+        # Check if provider is available
+        if not VectorStoreProviderFactory.is_provider_available(store_type):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Provider not available for backend type: {backend_type}"
+            )
+        
+        # Create provider and validate connectivity
+        provider = VectorStoreProviderFactory.create_provider(store_type)
+        
+        # Add timeout to prevent hanging
+        import asyncio
         try:
-            res_type = ResourceType(resource_type)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid resource type: {resource_type}")
-
-        status = lifecycle_manager.get_resource_status(res_type, resource_id)
-
-        return {
-            "success": True,
-            "status": {
-                "resource_id": status.resource_id,
-                "resource_type": status.resource_type.value,
-                "state": status.state.value,
-                "arn": status.arn,
-                "region": status.region,
-                "progress_percentage": status.progress_percentage,
-                "estimated_time_remaining": status.estimated_time_remaining,
-                "error_message": status.error_message,
-                "metadata": status.metadata
+            validation_result = await asyncio.wait_for(
+                asyncio.to_thread(provider.validate_connectivity),
+                timeout=5.0
+            )
+        except asyncio.TimeoutError:
+            validation_result = {
+                "accessible": False,
+                "endpoint": "unknown",
+                "response_time_ms": 5000.0,
+                "health_status": "unhealthy",
+                "error_message": "Validation timed out after 5 seconds",
+                "details": {
+                    "backend_type": backend_type
+                }
             }
+        
+        return {
+            "success": validation_result["accessible"],
+            "backend_type": backend_type,
+            "validation": validation_result
         }
+        
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get resource status: {e}")
+        logger.error(f"Backend validation failed for {backend_type}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== Batch Operations ====================
-
-@router.post("/batch/media-buckets")
-async def batch_create_media_buckets(request: BatchCreateMediaBucketsRequest):
-    """Create multiple media buckets in batch."""
-    try:
-        lifecycle_manager = ResourceLifecycleManager()
-        results = []
-
-        for bucket_name in request.bucket_names:
-            try:
-                status = lifecycle_manager.create_media_bucket(bucket_name)
-                results.append({
-                    "bucket_name": bucket_name,
-                    "success": status.state == ResourceState.ACTIVE,
-                    "status": {
-                        "resource_id": status.resource_id,
-                        "state": status.state.value,
-                        "arn": status.arn,
-                        "region": status.region,
-                        "error_message": status.error_message
-                    }
-                })
-            except Exception as e:
-                logger.error(f"Failed to create media bucket {bucket_name}: {e}")
-                results.append({
-                    "bucket_name": bucket_name,
-                    "success": False,
-                    "error": str(e)
-                })
-
-        success_count = sum(1 for r in results if r.get("success", False))
-        return {
-            "success": success_count > 0,
-            "total": len(request.bucket_names),
-            "successful": success_count,
-            "failed": len(request.bucket_names) - success_count,
-            "results": results
-        }
-    except Exception as e:
-        logger.error(f"Batch create media buckets failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+class ValidateBackendsRequest(BaseModel):
+    """Request model for batch backend validation."""
+    backend_types: List[str] = Field(..., description="List of backend types to validate")
 
 
-@router.post("/batch/vector-buckets")
-async def batch_create_vector_buckets(request: BatchCreateVectorBucketsRequest):
-    """Create multiple vector buckets in batch."""
-    try:
-        lifecycle_manager = ResourceLifecycleManager()
-        results = []
-
-        for bucket_name in request.bucket_names:
-            try:
-                status = lifecycle_manager.create_vector_bucket(
-                    bucket_name,
-                    encryption_type=request.encryption_type,
-                    kms_key_arn=request.kms_key_arn
-                )
-                results.append({
-                    "bucket_name": bucket_name,
-                    "success": status.state == ResourceState.ACTIVE,
-                    "status": {
-                        "resource_id": status.resource_id,
-                        "state": status.state.value,
-                        "arn": status.arn,
-                        "region": status.region,
-                        "error_message": status.error_message
-                    }
-                })
-            except Exception as e:
-                logger.error(f"Failed to create vector bucket {bucket_name}: {e}")
-                results.append({
-                    "bucket_name": bucket_name,
-                    "success": False,
-                    "error": str(e)
-                })
-
-        success_count = sum(1 for r in results if r.get("success", False))
-        return {
-            "success": success_count > 0,
-            "total": len(request.bucket_names),
-            "successful": success_count,
-            "failed": len(request.bucket_names) - success_count,
-            "results": results
-        }
-    except Exception as e:
-        logger.error(f"Batch create vector buckets failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/batch/opensearch-domains")
-async def batch_create_opensearch_domains(request: BatchCreateOpenSearchDomainsRequest):
-    """Create multiple OpenSearch domains in batch."""
-    try:
-        lifecycle_manager = ResourceLifecycleManager()
-        results = []
-
-        for domain_name in request.domain_names:
-            try:
-                status = lifecycle_manager.create_opensearch_domain(
-                    domain_name,
-                    instance_type=request.instance_type,
-                    instance_count=request.instance_count
-                )
-                results.append({
-                    "domain_name": domain_name,
-                    "success": status.state == ResourceState.CREATING,
-                    "status": {
-                        "resource_id": status.resource_id,
-                        "state": status.state.value,
-                        "arn": status.arn,
-                        "region": status.region,
-                        "estimated_time_remaining": status.estimated_time_remaining,
-                        "error_message": status.error_message
-                    }
-                })
-            except Exception as e:
-                logger.error(f"Failed to create OpenSearch domain {domain_name}: {e}")
-                results.append({
-                    "domain_name": domain_name,
-                    "success": False,
-                    "error": str(e)
-                })
-
-        success_count = sum(1 for r in results if r.get("success", False))
-        return {
-            "success": success_count > 0,
-            "total": len(request.domain_names),
-            "successful": success_count,
-            "failed": len(request.domain_names) - success_count,
-            "results": results
-        }
-    except Exception as e:
-        logger.error(f"Batch create OpenSearch domains failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/batch/delete")
-async def batch_delete_resources(request: BatchDeleteRequest):
-    """Delete multiple resources in batch."""
-    try:
-        lifecycle_manager = ResourceLifecycleManager()
-        results = []
-
-        for resource_name in request.resource_names:
-            try:
-                if request.resource_type == "media":
-                    status = lifecycle_manager.delete_media_bucket(resource_name, force_empty=request.force)
-                elif request.resource_type == "vector":
-                    status = lifecycle_manager.delete_vector_bucket(resource_name)
-                elif request.resource_type == "opensearch":
-                    status = lifecycle_manager.delete_opensearch_domain(resource_name)
-                else:
-                    raise ValueError(f"Invalid resource type: {request.resource_type}")
-
-                results.append({
-                    "resource_name": resource_name,
-                    "success": status.state in [ResourceState.DELETED, ResourceState.DELETING],
-                    "status": {
-                        "resource_id": status.resource_id,
-                        "state": status.state.value,
-                        "error_message": status.error_message
-                    }
-                })
-            except Exception as e:
-                logger.error(f"Failed to delete {request.resource_type} resource {resource_name}: {e}")
-                results.append({
-                    "resource_name": resource_name,
-                    "success": False,
-                    "error": str(e)
-                })
-
-        success_count = sum(1 for r in results if r.get("success", False))
-        return {
-            "success": success_count > 0,
-            "total": len(request.resource_names),
-            "successful": success_count,
-            "failed": len(request.resource_names) - success_count,
-            "results": results
-        }
-    except Exception as e:
-        logger.error(f"Batch delete resources failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/stack/create")
-async def create_stack(request: CreateStackRequest):
+@router.post("/validate-backends")
+async def validate_multiple_backends(request: ValidateBackendsRequest):
     """
-    Create a complete S3Vector stack with selected components.
-
-    Creates a coordinated set of resources with consistent naming:
-    - Vector bucket: {project_name}-vector-bucket
-    - Media bucket: {project_name}-media-bucket
-    - OpenSearch domain: {project_name}-os (shortened to meet 28 char limit)
-
-    Note: OpenSearch domain names must be ≤28 characters
+    Validate multiple vector store backends in parallel.
+    
+    Tests connectivity to multiple backends simultaneously and returns
+    results for each. Useful for checking which backends are available
+    before processing workflows.
+    
+    Args:
+        request: Request containing list of backend types to validate
+    
+    Returns:
+        Dictionary with validation results for each backend:
+        - accessible: Whether backend is accessible
+        - endpoint: Backend endpoint/URL
+        - response_time_ms: Response time in milliseconds
+        - health_status: Health status (healthy, degraded, unhealthy)
+        - error_message: Error message if not accessible
     """
     try:
-        lifecycle_manager = ResourceLifecycleManager()
-
-        # Validate OpenSearch domain name length (AWS limit is 28 characters)
-        if request.create_opensearch_domain:
-            opensearch_domain_name = f"{request.project_name}-os"
-            if len(opensearch_domain_name) > 28:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"OpenSearch domain name '{opensearch_domain_name}' is too long ({len(opensearch_domain_name)} chars). "
-                           f"Project name must be ≤25 characters to allow for '-os' suffix (AWS limit: 28 chars total). "
-                           f"Current project name '{request.project_name}' is {len(request.project_name)} characters."
-                )
-
-        results = {
-            "project_name": request.project_name,
-            "resources_created": [],
-            "resources_failed": [],
-            "details": {}
+        from src.services.vector_store_provider import (
+            VectorStoreType,
+            VectorStoreProviderFactory
+        )
+        import asyncio
+        
+        # Map string to VectorStoreType enum
+        type_map = {
+            "s3_vector": VectorStoreType.S3_VECTOR,
+            "opensearch": VectorStoreType.OPENSEARCH,
+            "qdrant": VectorStoreType.QDRANT,
+            "lancedb": VectorStoreType.LANCEDB
         }
-
-        # Create vector bucket if requested
-        if request.create_vector_bucket:
-            vector_bucket_name = f"{request.project_name}-vector-bucket"
-            try:
-                logger.info(f"Creating vector bucket: {vector_bucket_name}")
-                status = lifecycle_manager.create_vector_bucket(
-                    bucket_name=vector_bucket_name,
-                    encryption_type=request.encryption_type,
-                    kms_key_arn=request.kms_key_arn
-                )
-
-                if status.state == ResourceState.ACTIVE:
-                    results["resources_created"].append({
-                        "type": "vector_bucket",
-                        "name": vector_bucket_name
-                    })
-                    results["details"]["vector_bucket"] = {
-                        "name": vector_bucket_name,
-                        "status": "created",
-                        "state": status.state.value
-                    }
-                else:
-                    results["resources_failed"].append({
-                        "type": "vector_bucket",
-                        "name": vector_bucket_name,
-                        "error": status.error_message
-                    })
-                    results["details"]["vector_bucket"] = {
-                        "name": vector_bucket_name,
-                        "status": "failed",
-                        "error": status.error_message
-                    }
-            except Exception as e:
-                logger.error(f"Failed to create vector bucket: {e}")
-                results["resources_failed"].append({
-                    "type": "vector_bucket",
-                    "name": vector_bucket_name,
-                    "error": str(e)
-                })
-                results["details"]["vector_bucket"] = {
-                    "name": vector_bucket_name,
-                    "status": "failed",
-                    "error": str(e)
+        
+        results = {}
+        validation_tasks = []
+        
+        async def validate_backend(backend_type: str):
+            """Validate a single backend with timeout."""
+            backend_type_lower = backend_type.lower()
+            
+            if backend_type_lower not in type_map:
+                return backend_type, {
+                    "accessible": False,
+                    "endpoint": "unknown",
+                    "response_time_ms": 0.0,
+                    "health_status": "unhealthy",
+                    "error_message": f"Invalid backend type: {backend_type}"
                 }
-
-        # Create media bucket if requested
-        if request.create_media_bucket:
-            media_bucket_name = f"{request.project_name}-media-bucket"
-            try:
-                logger.info(f"Creating media bucket: {media_bucket_name}")
-                status = lifecycle_manager.create_media_bucket(bucket_name=media_bucket_name)
-
-                if status.state == ResourceState.ACTIVE:
-                    results["resources_created"].append({
-                        "type": "media_bucket",
-                        "name": media_bucket_name
-                    })
-                    results["details"]["media_bucket"] = {
-                        "name": media_bucket_name,
-                        "status": "created",
-                        "state": status.state.value
-                    }
-                else:
-                    results["resources_failed"].append({
-                        "type": "media_bucket",
-                        "name": media_bucket_name,
-                        "error": status.error_message
-                    })
-                    results["details"]["media_bucket"] = {
-                        "name": media_bucket_name,
-                        "status": "failed",
-                        "error": status.error_message
-                    }
-            except Exception as e:
-                logger.error(f"Failed to create media bucket: {e}")
-                results["resources_failed"].append({
-                    "type": "media_bucket",
-                    "name": media_bucket_name,
-                    "error": str(e)
-                })
-                results["details"]["media_bucket"] = {
-                    "name": media_bucket_name,
-                    "status": "failed",
-                    "error": str(e)
+            
+            store_type = type_map[backend_type_lower]
+            
+            # Check if provider is available
+            if not VectorStoreProviderFactory.is_provider_available(store_type):
+                return backend_type, {
+                    "accessible": False,
+                    "endpoint": "unknown",
+                    "response_time_ms": 0.0,
+                    "health_status": "unhealthy",
+                    "error_message": f"Provider not available for {backend_type}"
                 }
-
-        # Create OpenSearch domain if requested
-        if request.create_opensearch_domain:
-            # Use shortened suffix to meet AWS 28-character limit
-            opensearch_domain_name = f"{request.project_name}-os"
+            
             try:
-                logger.info(f"Creating OpenSearch domain: {opensearch_domain_name}")
-                status = lifecycle_manager.create_opensearch_domain(
-                    domain_name=opensearch_domain_name,
-                    instance_type=request.opensearch_instance_type,
-                    instance_count=request.opensearch_instance_count
+                provider = VectorStoreProviderFactory.create_provider(store_type)
+                
+                # Validate with timeout
+                validation_result = await asyncio.wait_for(
+                    asyncio.to_thread(provider.validate_connectivity),
+                    timeout=5.0
                 )
-
-                if status.state in [ResourceState.CREATING, ResourceState.ACTIVE]:
-                    results["resources_created"].append({
-                        "type": "opensearch_domain",
-                        "name": opensearch_domain_name
-                    })
-                    results["details"]["opensearch_domain"] = {
-                        "name": opensearch_domain_name,
-                        "status": "creating" if status.state == ResourceState.CREATING else "created",
-                        "state": status.state.value,
-                        "note": "Domain creation takes 5-10 minutes"
-                    }
-                else:
-                    results["resources_failed"].append({
-                        "type": "opensearch_domain",
-                        "name": opensearch_domain_name,
-                        "error": status.error_message
-                    })
-                    results["details"]["opensearch_domain"] = {
-                        "name": opensearch_domain_name,
-                        "status": "failed",
-                        "error": status.error_message
-                    }
+                return backend_type, validation_result
+                
+            except asyncio.TimeoutError:
+                return backend_type, {
+                    "accessible": False,
+                    "endpoint": "unknown",
+                    "response_time_ms": 5000.0,
+                    "health_status": "unhealthy",
+                    "error_message": "Validation timed out after 5 seconds"
+                }
             except Exception as e:
-                logger.error(f"Failed to create OpenSearch domain: {e}")
-                results["resources_failed"].append({
+                logger.error(f"Validation failed for {backend_type}: {e}")
+                return backend_type, {
+                    "accessible": False,
+                    "endpoint": "unknown",
+                    "response_time_ms": 0.0,
+                    "health_status": "unhealthy",
+                    "error_message": str(e)
+                }
+        
+        # Validate all backends in parallel
+        validation_tasks = [
+            validate_backend(backend_type)
+            for backend_type in request.backend_types
+        ]
+        
+        validation_results = await asyncio.gather(*validation_tasks)
+        
+        # Build results dictionary
+        for backend_type, validation_result in validation_results:
+            results[backend_type] = validation_result
+        
+        # Count accessible backends
+        accessible_count = sum(
+            1 for result in results.values()
+            if result.get("accessible", False)
+        )
+        
+        return {
+            "success": accessible_count > 0,
+            "total_backends": len(request.backend_types),
+            "accessible_backends": accessible_count,
+            "inaccessible_backends": len(request.backend_types) - accessible_count,
+            "results": results
+        }
+        
+    except Exception as e:
+        logger.error(f"Batch backend validation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Terraform State Resource Extraction ====================
+
+async def _get_media_buckets_from_tfstate(parser) -> List[Dict[str, Any]]:
+    """
+    Extract media buckets from Terraform state.
+    
+    Looks for aws_s3_bucket resources from module.shared_bucket.
+    """
+    buckets = []
+    
+    try:
+        # Get all S3 bucket resources from shared_bucket module
+        for resource in parser.resources:
+            if (resource.type == 'aws_s3_bucket' and
+                resource.module and 'shared_bucket' in resource.module):
+                
+                bucket_name = resource.attributes.get('bucket', resource.attributes.get('id'))
+                region = resource.attributes.get('region', 'us-east-1')
+                arn = resource.attributes.get('arn', f"arn:aws:s3:::{bucket_name}")
+                
+                buckets.append({
+                    "type": "s3_bucket",
+                    "name": bucket_name,
+                    "arn": arn,
+                    "region": region,
+                    "status": "active",
+                    "metadata": {
+                        "source": "terraform",
+                        "tfstate_resource": resource.full_name
+                    }
+                })
+                
+    except Exception as e:
+        logger.warning(f"Failed to extract media buckets from tfstate: {e}")
+    
+    return buckets
+
+
+async def _get_s3vector_backend_from_tfstate(parser) -> Dict[str, Any]:
+    """
+    Extract S3 Vector backend info from Terraform state.
+    
+    S3 Vector buckets are created via null_resource with AWS CLI in module.s3vector[0].
+    """
+    backend = {
+        "type": "s3vector",
+        "name": "S3 Vectors",
+        "status": "not_deployed",
+        "children": []
+    }
+    
+    try:
+        # Look for null_resource in s3vector module
+        s3vector_resources = [
+            r for r in parser.resources
+            if r.module and 's3vector' in r.module
+        ]
+        
+        if not s3vector_resources:
+            return backend
+        
+        backend["status"] = "deployed"
+        
+        # Extract bucket information from null_resource triggers or outputs
+        for resource in s3vector_resources:
+            if resource.type == 'null_resource' and 'bucket' in resource.name:
+                triggers = resource.attributes.get('triggers', {})
+                bucket_name = triggers.get('bucket_name')
+                
+                if bucket_name:
+                    backend["children"].append({
+                        "type": "vector_bucket",
+                        "name": bucket_name,
+                        "status": "active",
+                        "metadata": {
+                            "source": "terraform",
+                            "tfstate_resource": resource.full_name
+                        }
+                    })
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract S3 Vector backend from tfstate: {e}")
+    
+    return backend
+
+
+async def _get_opensearch_backend_from_tfstate(parser) -> Dict[str, Any]:
+    """
+    Extract OpenSearch backend info from Terraform state.
+    
+    Looks for aws_opensearch_domain resources from module.opensearch[0].
+    """
+    backend = {
+        "type": "opensearch",
+        "name": "OpenSearch",
+        "status": "not_deployed",
+        "children": []
+    }
+    
+    try:
+        # Look for OpenSearch domains in opensearch module
+        for resource in parser.resources:
+            if (resource.type == 'aws_opensearch_domain' and
+                resource.module and 'opensearch' in resource.module):
+                
+                backend["status"] = "deployed"
+                
+                domain_name = resource.attributes.get('domain_name', resource.name)
+                endpoint = resource.attributes.get('endpoint')
+                arn = resource.attributes.get('arn')
+                region = resource.attributes.get('region', 'us-east-1')
+                
+                backend["children"].append({
                     "type": "opensearch_domain",
-                    "name": opensearch_domain_name,
-                    "error": str(e)
+                    "name": domain_name,
+                    "arn": arn,
+                    "endpoint": endpoint,
+                    "region": region,
+                    "status": "active",
+                    "metadata": {
+                        "source": "terraform",
+                        "tfstate_resource": resource.full_name
+                    }
                 })
-                results["details"]["opensearch_domain"] = {
-                    "name": opensearch_domain_name,
-                    "status": "failed",
-                    "error": str(e)
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract OpenSearch backend from tfstate: {e}")
+    
+    return backend
+
+
+async def _get_qdrant_backend_from_tfstate(parser) -> Dict[str, Any]:
+    """
+    Extract Qdrant backend info from Terraform state.
+    
+    Looks for aws_instance resources from module.qdrant[0].
+    """
+    backend = {
+        "type": "qdrant",
+        "name": "Qdrant",
+        "status": "not_deployed",
+        "children": []
+    }
+    
+    try:
+        # Look for EC2 instances in qdrant module
+        for resource in parser.resources:
+            if (resource.type == 'aws_instance' and
+                resource.module and 'qdrant' in resource.module):
+                
+                backend["status"] = "deployed"
+                
+                instance_id = resource.attributes.get('id')
+                public_ip = resource.attributes.get('public_ip')
+                endpoint = f"http://{public_ip}:6333" if public_ip else None
+                
+                backend["children"].append({
+                    "type": "qdrant_instance",
+                    "name": f"qdrant-{instance_id[-8:]}",
+                    "instance_id": instance_id,
+                    "endpoint": endpoint,
+                    "status": "active",
+                    "metadata": {
+                        "source": "terraform",
+                        "tfstate_resource": resource.full_name,
+                        "public_ip": public_ip
+                    }
+                })
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract Qdrant backend from tfstate: {e}")
+    
+    return backend
+
+
+async def _get_lancedb_backend_from_tfstate(parser) -> Dict[str, Any]:
+    """
+    Extract LanceDB backend info from Terraform state.
+    
+    Looks for S3/EFS/EBS resources from module.lancedb_*[0].
+    """
+    backend = {
+        "type": "lancedb",
+        "name": "LanceDB",
+        "status": "not_deployed",
+        "children": []
+    }
+    
+    try:
+        # Look for LanceDB S3 backends
+        for resource in parser.resources:
+            if (resource.type == 'aws_s3_bucket' and
+                resource.module and 'lancedb' in resource.module):
+                
+                backend["status"] = "deployed"
+                
+                bucket_name = resource.attributes.get('bucket', resource.attributes.get('id'))
+                arn = resource.attributes.get('arn')
+                
+                backend["children"].append({
+                    "type": "lancedb_s3",
+                    "name": bucket_name,
+                    "arn": arn,
+                    "backend_type": "s3",
+                    "status": "active",
+                    "metadata": {
+                        "source": "terraform",
+                        "tfstate_resource": resource.full_name,
+                        "connection_uri": f"s3://{bucket_name}/"
+                    }
+                })
+        
+        # Look for LanceDB EFS backends
+        for resource in parser.resources:
+            if (resource.type == 'aws_efs_file_system' and
+                resource.module and 'lancedb' in resource.module):
+                
+                backend["status"] = "deployed"
+                
+                efs_id = resource.attributes.get('id')
+                
+                backend["children"].append({
+                    "type": "lancedb_efs",
+                    "name": f"efs-{efs_id[-8:]}",
+                    "filesystem_id": efs_id,
+                    "backend_type": "efs",
+                    "status": "active",
+                    "metadata": {
+                        "source": "terraform",
+                        "tfstate_resource": resource.full_name
+                    }
+                })
+        
+        # Look for LanceDB EBS backends
+        for resource in parser.resources:
+            if (resource.type == 'aws_ebs_volume' and
+                resource.module and 'lancedb' in resource.module):
+                
+                backend["status"] = "deployed"
+                
+                volume_id = resource.attributes.get('id')
+                
+                backend["children"].append({
+                    "type": "lancedb_ebs",
+                    "name": f"ebs-{volume_id[-8:]}",
+                    "volume_id": volume_id,
+                    "backend_type": "ebs",
+                    "status": "active",
+                    "metadata": {
+                        "source": "terraform",
+                        "tfstate_resource": resource.full_name
+                    }
+                })
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract LanceDB backend from tfstate: {e}")
+    
+    return backend
+
+
+async def _add_health_check_to_backend(node: Dict[str, Any], backend_type: str) -> Dict[str, Any]:
+    """
+    Add health check information to a backend node.
+    
+    Runs connectivity validation with 3-second timeout and adds:
+    - connectivity: "healthy", "degraded", "unhealthy", "timeout", "error", "unavailable"
+    - endpoint: Backend endpoint URL
+    - response_time_ms: Response time in milliseconds
+    - health_details: Additional health information
+    """
+    from src.services.vector_store_provider import (
+        VectorStoreType,
+        VectorStoreProviderFactory
+    )
+    import asyncio
+    
+    # Map backend type string to VectorStoreType enum
+    backend_map = {
+        "s3vector": VectorStoreType.S3_VECTOR,
+        "opensearch": VectorStoreType.OPENSEARCH,
+        "qdrant": VectorStoreType.QDRANT,
+        "lancedb": VectorStoreType.LANCEDB
+    }
+    
+    store_type = backend_map.get(backend_type)
+    if not store_type:
+        node["connectivity"] = "unavailable"
+        return node
+    
+    try:
+        # Check if provider is available
+        if not VectorStoreProviderFactory.is_provider_available(store_type):
+            node["connectivity"] = "unavailable"
+            return node
+        
+        # Create provider and validate connectivity
+        provider = VectorStoreProviderFactory.create_provider(store_type)
+        
+        # Run validation with 3-second timeout
+        validation_result = await asyncio.wait_for(
+            asyncio.to_thread(provider.validate_connectivity),
+            timeout=3.0
+        )
+        
+        # Add health check fields to node
+        if validation_result.get("accessible"):
+            node["connectivity"] = validation_result.get("health_status", "healthy")
+        else:
+            node["connectivity"] = "unavailable"
+        
+        node["endpoint"] = validation_result.get("endpoint")
+        node["response_time_ms"] = validation_result.get("response_time_ms")
+        node["health_details"] = validation_result.get("details", {})
+        
+    except asyncio.TimeoutError:
+        node["connectivity"] = "timeout"
+        logger.warning(f"Health check timeout for {backend_type}")
+    except Exception as e:
+        node["connectivity"] = "error"
+        node["health_details"] = {"error": str(e)}
+        logger.warning(f"Health check failed for {backend_type}: {e}")
+    
+    return node
+
+
+@router.get("/deployed-resources-tree")
+async def get_deployed_resources_tree():
+    """
+    Get hierarchical view of deployed resources from Terraform state.
+    
+    Reads terraform/terraform.tfstate and parses deployed infrastructure to
+    provide a true view of what's actually deployed via Terraform.
+    
+    Returns tree structure showing:
+    - Shared media buckets (from module.shared_bucket)
+    - Vector backends:
+      - S3 Vector (from module.s3vector[0])
+      - OpenSearch (from module.opensearch[0])
+      - Qdrant (from module.qdrant[0])
+      - LanceDB (from module.lancedb_*[0])
+    
+    Each backend includes health check information with connectivity status.
+    """
+    import os
+    from pathlib import Path
+    from src.utils.terraform_state_parser import TerraformStateParser
+    import asyncio
+    
+    tfstate_path = Path("terraform/terraform.tfstate")
+    
+    try:
+        # Check if tfstate exists
+        if not tfstate_path.exists():
+            return {
+                "success": False,
+                "message": "No terraform state found. Run 'terraform apply' first.",
+                "tree": None
+            }
+        
+        # Check if tfstate is empty
+        if tfstate_path.stat().st_size == 0:
+            return {
+                "success": True,
+                "message": "Terraform state is empty. No resources have been deployed yet.",
+                "tree": {
+                    "shared_resources": {
+                        "type": "shared",
+                        "name": "Shared Resources",
+                        "status": "empty",
+                        "children": []
+                    },
+                    "vector_backends": []
+                },
+                "metadata": {
+                    "tfstate_path": str(tfstate_path),
+                    "tfstate_modified": None,
+                    "total_resources": 0
                 }
-
-        # Determine overall success
-        success = len(results["resources_created"]) > 0
-
+            }
+        
+        # Parse Terraform state
+        try:
+            parser = TerraformStateParser(str(tfstate_path))
+        except Exception as e:
+            logger.error(f"Failed to parse Terraform state: {e}")
+            return {
+                "success": False,
+                "message": f"Failed to parse Terraform state: {str(e)}",
+                "tree": None
+            }
+        
+        # Extract resources from tfstate
+        media_buckets = await _get_media_buckets_from_tfstate(parser)
+        s3vector_backend = await _get_s3vector_backend_from_tfstate(parser)
+        opensearch_backend = await _get_opensearch_backend_from_tfstate(parser)
+        qdrant_backend = await _get_qdrant_backend_from_tfstate(parser)
+        lancedb_backend = await _get_lancedb_backend_from_tfstate(parser)
+        
+        # Add health checks to backends (run in parallel)
+        health_check_tasks = [
+            _add_health_check_to_backend(s3vector_backend, "s3vector"),
+            _add_health_check_to_backend(opensearch_backend, "opensearch"),
+            _add_health_check_to_backend(qdrant_backend, "qdrant"),
+            _add_health_check_to_backend(lancedb_backend, "lancedb")
+        ]
+        
+        await asyncio.gather(*health_check_tasks, return_exceptions=True)
+        
+        # Build tree structure
+        tree = {
+            "shared_resources": {
+                "type": "shared",
+                "name": "Shared Resources",
+                "status": "active" if media_buckets else "empty",
+                "children": media_buckets
+            },
+            "vector_backends": [
+                s3vector_backend,
+                opensearch_backend,
+                qdrant_backend,
+                lancedb_backend
+            ]
+        }
+        
+        # Calculate total resources
+        total_resources = len(media_buckets)
+        for backend in tree["vector_backends"]:
+            total_resources += len(backend.get("children", []))
+        
+        # Get tfstate modification time
+        tfstate_modified = tfstate_path.stat().st_mtime
+        
         return {
-            "success": success,
-            "message": f"Created {len(results['resources_created'])} of {len(results['resources_created']) + len(results['resources_failed'])} requested resources",
-            "project_name": request.project_name,
-            "created_count": len(results["resources_created"]),
-            "failed_count": len(results["resources_failed"]),
-            "resources_created": results["resources_created"],
-            "resources_failed": results["resources_failed"],
-            "details": results["details"]
+            "success": True,
+            "tree": tree,
+            "metadata": {
+                "tfstate_path": str(tfstate_path),
+                "tfstate_modified": tfstate_modified,
+                "total_resources": total_resources
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get deployed resources tree: {e}")
+        # Return partial tree if possible
+        return {
+            "success": False,
+            "message": f"Error reading Terraform state: {str(e)}",
+            "tree": None
         }
 
+
+
+# ==================== Vector Index Management Endpoints ====================
+
+@router.get("/vector-indexes/{bucket_name}")
+async def list_vector_indexes(
+    bucket_name: str,
+    storage_manager: S3VectorStorageManager = Depends(get_storage_manager)
+):
+    """
+    List all vector indexes within a vector bucket.
+    
+    Args:
+        bucket_name: Name of the S3 vector bucket
+        
+    Returns:
+        Dictionary with list of indexes containing:
+        - index_name: Name of the index
+        - index_arn: ARN of the index
+        - dimension: Vector dimension
+        - distance_metric: Distance metric used
+        - data_type: Data type (float32)
+        - vector_count: Number of vectors in the index
+        - status: Index status
+        - created_at: Creation timestamp
+    """
+    try:
+        logger.info(f"Listing vector indexes for bucket: {bucket_name}")
+        
+        # List indexes using storage manager
+        indexes = storage_manager.list_vector_indexes(bucket_name)
+        
+        # Format response
+        index_list = []
+        for index in indexes:
+            index_info = {
+                "index_name": index.get("indexName"),
+                "index_arn": index.get("indexArn"),
+                "dimension": index.get("dimension", 0),
+                "distance_metric": index.get("distanceMetric", "cosine"),
+                "data_type": index.get("dataType", "float32"),
+                "vector_count": index.get("vectorCount", 0),
+                "status": index.get("status", "active"),
+                "created_at": index.get("createdAt")
+            }
+            index_list.append(index_info)
+        
+        return {
+            "success": True,
+            "bucket_name": bucket_name,
+            "index_count": len(index_list),
+            "indexes": index_list
+        }
+        
     except Exception as e:
-        logger.error(f"Stack creation failed: {e}")
+        logger.error(f"Failed to list vector indexes for bucket {bucket_name}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ==================== DEPRECATED ENDPOINTS REMOVED ====================
+# The following endpoints have been removed as part of the Terraform-first architecture:
+# - POST /create-vector-index (create vector index)
+# - DELETE /delete-vector-index/{bucket_name}/{index_name} (delete vector index)
+# Vector indexes should be created via the backend provider APIs directly.
+
+
+@router.get("/vector-index/status")
+async def get_vector_index_status(
+    index_arn: str,
+    storage_manager: S3VectorStorageManager = Depends(get_storage_manager)
+):
+    """
+    Get detailed status and statistics for a vector index.
+    
+    Args:
+        index_arn: ARN of the vector index (format: arn:aws:s3vectors:region:account:bucket/bucket-name/index/index-name)
+        
+    Returns:
+        Dictionary with:
+        - index_arn: Index ARN
+        - status: Index status (active, creating, etc.)
+        - vector_count: Number of vectors in the index
+        - dimension: Vector dimension
+        - metric: Distance metric
+        - storage_size_mb: Estimated storage size in MB
+        - last_updated: Last update timestamp
+        - metadata: Additional index metadata
+    """
+    try:
+        logger.info(f"Getting status for index: {index_arn}")
+        
+        # Parse ARN to extract bucket and index name
+        from src.utils.arn_parser import ARNParser
+        
+        try:
+            parts = ARNParser.parse_s3vector_arn(index_arn)
+            bucket_name = parts["bucket"]
+            index_name = parts["index"]
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid index ARN format: {str(e)}"
+            )
+        
+        # Get index metadata
+        metadata = storage_manager.get_vector_index_metadata(bucket_name, index_name)
+        
+        if not metadata:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Index not found: {index_arn}"
+            )
+        
+        # Calculate estimated storage size (rough estimate: vector_count * dimension * 4 bytes for float32)
+        vector_count = metadata.get("vectorCount", 0)
+        dimension = metadata.get("dimension", 0)
+        storage_size_bytes = vector_count * dimension * 4  # 4 bytes per float32
+        storage_size_mb = storage_size_bytes / (1024 * 1024)
+        
+        return {
+            "success": True,
+            "index_arn": index_arn,
+            "bucket_name": bucket_name,
+            "index_name": index_name,
+            "status": metadata.get("status", "active"),
+            "vector_count": vector_count,
+            "dimension": dimension,
+            "metric": metadata.get("distanceMetric", "cosine"),
+            "data_type": metadata.get("dataType", "float32"),
+            "storage_size_mb": round(storage_size_mb, 2),
+            "created_at": metadata.get("createdAt"),
+            "last_updated": metadata.get("lastUpdated"),
+            "metadata": metadata
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get index status for {index_arn}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/store-embeddings-to-index")
+async def store_embeddings_to_index(
+    request: StoreEmbeddingsToIndexRequest,
+    storage_manager: S3VectorStorageManager = Depends(get_storage_manager)
+):
+    """
+    Store completed processing job embeddings to specified index.
+    
+    This endpoint provides a complete workflow:
+    1. Get job results from processing service
+    2. Extract embeddings from job
+    3. Store to specified index via appropriate backend provider
+    4. Return storage status
+    
+    Args:
+        request: StoreEmbeddingsToIndexRequest with:
+            - job_id: Processing job ID
+            - index_arn: Target index ARN
+            - backend: Backend type (s3_vector, opensearch, qdrant, lancedb)
+            
+    Returns:
+        Dictionary with storage result and statistics
+    """
+    try:
+        logger.info(f"Storing embeddings from job {request.job_id} to index {request.index_arn}")
+        
+        # Import processing jobs from processing router
+        from src.api.routers.processing import processing_jobs
+        
+        # Validate job exists
+        if request.job_id not in processing_jobs:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Processing job {request.job_id} not found"
+            )
+        
+        job = processing_jobs[request.job_id]
+        
+        # Validate job is completed
+        if job.status != "completed":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Job {request.job_id} is not completed. Current status: {job.status}"
+            )
+        
+        if not job.result:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Job {request.job_id} has no results available"
+            )
+        
+        # Extract and prepare vectors
+        vectors_data = []
+        for segment in job.result.get('segments', []):
+            embedding = segment.get('embedding')
+            if not embedding:
+                logger.warning(f"Segment {segment.get('segment_id')} has no embedding, skipping")
+                continue
+                
+            vectors_data.append({
+                'id': segment.get('segment_id'),
+                'vector': embedding,
+                'metadata': {
+                    'video_id': job.result.get('video_id'),
+                    'start_sec': segment.get('start_offset_sec'),
+                    'end_sec': segment.get('end_offset_sec'),
+                    'embedding_option': segment.get('embedding_option'),
+                    'job_id': request.job_id
+                }
+            })
+        
+        if not vectors_data:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid embeddings found in job results"
+            )
+        
+        # Store vectors based on backend type
+        if request.backend == "s3_vector":
+            # Use S3 Vectors backend
+            result = storage_manager.put_vectors(request.index_arn, vectors_data)
+            
+        elif request.backend == "opensearch":
+            # Use OpenSearch backend
+            from src.services.vector_store_provider import VectorStoreType, VectorStoreProviderFactory
+            
+            provider = VectorStoreProviderFactory.create_provider(VectorStoreType.OPENSEARCH)
+            
+            # Parse index name from ARN
+            from src.utils.arn_parser import ARNParser
+            parts = ARNParser.parse_s3vector_arn(request.index_arn)
+            index_name = parts.get("index", "default")
+            
+            result = provider.upsert_vectors(index_name, vectors_data)
+            
+        elif request.backend in ["qdrant", "lancedb"]:
+            # Use other vector store backends
+            from src.services.vector_store_provider import VectorStoreType, VectorStoreProviderFactory
+            
+            backend_map = {
+                "qdrant": VectorStoreType.QDRANT,
+                "lancedb": VectorStoreType.LANCEDB
+            }
+            
+            provider = VectorStoreProviderFactory.create_provider(backend_map[request.backend])
+            
+            # Parse collection/table name from ARN
+            from src.utils.arn_parser import ARNParser
+            parts = ARNParser.parse_s3vector_arn(request.index_arn)
+            store_name = parts.get("index", "default")
+            
+            result = provider.upsert_vectors(store_name, vectors_data)
+            
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported backend: {request.backend}"
+            )
+        
+        return {
+            "success": True,
+            "message": f"Successfully stored {len(vectors_data)} embeddings to index",
+            "job_id": request.job_id,
+            "index_arn": request.index_arn,
+            "backend": request.backend,
+            "stored_count": len(vectors_data),
+            "result": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to store embeddings from job {request.job_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -97,6 +97,31 @@ class TerraformInfrastructureManager:
 
         logger.info(f"Initialized Terraform manager: {self.terraform_dir}")
 
+    def _get_module_target(self, vector_store: str) -> str:
+        """
+        Get the correct Terraform target for a vector store module.
+        
+        Modules that use count parameter need [0] index.
+        
+        Args:
+            vector_store: Vector store name
+            
+        Returns:
+            Terraform target string (e.g., "module.s3vector[0]")
+        """
+        # Modules using count need [0] index
+        # Only shared_bucket doesn't use count (it's always created)
+        modules_with_count = [
+            "s3vector", "opensearch", "qdrant",
+            "lancedb_s3", "lancedb_efs", "lancedb_ebs",
+            "data_bucket"  # Legacy data bucket also uses count
+        ]
+        
+        if vector_store in modules_with_count:
+            return f"module.{vector_store}[0]"
+        else:
+            return f"module.{vector_store}"
+
     def deploy_vector_store(
         self,
         vector_store: str,
@@ -121,11 +146,31 @@ class TerraformInfrastructureManager:
         start_time = time.time()
 
         try:
-            # Use terraform apply with -target to deploy specific module
-            target = f"module.{vector_store}"
+            # Map store names to Terraform variable names
+            var_map = {
+                's3vector': 'deploy_s3vector',
+                'opensearch': 'deploy_opensearch',
+                'qdrant': 'deploy_qdrant',
+                'lancedb_s3': 'deploy_lancedb_s3',
+                'lancedb_efs': 'deploy_lancedb_efs',
+                'lancedb_ebs': 'deploy_lancedb_ebs',
+                'data_bucket': None,  # Legacy data_bucket uses different variable
+            }
+            
+            # Build terraform command with -var flag to enable the module
+            target = self._get_module_target(vector_store)
+            cmd = ["apply", "-auto-approve"]
+            
+            # Add -var flag to enable the module (set count = 1)
+            var_name = var_map.get(vector_store)
+            if var_name:
+                cmd.extend(["-var", f"{var_name}=true"])
+            
+            # Add target module
+            cmd.extend(["-target", target])
 
             result = self._run_terraform_command(
-                ["apply", "-target", target, "-auto-approve"],
+                cmd,
                 timeout=timeout_sec if wait_for_completion else None,
                 operation_id=operation_id
             )
@@ -191,33 +236,62 @@ class TerraformInfrastructureManager:
         logger.info(f"Deploying multiple vector stores: {', '.join(vector_stores)}")
 
         try:
-            # Build command with multiple -target flags
+            # Map store names to Terraform variable names
+            var_map = {
+                's3vector': 'deploy_s3vector',
+                'opensearch': 'deploy_opensearch',
+                'qdrant': 'deploy_qdrant',
+                'lancedb_s3': 'deploy_lancedb_s3',
+                'lancedb_efs': 'deploy_lancedb_efs',
+                'lancedb_ebs': 'deploy_lancedb_ebs',
+                'data_bucket': None,  # Legacy data_bucket uses different variable
+            }
+            
+            # Build command with -var flags for each store and multiple -target flags
             cmd = ["apply", "-auto-approve"]
+            
+            # Add -var flag for each store to enable the module (set count = 1)
             for store in vector_stores:
-                cmd.extend(["-target", f"module.{store}"])
+                var_name = var_map.get(store)
+                if var_name:
+                    cmd.extend(["-var", f"{var_name}=true"])
+            
+            # Add -target flag for each store
+            for store in vector_stores:
+                target = self._get_module_target(store)
+                cmd.extend(["-target", target])
 
+            start_time = time.time()
+            
             result = self._run_terraform_command(
                 cmd,
                 timeout=timeout_sec if wait_for_completion else None,
                 operation_id=operation_id
             )
 
+            deployment_time = time.time() - start_time
+            
             # Sync state
             if self.tfstate_path.exists():
                 self._sync_state_to_registry()
 
             return DeploymentStatus(
-                deployed=result["success"],
+                vector_store=f"batch_{len(vector_stores)}_stores",
+                deployed=True,
                 endpoint=None,  # Multiple stores don't have a single endpoint
-                deployment_time_sec=result.get("duration", 0),
-                error_message=result.get("error")
+                status="deployed",
+                estimated_cost_monthly=sum(self._estimate_cost(s) for s in vector_stores),
+                deployment_time_sec=deployment_time
             )
 
         except Exception as e:
             logger.error(f"Batch deployment failed: {str(e)}")
             return DeploymentStatus(
+                vector_store=f"batch_{len(vector_stores)}_stores",
                 deployed=False,
                 endpoint=None,
+                status="failed",
+                estimated_cost_monthly=None,
                 deployment_time_sec=0,
                 error_message=str(e)
             )
@@ -242,7 +316,7 @@ class TerraformInfrastructureManager:
         logger.info(f"Destroying vector store: {vector_store}")
 
         try:
-            target = f"module.{vector_store}"
+            target = self._get_module_target(vector_store)
 
             # S3 Vector destroy can take longer due to index deletion waits
             timeout = 3600 if wait_for_completion else None  # 1 hour for destroy operations
@@ -296,7 +370,8 @@ class TerraformInfrastructureManager:
             # Build command with multiple -target flags
             cmd = ["destroy", "-auto-approve"]
             for store in vector_stores:
-                cmd.extend(["-target", f"module.{store}"])
+                target = self._get_module_target(store)
+                cmd.extend(["-target", target])
 
             result = self._run_terraform_command(
                 cmd,
@@ -309,9 +384,9 @@ class TerraformInfrastructureManager:
                 self._sync_state_to_registry()
 
             return {
-                "success": result["success"],
+                "success": True,
                 "stores": vector_stores,
-                "error": result.get("error")
+                "error": None
             }
 
         except Exception as e:

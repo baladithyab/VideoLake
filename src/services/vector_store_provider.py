@@ -176,6 +176,24 @@ class VectorStoreProvider(ABC):
         """
         pass
     
+    @abstractmethod
+    def validate_connectivity(self) -> Dict[str, Any]:
+        """
+        Validate connectivity to the vector store backend.
+        
+        Tests actual connectivity to the backend service and returns
+        detailed health information including response time.
+        
+        Returns:
+            Dictionary with:
+                - accessible (bool): Whether backend is accessible
+                - endpoint (str): Backend endpoint/URL
+                - response_time_ms (float): Response time in milliseconds
+                - health_status (str): Health status (healthy, degraded, unhealthy)
+                - error_message (Optional[str]): Error message if not accessible
+        """
+        pass
+    
     def validate_config(self, config: VectorStoreConfig) -> bool:
         """
         Validate configuration for this provider.

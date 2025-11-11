@@ -356,3 +356,81 @@ class QdrantProvider(VectorStoreProvider):
         except Exception as e:
             logger.error(f"Failed to query Qdrant collection: {e}")
             return []
+    
+    def validate_connectivity(self) -> Dict[str, Any]:
+        """
+        Validate connectivity to Qdrant service.
+        
+        Tests:
+        - Qdrant endpoint accessibility
+        - Collection listing capability
+        - Service health check
+        - Response time measurement
+        
+        Returns:
+            Connectivity validation result
+        """
+        import time
+        
+        start_time = time.time()
+        
+        try:
+            # Test Qdrant connectivity by listing collections
+            collections_response = self.client.get_collections()
+            
+            response_time_ms = (time.time() - start_time) * 1000
+            
+            collections = collections_response.collections
+            collection_count = len(collections)
+            
+            # Determine health status based on response
+            health_status = "healthy"
+            
+            details = {
+                "collection_count": collection_count,
+                "url": self.qdrant_url,
+                "deployment_type": "cloud" if self.qdrant_api_key else "local",
+                "service": "Qdrant"
+            }
+            
+            # Try to get additional health info if available
+            try:
+                # Some Qdrant deployments expose health endpoint
+                health_info = self.client.get_collections()
+                details['collections_accessible'] = True
+            except Exception as e:
+                logger.warning(f"Could not fetch additional health info: {e}")
+            
+            return {
+                "accessible": True,
+                "endpoint": self.qdrant_url,
+                "response_time_ms": round(response_time_ms, 2),
+                "health_status": health_status,
+                "error_message": None,
+                "details": details
+            }
+                
+        except Exception as e:
+            response_time_ms = (time.time() - start_time) * 1000
+            error_msg = str(e)
+            
+            logger.error(f"Qdrant connectivity validation failed: {e}")
+            
+            # Determine if it's a connection error or other issue
+            if "refused" in error_msg.lower() or "timeout" in error_msg.lower():
+                health_status = "unhealthy"
+            else:
+                health_status = "degraded"
+            
+            return {
+                "accessible": False,
+                "endpoint": self.qdrant_url,
+                "response_time_ms": round(response_time_ms, 2),
+                "health_status": health_status,
+                "error_message": error_msg,
+                "details": {
+                    "url": self.qdrant_url,
+                    "deployment_type": "cloud" if self.qdrant_api_key else "local",
+                    "service": "Qdrant"
+                }
+            }

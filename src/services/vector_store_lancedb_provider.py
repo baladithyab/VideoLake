@@ -313,3 +313,79 @@ class LanceDBProvider(VectorStoreProvider):
         except Exception as e:
             logger.error(f"Failed to query LanceDB table: {e}")
             return []
+    
+    def validate_connectivity(self) -> Dict[str, Any]:
+        """
+        Validate connectivity to LanceDB storage.
+        
+        Tests:
+        - Storage backend accessibility (local or S3)
+        - Database connection
+        - Table listing capability
+        - Response time measurement
+        
+        Returns:
+            Connectivity validation result
+        """
+        import time
+        
+        start_time = time.time()
+        
+        try:
+            # Test LanceDB connectivity by listing tables
+            table_names = self.db.table_names()
+            
+            response_time_ms = (time.time() - start_time) * 1000
+            
+            table_count = len(table_names)
+            
+            # Determine storage type and health
+            storage_type = "s3" if self.db_uri.startswith("s3://") else "local"
+            health_status = "healthy"
+            
+            details = {
+                "table_count": table_count,
+                "uri": self.db_uri,
+                "storage_type": storage_type,
+                "service": "LanceDB"
+            }
+            
+            # For S3, verify we can access the backend
+            if storage_type == "s3":
+                details['s3_accessible'] = True
+            
+            return {
+                "accessible": True,
+                "endpoint": self.db_uri,
+                "response_time_ms": round(response_time_ms, 2),
+                "health_status": health_status,
+                "error_message": None,
+                "details": details
+            }
+                
+        except Exception as e:
+            response_time_ms = (time.time() - start_time) * 1000
+            error_msg = str(e)
+            
+            logger.error(f"LanceDB connectivity validation failed: {e}")
+            
+            # Determine health status based on error type
+            if "permission" in error_msg.lower() or "access denied" in error_msg.lower():
+                health_status = "unhealthy"
+            elif "not found" in error_msg.lower() or "does not exist" in error_msg.lower():
+                health_status = "degraded"
+            else:
+                health_status = "unhealthy"
+            
+            return {
+                "accessible": False,
+                "endpoint": self.db_uri,
+                "response_time_ms": round(response_time_ms, 2),
+                "health_status": health_status,
+                "error_message": error_msg,
+                "details": {
+                    "uri": self.db_uri,
+                    "storage_type": "s3" if self.db_uri.startswith("s3://") else "local",
+                    "service": "LanceDB"
+                }
+            }

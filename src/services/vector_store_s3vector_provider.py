@@ -255,6 +255,71 @@ class S3VectorProvider(VectorStoreProvider):
         except Exception as e:
             logger.error(f"Failed to query vectors: {e}")
             return []
+    
+    def validate_connectivity(self) -> Dict[str, Any]:
+        """
+        Validate connectivity to S3 Vectors service.
+        
+        Tests:
+        - S3 bucket listing functionality
+        - S3Vectors client accessibility
+        - Response time measurement
+        
+        Returns:
+            Connectivity validation result
+        """
+        import time
+        
+        start_time = time.time()
+        
+        try:
+            # Test S3Vectors client connectivity by listing vector buckets
+            response = self.s3vectors_client.list_vector_buckets()
+            
+            response_time_ms = (time.time() - start_time) * 1000
+            
+            # Check if we got a valid response
+            if 'Buckets' in response:
+                bucket_count = len(response.get('Buckets', []))
+                
+                return {
+                    "accessible": True,
+                    "endpoint": f"s3vectors.{self.region}.amazonaws.com",
+                    "response_time_ms": round(response_time_ms, 2),
+                    "health_status": "healthy",
+                    "error_message": None,
+                    "details": {
+                        "bucket_count": bucket_count,
+                        "region": self.region,
+                        "service": "S3 Vectors"
+                    }
+                }
+            else:
+                return {
+                    "accessible": False,
+                    "endpoint": f"s3vectors.{self.region}.amazonaws.com",
+                    "response_time_ms": round(response_time_ms, 2),
+                    "health_status": "unhealthy",
+                    "error_message": "Invalid response from S3 Vectors service"
+                }
+                
+        except Exception as e:
+            response_time_ms = (time.time() - start_time) * 1000
+            error_msg = str(e)
+            
+            logger.error(f"S3 Vectors connectivity validation failed: {e}")
+            
+            return {
+                "accessible": False,
+                "endpoint": f"s3vectors.{self.region}.amazonaws.com",
+                "response_time_ms": round(response_time_ms, 2),
+                "health_status": "unhealthy",
+                "error_message": error_msg,
+                "details": {
+                    "region": self.region,
+                    "service": "S3 Vectors"
+                }
+            }
 
 
 # Register the S3Vector provider

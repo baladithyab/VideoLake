@@ -298,6 +298,116 @@ class OpenSearchProvider(VectorStoreProvider):
         except Exception as e:
             logger.error(f"Failed to query vectors: {e}")
             return []
+    
+    def validate_connectivity(self) -> Dict[str, Any]:
+        """
+        Validate connectivity to OpenSearch service.
+        
+        Tests:
+        - OpenSearch service accessibility
+        - Domain listing capability
+        - Cluster health check if domains exist
+        - Response time measurement
+        
+        Returns:
+            Connectivity validation result
+        """
+        import time
+        from opensearchpy import OpenSearch, RequestsHttpConnection
+        from requests_aws4auth import AWS4Auth
+        import boto3
+        
+        start_time = time.time()
+        
+        try:
+            # Test OpenSearch AWS service by listing domains
+            response = self.opensearch_client.list_domain_names()
+            
+            response_time_ms = (time.time() - start_time) * 1000
+            
+            domain_names = response.get('DomainNames', [])
+            domain_count = len(domain_names)
+            
+            health_status = "healthy"
+            details = {
+                "domain_count": domain_count,
+                "region": self.region,
+                "service": "OpenSearch"
+            }
+            
+            # If we have domains, try to check cluster health of the first active one
+            if domain_count > 0:
+                for domain_info in domain_names:
+                    domain_name = domain_info.get('DomainName')
+                    try:
+                        domain_status = self.opensearch_client.describe_domain(DomainName=domain_name)
+                        domain = domain_status.get('DomainStatus', {})
+                        
+                        if domain.get('Endpoint') and not domain.get('Processing', False):
+                            # Try to connect to actual cluster
+                            endpoint = f"https://{domain['Endpoint']}"
+                            
+                            # Setup AWS auth
+                            credentials = boto3.Session().get_credentials()
+                            awsauth = AWS4Auth(
+                                credentials.access_key,
+                                credentials.secret_key,
+                                self.region,
+                                'es',
+                                session_token=credentials.token
+                            )
+                            
+                            # Create OpenSearch client
+                            os_client = OpenSearch(
+                                hosts=[{'host': domain['Endpoint'], 'port': 443}],
+                                http_auth=awsauth,
+                                use_ssl=True,
+                                verify_certs=True,
+                                connection_class=RequestsHttpConnection,
+                                timeout=5
+                            )
+                            
+                            # Check cluster health
+                            cluster_health = os_client.cluster.health()
+                            cluster_status = cluster_health.get('status', 'unknown')
+                            
+                            details['sample_domain'] = domain_name
+                            details['cluster_status'] = cluster_status
+                            
+                            if cluster_status == 'red':
+                                health_status = "degraded"
+                            
+                            break
+                    except Exception as e:
+                        logger.warning(f"Could not check cluster health for {domain_name}: {e}")
+                        continue
+            
+            return {
+                "accessible": True,
+                "endpoint": f"es.{self.region}.amazonaws.com",
+                "response_time_ms": round(response_time_ms, 2),
+                "health_status": health_status,
+                "error_message": None,
+                "details": details
+            }
+                
+        except Exception as e:
+            response_time_ms = (time.time() - start_time) * 1000
+            error_msg = str(e)
+            
+            logger.error(f"OpenSearch connectivity validation failed: {e}")
+            
+            return {
+                "accessible": False,
+                "endpoint": f"es.{self.region}.amazonaws.com",
+                "response_time_ms": round(response_time_ms, 2),
+                "health_status": "unhealthy",
+                "error_message": error_msg,
+                "details": {
+                    "region": self.region,
+                    "service": "OpenSearch"
+                }
+            }
 
 
 # Register the OpenSearch provider
