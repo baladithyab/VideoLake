@@ -102,13 +102,13 @@ npm run dev &
 FRONTEND_PID=$!
 cd ..
 echo -e "${GREEN}✅ Frontend started (PID: $FRONTEND_PID)${NC}"
-echo -e "${GREEN}   App: http://localhost:5174${NC}"
+echo -e "${GREEN}   App: http://localhost:5172${NC}"
 echo ""
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✨ S3Vector is running!${NC}"
 echo ""
-echo -e "  Frontend: ${BLUE}http://localhost:5174${NC}"
+echo -e "  Frontend: ${BLUE}http://localhost:5172${NC}"
 echo -e "  Backend:  ${BLUE}http://localhost:8000${NC}"
 echo -e "  API Docs: ${BLUE}http://localhost:8000/docs${NC}"
 echo ""

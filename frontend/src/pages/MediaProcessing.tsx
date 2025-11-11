@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { processingAPI } from '../api/client';
-import { Upload, Film, Play, Video, CheckCircle, XCircle, Clock, Loader2 } from 'lucide-react';
+import { processingAPI, resourcesAPI } from '../api/client';
+import { Upload, Film, Play, Video, CheckCircle, XCircle, Clock, Loader2, Database } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface SampleVideo {
@@ -49,6 +49,13 @@ export default function MediaProcessing() {
     lancedbBackend: 's3',
   });
 
+  // State for embedding storage
+  const [selectedBucket, setSelectedBucket] = useState<string>('');
+  const [selectedIndexArn, setSelectedIndexArn] = useState<string>('');
+  const [selectedBackends, setSelectedBackends] = useState<string[]>(['s3_vector']);
+  const [storageResults, setStorageResults] = useState<Record<string, any> | null>(null);
+  const [completedJobId, setCompletedJobId] = useState<string | null>(null);
+
   // Fetch sample videos
   const { data: sampleVideosData } = useQuery({
     queryKey: ['sample-videos'],
@@ -90,6 +97,43 @@ export default function MediaProcessing() {
     },
     refetchInterval: 3000, // Poll every 3 seconds
   });
+
+  // Fetch vector buckets for index selection
+  const { data: registry } = useQuery({
+    queryKey: ['resource-registry'],
+    queryFn: async () => {
+      const response = await resourcesAPI.getRegistry();
+      return response.data;
+    },
+  });
+
+  // Fetch indexes for selected bucket
+  const { data: indexesData, refetch: refetchIndexes } = useQuery({
+    queryKey: ['vector-indexes', selectedBucket],
+    queryFn: async () => {
+      if (!selectedBucket) return null;
+      const response = await resourcesAPI.listVectorIndexes(selectedBucket);
+      return response.data;
+    },
+    enabled: !!selectedBucket,
+  });
+
+  // Watch for completed jobs and auto-select first vector bucket
+  useEffect(() => {
+    if (jobs?.jobs) {
+      const completedJob = jobs.jobs.find((j: any) => j.status === 'completed');
+      if (completedJob && completedJob.job_id !== completedJobId) {
+        setCompletedJobId(completedJob.job_id);
+        setStorageResults(null); // Reset storage results for new job
+        
+        // Auto-select first vector bucket if available
+        const buckets = registry?.registry?.vector_buckets || [];
+        if (buckets.length > 0 && !selectedBucket) {
+          setSelectedBucket(buckets[0].name);
+        }
+      }
+    }
+  }, [jobs, registry, completedJobId, selectedBucket]);
 
   const handleMultipleFileUpload = async () => {
     if (selectedFiles.length === 0) return;
@@ -158,7 +202,57 @@ export default function MediaProcessing() {
     setSettings({ ...settings, vectorTypes: newTypes });
   };
 
+  const toggleBackend = (backend: string) => {
+    setSelectedBackends(prev =>
+      prev.includes(backend)
+        ? prev.filter(b => b !== backend)
+        : [...prev, backend]
+    );
+  };
+
+  const storeEmbeddingsMutation = useMutation({
+    mutationFn: async (data: { job_id: string; index_arn: string; backend: string }) =>
+      resourcesAPI.storeEmbeddingsToIndex(data),
+  });
+
+  const handleStoreEmbeddings = async () => {
+    if (!completedJobId || !selectedIndexArn || selectedBackends.length === 0) {
+      toast.error('Please select an index and at least one backend');
+      return;
+    }
+
+    const results: Record<string, any> = {};
+    
+    for (const backend of selectedBackends) {
+      try {
+        toast.loading(`Storing to ${backend}...`, { id: backend });
+        const response = await storeEmbeddingsMutation.mutateAsync({
+          job_id: completedJobId,
+          index_arn: selectedIndexArn,
+          backend: backend,
+        });
+        
+        results[backend] = {
+          success: true,
+          vectors_stored: response.data.stored_count || 0,
+          message: response.data.message,
+        };
+        toast.success(`Stored to ${backend}!`, { id: backend });
+      } catch (error: any) {
+        results[backend] = {
+          success: false,
+          error: error.response?.data?.detail || error.message,
+        };
+        toast.error(`Failed to store to ${backend}: ${error.response?.data?.detail || error.message}`, { id: backend });
+      }
+    }
+
+    setStorageResults(results);
+  };
+
   const sampleVideos = sampleVideosData?.categories[0]?.videos || [];
+  const vectorBuckets = registry?.registry?.vector_buckets || [];
+  const availableIndexes = indexesData?.indexes || [];
 
   return (
     <div className="space-y-6">
@@ -707,6 +801,145 @@ export default function MediaProcessing() {
                       <p className="text-xs text-gray-600">
                         <strong>Segments:</strong> {job.result.segments?.length || 0}
                       </p>
+                    </div>
+                  )}
+
+                  {/* Store to Index Section - Only show for completed jobs */}
+                  {job.status === 'completed' && (
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Store Embeddings to Index</h4>
+                      
+                      {/* Bucket Selector */}
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            1. Select Vector Bucket
+                          </label>
+                          <select
+                            value={selectedBucket}
+                            onChange={(e) => {
+                              setSelectedBucket(e.target.value);
+                              setSelectedIndexArn('');
+                              setStorageResults(null);
+                            }}
+                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                          >
+                            <option value="">Select vector bucket</option>
+                            {vectorBuckets.map((bucket: any) => (
+                              <option key={bucket.name} value={bucket.name}>
+                                {bucket.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Index Selector */}
+                        {selectedBucket && (
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              2. Select Vector Index
+                            </label>
+                            <select
+                              value={selectedIndexArn}
+                              onChange={(e) => {
+                                setSelectedIndexArn(e.target.value);
+                                setStorageResults(null);
+                              }}
+                              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                            >
+                              <option value="">Select vector index</option>
+                              {availableIndexes.map((index: any) => (
+                                <option key={index.index_arn} value={index.index_arn}>
+                                  {index.index_name} ({index.dimension}D, {index.distance_metric})
+                                </option>
+                              ))}
+                            </select>
+                            {availableIndexes.length === 0 && (
+                              <p className="text-xs text-amber-600 mt-1">
+                                No indexes found. Create one in Resource Management.
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Backend Checkboxes */}
+                        {selectedIndexArn && (
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-2">
+                              3. Select Storage Backends
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {['s3_vector', 'opensearch', 'qdrant', 'lancedb'].map(backend => (
+                                <label key={backend} className="flex items-center gap-2 text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedBackends.includes(backend)}
+                                    onChange={() => toggleBackend(backend)}
+                                    className="h-3 w-3 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                  />
+                                  <span className="text-gray-700 capitalize">
+                                    {backend.replace('_', ' ')}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Store Button */}
+                        {selectedIndexArn && selectedBackends.length > 0 && (
+                          <button
+                            onClick={handleStoreEmbeddings}
+                            disabled={storeEmbeddingsMutation.isPending}
+                            className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {storeEmbeddingsMutation.isPending ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Storing...
+                              </>
+                            ) : (
+                              <>
+                                <Database className="w-4 h-4" />
+                                Store to {selectedBackends.length} Backend(s)
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {/* Storage Results */}
+                        {storageResults && (
+                          <div className="mt-3 space-y-2">
+                            <p className="text-xs font-medium text-gray-700">Storage Results:</p>
+                            {Object.entries(storageResults).map(([backend, result]: [string, any]) => (
+                              <div
+                                key={backend}
+                                className={`flex items-center justify-between p-2 rounded text-xs ${
+                                  result.success
+                                    ? 'bg-green-50 border border-green-200'
+                                    : 'bg-red-50 border border-red-200'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {result.success ? (
+                                    <CheckCircle className="w-4 h-4 text-green-600" />
+                                  ) : (
+                                    <XCircle className="w-4 h-4 text-red-600" />
+                                  )}
+                                  <span className="font-medium capitalize">
+                                    {backend.replace('_', ' ')}
+                                  </span>
+                                </div>
+                                <span className={result.success ? 'text-green-700' : 'text-red-700'}>
+                                  {result.success
+                                    ? `${result.vectors_stored} vectors stored`
+                                    : 'Failed'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
