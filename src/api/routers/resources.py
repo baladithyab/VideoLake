@@ -1,21 +1,45 @@
 """
-Resource Management Router - READ-ONLY Resource Viewer
+Resource Management API Router - READ-ONLY
 
-This router provides READ-ONLY access to view deployed infrastructure from Terraform state.
-All resource creation and deletion is now handled via:
-  1. Infrastructure Dashboard (/infrastructure) for deployment operations
-  2. Terraform CLI for direct infrastructure management
+⚠️  TERRAFORM-FIRST ARCHITECTURE ⚠️
 
-Key endpoints:
-  - GET /deployed-resources-tree: View complete infrastructure from tfstate
-  - GET /validate-backend/{type}: Check backend connectivity
-  - GET /vector-indexes/{bucket}: List vector indexes in a bucket
-  - POST /store-embeddings-to-index: Store embeddings (workflow operation, not CRUD)
-  
-For creating/deleting resources, use the Infrastructure Dashboard or Terraform directly.
+This router provides READ-ONLY access to deployed infrastructure.
+ALL infrastructure creation, modification, and deletion is handled
+EXCLUSIVELY through Terraform.
 
-Note: The legacy /scan, /registry, and /active endpoints are maintained for backward compatibility
-but will be deprecated in future versions in favor of /deployed-resources-tree.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AVAILABLE ENDPOINTS (All Read-Only or Workflow Operations):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 Resource Viewing:
+  - GET  /deployed-resources-tree      View deployed infrastructure from terraform.tfstate
+  - GET  /scan                          Scan for existing AWS resources
+  - GET  /registry                      View resource registry
+  - GET  /active                        View currently active resources
+
+🏥 Health Checks:
+  - GET  /validate-backend/{type}       Check backend connectivity
+  - POST /validate-backends             Batch validate multiple backends
+
+📦 Vector Index Operations:
+  - GET  /vector-indexes/{bucket}       List vector indexes in bucket
+  - GET  /vector-index/status           Get detailed index status
+  - POST /store-embeddings-to-index     Store embeddings (workflow, not CRUD)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NO POST/PUT/DELETE ENDPOINTS FOR INFRASTRUCTURE MANAGEMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+To create, modify, or delete infrastructure resources:
+    cd terraform && terraform apply
+
+To destroy infrastructure:
+    cd terraform && terraform destroy
+
+For more information, see:
+  - terraform/README.md
+  - terraform/MIGRATION_GUIDE.md
+  - docs/DEPLOYMENT_GUIDE.md
 """
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -102,32 +126,40 @@ async def get_resource_registry():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ====================DEPRECATED ENDPOINTS REMOVED ====================
-# The following endpoints have been removed as part of the Terraform-first architecture:
-# - POST /vector-bucket (create vector bucket)
-# - POST /vector-index (create vector index - old endpoint)
-# - POST /opensearch-domain (create OpenSearch domain)
-# All resource creation now happens via Terraform. Use the Infrastructure Dashboard.
-
-
-@router.delete("/cleanup")
-async def cleanup_resources(resource_type: Optional[str] = None):
-    """Cleanup AWS resources."""
-    try:
-        # Implement cleanup logic based on resource_type
-        # For now, return success
-        return {
-            "success": True,
-            "message": f"Cleanup initiated for {resource_type or 'all resources'}"
-        }
-    except Exception as e:
-        logger.error(f"Cleanup failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# ==================== DEPRECATED/REMOVED INFRASTRUCTURE ENDPOINTS ====================
+# The following endpoints have been REMOVED as part of the Terraform-first architecture.
+# All infrastructure creation, modification, and deletion must be done via Terraform.
+#
+# Previously removed POST/PUT/DELETE endpoints:
+# - POST   /media-bucket                              (create media bucket)
+# - POST   /vector-bucket                             (create vector bucket)
+# - POST   /vector-index                              (create vector index)
+# - POST   /opensearch-domain                         (create OpenSearch domain)
+# - DELETE /media-bucket/{bucket_name}                (delete media bucket)
+# - DELETE /vector-bucket/{bucket_name}               (delete vector bucket)
+# - DELETE /opensearch-domain/{domain_name}           (delete OpenSearch domain)
+# - DELETE /cleanup                                   (cleanup/delete resources)
+# - POST   /active/set                                (modify resource registry state)
+# - POST   /batch/media-buckets                       (batch create media buckets)
+# - POST   /batch/vector-buckets                      (batch create vector buckets)
+# - POST   /batch/opensearch-domains                  (batch create OpenSearch domains)
+# - POST   /batch/delete                              (batch delete resources)
+# - POST   /stack/create                              (create complete stack)
+# - GET    /status/{resource_type}/{resource_id}      (get resource status)
+#
+# For infrastructure management:
+#   Create/Modify:  cd terraform && terraform apply
+#   Destroy:        cd terraform && terraform destroy
 
 
 @router.get("/active")
 async def get_active_resources():
-    """Get currently active resources."""
+    """
+    Get currently active resources (READ-ONLY).
+    
+    Returns the list of resources currently marked as active in the resource registry.
+    This is a read-only operation - use Terraform to manage actual infrastructure.
+    """
     try:
         active_resources = resource_registry.get_active_resources()
         return {
@@ -137,35 +169,6 @@ async def get_active_resources():
     except Exception as e:
         logger.error(f"Failed to get active resources: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/active/set")
-async def set_active_resource(resource_type: str, resource_id: str):
-    """Set active resource for a given type."""
-    try:
-        resource_registry.set_active_resource(resource_type, resource_id)
-        return {
-            "success": True,
-            "message": f"Set active {resource_type} to {resource_id}"
-        }
-    except Exception as e:
-        logger.error(f"Failed to set active resource: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ==================== DEPRECATED ENDPOINTS REMOVED ====================
-# The following endpoints have been removed as part of the Terraform-first architecture:
-# - POST /media-bucket (create media bucket)
-# - DELETE /media-bucket/{bucket_name} (delete media bucket)
-# - DELETE /vector-bucket/{bucket_name} (delete vector bucket)
-# - DELETE /opensearch-domain/{domain_name} (delete OpenSearch domain)
-# - GET /status/{resource_type}/{resource_id} (get resource status)
-# - POST /batch/media-buckets (batch create media buckets)
-# - POST /batch/vector-buckets (batch create vector buckets)
-# - POST /batch/opensearch-domains (batch create OpenSearch domains)
-# - POST /batch/delete (batch delete resources)
-# - POST /stack/create (create complete stack)
-# All resource creation/deletion now happens via Terraform. Use the Infrastructure Dashboard.
 
 
 # ==================== Backend Connectivity Validation ====================

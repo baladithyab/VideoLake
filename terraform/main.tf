@@ -1,6 +1,49 @@
-# S3Vector Demo Complete Infrastructure
+# =============================================================================
+# S3Vector Platform - Terraform Infrastructure Configuration
+# =============================================================================
 #
-# Provisions all vector stores and data storage for demo
+# DEPLOYMENT PHILOSOPHY: Modular "Opt-In" Architecture
+#
+# This configuration uses a modular design that prioritizes:
+# 1. Fast default deployment (S3Vector-only, < 5 minutes)
+# 2. Optional comparison backends (OpenSearch, Qdrant, LanceDB)
+# 3. Cost optimization (deploy only what you need)
+#
+# WHY S3VECTOR IS THE ONLY DEFAULT:
+# - Fastest setup (< 5 min vs 15-20 min for full stack)
+# - Lowest cost (~$0.50/month vs $50-100/month for all backends)
+# - Serverless (no infrastructure management)
+# - Perfect for:
+#   * Learning the platform
+#   * Testing workflows
+#   * Evaluating S3Vector specifically
+#   * Cost-conscious deployments
+#
+# DEPLOYMENT MODES:
+#
+# Mode 1: Fast Start (S3Vector Only) - DEFAULT
+#   terraform apply
+#   Time: < 5 minutes | Cost: ~$0.50/month
+#
+# Mode 2: Single Backend Comparison
+#   terraform apply -var="deploy_opensearch=true"
+#   Time: 10-15 minutes | Cost: ~$10-50/month
+#
+# Mode 3: Full Comparison (All 4 Vector Stores)
+#   terraform apply \
+#     -var="deploy_opensearch=true" \
+#     -var="deploy_qdrant=true" \
+#     -var="deploy_lancedb_s3=true"
+#   Time: 15-20 minutes | Cost: ~$50-100/month
+#
+# MODULAR BENEFITS:
+# - Deploy only needed backends
+# - Avoid unnecessary costs
+# - Fast experimentation
+# - Incremental adoption
+#
+# For full documentation, see: ../docs/ARCHITECTURE.md
+# =============================================================================
 
 terraform {
   required_version = ">= 1.0"
@@ -110,8 +153,8 @@ module "data_bucket" {
 #   - var.deploy_lancedb_efs (default: false)
 #   - var.deploy_lancedb_ebs (default: false)
 
-# 1. S3Vector (Direct) - Native AWS vector storage
-#    Recommended to always enable (it's cheap and serverless)
+# 1. S3Vector (Direct) - Native AWS vector storage (ALWAYS DEFAULT)
+#    Recommended to always enable (cheap, serverless, < 5 min deployment)
 module "s3vector" {
   count  = var.deploy_s3vector ? 1 : 0
   source = "./modules/s3vector"
@@ -124,8 +167,20 @@ module "s3vector" {
   }
 }
 
-# 2. OpenSearch with S3Vector Backend - Hybrid search capability
-#    NOTE: This is expensive! Only deploy if you need hybrid search
+# -----------------------------------------------------------------------------
+# OpenSearch Serverless (OPTIONAL)
+# -----------------------------------------------------------------------------
+# Deploy OpenSearch Serverless for AWS-managed vector search with:
+# - Mature search features (filtering, aggregations)
+# - Hybrid search (keyword + vector)
+# - Auto-scaling
+#
+# DEFAULT: false (not deployed)
+# WHY: Expensive (~$50+/month) and slow to provision (10-15 min)
+#
+# Enable: terraform apply -var="deploy_opensearch=true"
+# Use Case: Production workloads requiring advanced search features
+# -----------------------------------------------------------------------------
 module "opensearch" {
   count  = var.deploy_opensearch ? 1 : 0
   source = "./modules/opensearch"
@@ -144,7 +199,20 @@ module "opensearch" {
   }
 }
 
-# 3. Qdrant - High-performance HNSW indexing (ECS Fargate)
+# -----------------------------------------------------------------------------
+# Qdrant on ECS Fargate (OPTIONAL)
+# -----------------------------------------------------------------------------
+# Deploy Qdrant vector database on ECS for:
+# - High-performance vector operations
+# - Advanced filtering capabilities
+# - Quantization and sharding features
+#
+# DEFAULT: false (not deployed)
+# WHY: Additional infrastructure complexity and cost
+#
+# Enable: terraform apply -var="deploy_qdrant=true"
+# Use Case: Performance-critical applications with specialized needs
+# -----------------------------------------------------------------------------
 module "qdrant" {
   count  = var.deploy_qdrant ? 1 : 0
   source = "./modules/qdrant_ecs"
@@ -161,9 +229,25 @@ module "qdrant" {
   }
 }
 
-# 4. LanceDB - ECS Fargate with multiple backend options
+# -----------------------------------------------------------------------------
+# LanceDB (OPTIONAL - Choose Storage Backend)
+# -----------------------------------------------------------------------------
+# Deploy LanceDB columnar vector database with choice of storage:
+# - S3 backend: Cheapest, highest latency
+# - EFS backend: Balanced performance/cost
+# - EBS backend: Fastest, most expensive
+#
+# DEFAULT: false (not deployed)
+# WHY: Specialized use cases (Arrow-native, columnar storage)
+#
+# Enable S3: terraform apply -var="deploy_lancedb_s3=true"
+# Enable EFS: terraform apply -var="deploy_lancedb_efs=true"
+# Enable EBS: terraform apply -var="deploy_lancedb_ebs=true"
+#
+# Use Case: Arrow-based pipelines, cost optimization experiments
+# -----------------------------------------------------------------------------
 
-# LanceDB S3 Backend (serverless, cost-effective)
+# LanceDB S3 Backend (cheapest option)
 module "lancedb_s3" {
   count  = var.deploy_lancedb_s3 ? 1 : 0
   source = "./modules/lancedb_ecs"

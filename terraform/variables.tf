@@ -1,4 +1,26 @@
-# Root Terraform Variables for S3Vector Demo
+# =============================================================================
+# Terraform Variables - Deployment Configuration
+# =============================================================================
+#
+# DEPLOYMENT FLAGS: Control which vector store backends are deployed
+#
+# By default, ONLY S3Vector is deployed (deploy_s3vector = true).
+# All other backends are OPTIONAL and set to false by default.
+#
+# This modular "opt-in" approach provides:
+# - Fast default deployment (< 5 min)
+# - Cost optimization (deploy only what you need)
+# - Flexibility (mix and match backends)
+#
+# To enable optional backends, use -var flags:
+#   terraform apply -var="deploy_opensearch=true"
+#   terraform apply -var="deploy_qdrant=true"
+#   terraform apply -var="deploy_lancedb_s3=true"
+#
+# Or set them in terraform.tfvars (copy from terraform.tfvars.example)
+#
+# See docs/ARCHITECTURE.md for detailed deployment modes and cost estimates.
+# =============================================================================
 
 #------------------------------------------------------------------------------
 # GENERAL
@@ -27,39 +49,39 @@ variable "project_name" {
 #------------------------------------------------------------------------------
 
 variable "deploy_s3vector" {
-  description = "Deploy S3Vector (always recommended, it's cheap)"
+  description = "Deploy S3Vector storage (ALWAYS ENABLED - this is the core platform)"
   type        = bool
-  default     = true
+  default     = true  # Never change this - S3Vector is the baseline
 }
 
 variable "deploy_opensearch" {
-  description = "Deploy OpenSearch with S3Vector backend (expensive)"
+  description = "Deploy OpenSearch Serverless (OPTIONAL - expensive, 10-15 min deployment)"
   type        = bool
-  default     = false
+  default     = false  # Enable for AWS-managed search with advanced features
 }
 
 variable "deploy_qdrant" {
-  description = "Deploy Qdrant on ECS Fargate"
+  description = "Deploy Qdrant on ECS Fargate (OPTIONAL - high-performance vector ops)"
   type        = bool
-  default     = false
+  default     = false  # Enable for performance-critical workloads
 }
 
 variable "deploy_lancedb_s3" {
-  description = "Deploy LanceDB with S3 backend"
+  description = "Deploy LanceDB with S3 storage (OPTIONAL - cheapest LanceDB option)"
   type        = bool
-  default     = false
+  default     = false  # Enable for Arrow-based pipelines, cost optimization
 }
 
 variable "deploy_lancedb_efs" {
-  description = "Deploy LanceDB with EFS backend"
+  description = "Deploy LanceDB with EFS storage (OPTIONAL - balanced performance/cost)"
   type        = bool
-  default     = false
+  default     = false  # Enable for better performance than S3, lower cost than EBS
 }
 
 variable "deploy_lancedb_ebs" {
-  description = "Deploy LanceDB with EBS backend"
+  description = "Deploy LanceDB with EBS storage (OPTIONAL - fastest, most expensive)"
   type        = bool
-  default     = false
+  default     = false  # Enable for maximum performance requirements
 }
 
 #------------------------------------------------------------------------------

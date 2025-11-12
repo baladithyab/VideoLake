@@ -1,34 +1,52 @@
-# Terraform Variables Example
-# Copy this file to terraform.tfvars and customize for your deployment
+# =============================================================================
+# Terraform Configuration Template
+# =============================================================================
+#
+# INSTRUCTIONS:
+# 1. Copy this file to terraform.tfvars:
+#    cp terraform.tfvars.example terraform.tfvars
+#
+# 2. Fill in your AWS configuration (region, project name)
+#
+# 3. OPTIONALLY enable additional vector store backends:
+#    - Uncomment the backend you want to deploy
+#    - Set its value to true
+#    - Save the file
+#
+# 4. Run terraform apply (no -var flags needed when using terraform.tfvars)
+#
+# DEFAULT DEPLOYMENT:
+# If you don't create terraform.tfvars or leave backends commented out,
+# Terraform will deploy ONLY S3Vector (fast, cheap, perfect for getting started).
+#
+# =============================================================================
 
-#------------------------------------------------------------------------------
-# GENERAL CONFIGURATION
-#------------------------------------------------------------------------------
-
-project_name = "s3vector-demo"
-aws_region   = "us-east-1"
+# -----------------------------------------------------------------------------
+# Required AWS Configuration
+# -----------------------------------------------------------------------------
+aws_region   = "us-east-1"  # Change to your preferred AWS region
+project_name = "s3vector"   # Change if you want a different project name
 environment  = "dev"
 
-#------------------------------------------------------------------------------
-# CONDITIONAL DEPLOYMENT FLAGS
-#------------------------------------------------------------------------------
-# Control which vector stores get deployed
-# Default: Only S3Vector (cheap and serverless)
+# -----------------------------------------------------------------------------
+# Optional Vector Store Backends (ALL DISABLED BY DEFAULT)
+# -----------------------------------------------------------------------------
+# Uncomment and set to true to enable additional backends
 
-# S3Vector - Native AWS vector storage (recommended, cheap)
-deploy_s3vector = true
+# OpenSearch Serverless (AWS-managed, advanced features, ~$50+/month, 10-15 min deploy)
+# deploy_opensearch = true
 
-# OpenSearch - Hybrid search with S3Vector backend (EXPENSIVE!)
-# Only enable if you need full-text + vector hybrid search
-deploy_opensearch = false
+# Qdrant on ECS (high-performance, advanced filtering, ~$20+/month, 5-10 min deploy)
+# deploy_qdrant = true
 
-# Qdrant - High-performance HNSW indexing
-deploy_qdrant = false
+# LanceDB with S3 storage (cheapest option, Arrow-native, ~$5+/month, 5 min deploy)
+# deploy_lancedb_s3 = true
 
-# LanceDB - Multiple backend options
-deploy_lancedb_s3  = false  # S3 backend (serverless)
-deploy_lancedb_efs = false  # EFS backend (shared, multi-AZ)
-deploy_lancedb_ebs = false  # EBS backend (single-AZ, fast)
+# LanceDB with EFS storage (balanced performance/cost, ~$15+/month, 5 min deploy)
+# deploy_lancedb_efs = true
+
+# LanceDB with EBS storage (fastest option, ~$30+/month, 5 min deploy)
+# deploy_lancedb_ebs = true
 
 #------------------------------------------------------------------------------
 # SHARED MEDIA BUCKET (Always Created)
@@ -105,24 +123,14 @@ lancedb_storage_gb = 100
 
 # data_bucket_name = "media-lake-demo-data"  # Use shared_bucket_name instead
 
-#------------------------------------------------------------------------------
-# EXAMPLE CONFIGURATIONS
-#------------------------------------------------------------------------------
-
-# Example 1: Minimal Cost (Development)
-# deploy_s3vector = true
-# All others = false
-# Estimated cost: ~$5-10/month
-
-# Example 2: Full Demo (All Stores)
-# deploy_s3vector = true
-# deploy_opensearch = true
-# deploy_qdrant = true
-# deploy_lancedb_s3 = true
-# Estimated cost: ~$200-500/month
-
-# Example 3: Production S3Vector Only
-# deploy_s3vector = true
-# opensearch_multi_az = true (if enabled)
-# shared_bucket_lifecycle_enabled = true
-# Estimated cost: ~$10-50/month depending on usage
+# -----------------------------------------------------------------------------
+# Deployment Time & Cost Summary
+# -----------------------------------------------------------------------------
+# S3Vector only:     < 5 min    ~$0.50/month
+# + OpenSearch:      15-20 min  ~$50-60/month
+# + Qdrant:          10-15 min  ~$20-30/month
+# + LanceDB (S3):    5-10 min   ~$5-10/month
+# + LanceDB (EFS):   5-10 min   ~$15-20/month
+# + LanceDB (EBS):   5-10 min   ~$30-40/month
+#
+# Full comparison (all 4): 15-20 min, ~$50-100/month
