@@ -1,8 +1,26 @@
-# S3Vector - Enterprise Vector Embedding Platform
+# S3Vector: AWS Vector Store Comparison Platform
 
-A comprehensive, production-ready vector embedding platform that integrates AWS S3 Vectors with Amazon Bedrock and TwelveLabs Marengo for cost-effective, scalable vector storage and similarity search. Designed for enterprise media processing with complete end-to-end pipelines for text, video, and multimodal embedding workflows.
+> **Hands-on platform for evaluating and comparing AWS vector storage solutions with real multimodal data**
+
+An interactive demonstration platform that helps you evaluate and choose between AWS vector storage options (S3Vector, OpenSearch Serverless, Qdrant, LanceDB) using real video processing and semantic search workloads.
 
 ![S3Vector Architecture](https://img.shields.io/badge/AWS-S3%20Vectors-orange) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Tests](https://img.shields.io/badge/tests-134%2B-brightgreen) ![Cost Savings](https://img.shields.io/badge/savings-90%25%2B-gold)
+
+## 🎯 What This Platform Does
+
+This platform provides a **practical, side-by-side comparison** of AWS vector storage solutions:
+
+- **Fast Default Setup**: Deploy S3Vector-only stack in < 5 minutes for quick testing
+- **Full Comparison Mode**: Deploy all 4 vector stores to compare performance and features
+- **Real Workloads**: Process actual videos with TwelveLabs API and AWS Bedrock embeddings
+- **Interactive UI**: Modern React interface for exploring search quality and performance
+- **Terraform-First**: Infrastructure as Code for reproducible deployments
+
+**Use Cases:**
+- 🔍 Evaluating which AWS vector store fits your needs
+- 📊 Comparing search quality across different backends
+- 🎓 Learning about vector storage options on AWS
+- 🧪 Testing embedding models with real data
 
 ## 🆕 Recent Major Update: Terraform-First Architecture
 
@@ -90,25 +108,53 @@ The S3 Vector storage system has been refactored using the **Facade Pattern** fo
 
 See [REFACTORING_ARCHITECTURE.md](docs/REFACTORING_ARCHITECTURE.md) for detailed architectural patterns and [REFACTORING_RESULTS.md](docs/REFACTORING_RESULTS.md) for complete metrics.
 
-## Features
+## ✅ Platform Capabilities
 
-### ✅ **Completed Core Features**
+### Current (Fully Functional)
+- **S3 Vector Storage** ✅ - AWS S3Vectors library with native S3 integration
+- **Bedrock Text Embeddings** ✅ - Generate embeddings using AWS Bedrock
+- **TwelveLabs Video Processing** ✅ - Extract video embeddings (Marengo 2.6/2.7)
+- **React Search UI** ✅ - Modern interface for search and visualization
+- **Terraform Infrastructure** ✅ - Modular IaC with fast defaults
+- **Real-Time Health Monitoring** ✅ - Backend connectivity validation
 
-- **S3 Vector Storage**: Production-ready vector storage with 90%+ cost savings vs traditional vector DBs
-- **Bedrock Text Embeddings**: Complete text embedding pipeline with batch processing
-- **TwelveLabs Video Processing**: End-to-end video embedding generation with Marengo model
-- **Video Similarity Search**: Enterprise-grade video segment search with temporal filtering
-- **Text Embedding Integration**: Natural language search across stored text embeddings
-- **Terraform-First Infrastructure**: All infrastructure managed via Terraform for consistency and reliability
-- **Real-Time Health Monitoring**: Live connectivity checks with response time tracking for all backends
-- **Cost Optimization**: Real-time cost tracking and optimization strategies
-- **Production Monitoring**: Comprehensive logging, error handling, and performance metrics
+### Optional (Deploy On-Demand)
+- **OpenSearch Serverless** 🔄 - AWS managed vector search (add via terraform.tfvars)
+- **Qdrant on ECS** 🔄 - High-performance vector database (add via terraform.tfvars)
+- **LanceDB Variants** 🔄 - Columnar storage on S3/EFS/EBS (add via terraform.tfvars)
 
-### 🚧 **Planned Features**
+### Architecture Highlights
+- **Modular Design**: Fast S3-only default OR full 4-backend comparison
+- **Single Source of Truth**: Terraform state drives infrastructure discovery
+- **Zero Configuration Drift**: UI reflects actual deployed infrastructure
+- **Health Status**: Real-time connectivity checks for all backends
+
+### 🚧 **Planned Enhancements**
 
 - **Cross-Modal Search**: Text-to-video and video-to-video similarity search
-- **OpenSearch Integration**: Hybrid search capabilities combining vector and keyword search
 - **Advanced Analytics**: Content recommendation and discovery algorithms
+- **Performance Benchmarking**: Automated comparison metrics across backends
+
+## 📋 Project Scope & Purpose
+
+**This is a comparison platform, not a production application.**
+
+**What it IS:**
+- ✅ Evaluation tool for choosing AWS vector stores
+- ✅ Hands-on learning platform for vector search concepts
+- ✅ Reference implementation for multimodal search pipelines
+- ✅ Terraform patterns for AWS vector infrastructure
+
+**What it is NOT:**
+- ❌ Production-ready SaaS application
+- ❌ General-purpose vector database
+- ❌ Commercial product offering
+
+**Intended Audience:**
+- Teams evaluating AWS vector storage options
+- Architects designing vector search systems
+- Developers learning about vector embeddings and semantic search
+- Organizations prototyping multimodal AI applications
 
 ## Environment Configuration
 
@@ -151,48 +197,44 @@ LOG_LEVEL=INFO
 STRUCTURED_LOGGING=true
 ```
 
-## Quick Start
+## 🚀 Quick Start (< 15 minutes)
 
-### Infrastructure Setup (First Time)
+**Fast Path - S3Vector Only:**
+```bash
+# 1. Deploy infrastructure (< 5 min)
+cd terraform && terraform init && terraform apply -auto-approve
 
-1. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+# 2. Start backend
+cd .. && ./start.sh
 
-2. **Configure Environment**:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your AWS profile and bucket details
-   ```
+# 3. Access UI
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:8000
+```
 
-3. **Configure AWS Credentials**:
-   ```bash
-   aws configure
-   # or use IAM roles, environment variables, etc.
-   ```
+**Full Comparison - All 4 Vector Stores:**
+See [QUICKSTART.md](QUICKSTART.md) for complete setup including OpenSearch, Qdrant, and LanceDB.
 
-4. **Deploy Infrastructure via Terraform**:
-   ```bash
-   cd terraform
-   terraform init
-   terraform apply -var="deploy_s3vector=true"
-   # Or use the Infrastructure Dashboard at http://localhost:3000/infrastructure
-   ```
+### Infrastructure Management
 
-5. **Verify Deployment**:
-   - Open Resource Management page: `http://localhost:3000/resource-management`
-   - Check that backends show "healthy" status with response times
-   - All resources should be visible in the tree view
+**View Resources**: Navigate to `/resource-management` to see all deployed infrastructure with real-time health status
 
-### Running Demos
+**Deploy/Modify Resources**:
+- **Option 1 (UI)**: Use Infrastructure Dashboard at `/infrastructure`
+- **Option 2 (CLI)**: Use Terraform commands in the `terraform/` directory
 
-1. **Run Text Embedding Demo**:
+**Important**: Resource Management page is **view-only**. All infrastructure changes must go through Terraform (via UI or CLI).
+
+📖 **[Full Infrastructure Guide](docs/RESOURCE_MANAGEMENT_REFACTOR.md)**
+
+### Running Demonstrations
+
+1. **Text Embedding Demo**:
    ```bash
    python examples/vector_operations_demo.py
    ```
 
-2. **Run Complete Video Pipeline Demo** ⭐:
+2. **Complete Video Pipeline Demo** ⭐:
    ```bash
    export REAL_AWS_DEMO=1  # Enable real AWS operations
    python examples/real_video_processing_demo.py
@@ -204,23 +246,6 @@ STRUCTURED_LOGGING=true
    - Stores embeddings in S3 Vector storage
    - Demonstrates similarity search capabilities
    - **Cost**: ~$0.01 for 15-second video processing
-
-### Infrastructure Management
-
-**View Resources**: Navigate to `/resource-management` to see all deployed infrastructure with real-time health status
-
-**Deploy/Modify Resources**:
-- **Option 1 (UI)**: Use Infrastructure Dashboard at `/infrastructure`
-- **Option 2 (CLI)**: Use Terraform commands:
-  ```bash
-  cd terraform
-  terraform plan    # Preview changes
-  terraform apply   # Apply changes
-  ```
-
-**Important**: Resource Management page is **view-only**. All infrastructure changes must go through Terraform (via UI or CLI).
-
-📖 **[Full Infrastructure Guide](docs/RESOURCE_MANAGEMENT_REFACTOR.md)**
 
 ## Core Components
 
@@ -264,13 +289,13 @@ STRUCTURED_LOGGING=true
 
 ## Cost Optimization
 
-This POC implements several cost optimization strategies with **proven results**:
+This platform implements several cost optimization strategies with **proven results**:
 
 ### **Real Cost Savings**
 - **S3 Vectors**: 90%+ cost reduction vs traditional vector databases ($0.023/GB/month)
 - **Video Processing**: ~$0.01 for 15-second video processing with TwelveLabs Marengo
 - **Text Embeddings**: $0.0001 per 1K tokens with Amazon Titan Text V2
-- **Total Demo Cost**: Under $0.02 for complete video pipeline demonstration
+- **Total Platform Cost**: Under $0.02 for complete video pipeline demonstration
 
 ### **Optimization Strategies**
 - **Batch Processing**: Optimized batch sizes for different operations
@@ -373,27 +398,27 @@ python -m pytest tests/integration_test_end_to_end_text_processing.py -v  # End-
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Key Achievements
+## Key Platform Features
 
-### **🎯 Production-Ready Implementation**
+### **🎯 Functional Implementation**
 - **Complete End-to-End Pipelines**: Both text and video embedding workflows
 - **Real AWS Integration**: Successfully processes actual content with live AWS services
 - **Cost Optimization**: 90%+ savings vs traditional vector databases
-- **Enterprise Features**: Comprehensive logging, monitoring, and error handling
+- **Comprehensive Monitoring**: Logging, monitoring, and error handling throughout
 
 ### **📊 Proven Performance**
 - **Video Processing**: 15-second video processed in 91.8s with 6 segments generated
 - **Search Performance**: Sub-second similarity queries (0ms response time)
-- **Cost Efficiency**: Total demo cost under $0.02 for complete video pipeline
+- **Cost Efficiency**: Total platform cost under $0.02 for complete video pipeline
 - **Test Coverage**: 134+ comprehensive tests across all components
 
-### **🏗️ Scalable Architecture** 
+### **🏗️ Modular Architecture**
 - **Microservices Design**: Modular, testable, and maintainable codebase
 - **AWS Native**: Leverages managed services for reliability and scalability
 - **Batch Processing**: Optimized for large-scale content processing
-- **Resource Management**: Automated cleanup and cost control
+- **Resource Management**: Terraform-driven infrastructure management
 
-### **🎬 Media Industry Focus**
+### **🎬 Multimodal Search Capabilities**
 - **Temporal Video Search**: Find specific moments within video content
 - **Rich Metadata**: Series, episodes, genres, and cast information
 - **Multi-Modal Embeddings**: Visual, audio, and text-based video understanding
@@ -411,4 +436,4 @@ Comprehensive implementation documentation is available in the `docs/` directory
 
 ## License
 
-This is a proof-of-concept project for demonstration purposes.
+This is a comparison and evaluation platform for demonstration purposes.
