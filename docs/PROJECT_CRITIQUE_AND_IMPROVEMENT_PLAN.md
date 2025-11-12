@@ -33,11 +33,11 @@ The S3Vector project is experiencing a critical identity crisis and severe docum
 
 **Problematic File Categories:**
 - **Validation Reports** (10+ files):
-  - [`docs/validations/ALL_RESOURCES_VALIDATION.md`](validations/ALL_RESOURCES_VALIDATION.md)
-  - [`docs/validations/COMPLETE_SETUP_FIX.md`](validations/COMPLETE_SETUP_FIX.md)
-  - [`docs/validations/CONSOLIDATION_SUMMARY.md`](validations/CONSOLIDATION_SUMMARY.md)
-  - [`docs/validations/REFACTORED_DEMO_VALIDATION.md`](validations/REFACTORED_DEMO_VALIDATION.md)
-  - [`docs/validations/RESOURCE_MANAGER_VALIDATION.md`](validations/RESOURCE_MANAGER_VALIDATION.md)
+  - [`archive/development/validations/ALL_RESOURCES_VALIDATION.md`](../archive/development/validations/ALL_RESOURCES_VALIDATION.md)
+  - [`archive/development/validations/COMPLETE_SETUP_FIX.md`](../archive/development/validations/COMPLETE_SETUP_FIX.md)
+  - [`archive/development/validations/CONSOLIDATION_SUMMARY.md`](../archive/development/validations/CONSOLIDATION_SUMMARY.md)
+  - [`archive/development/validations/REFACTORED_DEMO_VALIDATION.md`](../archive/development/validations/REFACTORED_DEMO_VALIDATION.md)
+  - [`archive/development/validations/RESOURCE_MANAGER_VALIDATION.md`](../archive/development/validations/RESOURCE_MANAGER_VALIDATION.md)
 
 - **Implementation Summaries** (15+ files):
   - [`BACKEND_IMPLEMENTATION_SUMMARY.md`](../BACKEND_IMPLEMENTATION_SUMMARY.md)
@@ -288,8 +288,7 @@ variable "deploy_qdrant" {
    mkdir -p archive/development/{validations,summaries,implementations,refactoring,sessions,consolidations}
    
    # Move all development artifacts
-   mv docs/validations/*.md archive/development/validations/
-   mv docs/summaries/*.md archive/development/summaries/
+   # Files already moved to archive/development/
    mv docs/*IMPLEMENTATION*.md archive/development/implementations/
    mv docs/*REFACTOR*.md archive/development/refactoring/
    mv docs/*SESSION*.md archive/development/sessions/
@@ -481,15 +480,15 @@ variable "deploy_qdrant" {
 ### Files to Archive → `archive/development/`
 
 **Validation Reports:**
-- [ ] [`docs/validations/ALL_RESOURCES_VALIDATION.md`](validations/ALL_RESOURCES_VALIDATION.md)
-- [ ] [`docs/validations/COMPLETE_SETUP_FIX.md`](validations/COMPLETE_SETUP_FIX.md)
-- [ ] [`docs/validations/CONSOLIDATION_SUMMARY.md`](validations/CONSOLIDATION_SUMMARY.md)
-- [ ] [`docs/validations/OPENSEARCH_WAIT_FEATURE.md`](validations/OPENSEARCH_WAIT_FEATURE.md)
-- [ ] [`docs/validations/REFACTORED_DEMO_VALIDATION.md`](validations/REFACTORED_DEMO_VALIDATION.md)
-- [ ] [`docs/validations/REFACTORING_SUMMARY.md`](validations/REFACTORING_SUMMARY.md)
-- [ ] [`docs/validations/REGISTRY_TRACKING_VALIDATION.md`](validations/REGISTRY_TRACKING_VALIDATION.md)
-- [ ] [`docs/validations/RESOURCE_MANAGER_VALIDATION.md`](validations/RESOURCE_MANAGER_VALIDATION.md)
-- [ ] [`docs/validations/SIMPLIFIED_SERVICES_SUMMARY.md`](validations/SIMPLIFIED_SERVICES_SUMMARY.md)
+- [ ] [`archive/development/validations/ALL_RESOURCES_VALIDATION.md`](../archive/development/validations/ALL_RESOURCES_VALIDATION.md)
+- [ ] [`archive/development/validations/COMPLETE_SETUP_FIX.md`](../archive/development/validations/COMPLETE_SETUP_FIX.md)
+- [ ] [`archive/development/validations/CONSOLIDATION_SUMMARY.md`](../archive/development/validations/CONSOLIDATION_SUMMARY.md)
+- [ ] [`archive/development/validations/OPENSEARCH_WAIT_FEATURE.md`](../archive/development/validations/OPENSEARCH_WAIT_FEATURE.md)
+- [ ] [`archive/development/validations/REFACTORED_DEMO_VALIDATION.md`](../archive/development/validations/REFACTORED_DEMO_VALIDATION.md)
+- [ ] [`archive/development/validations/REFACTORING_SUMMARY.md`](../archive/development/validations/REFACTORING_SUMMARY.md)
+- [ ] [`archive/development/validations/REGISTRY_TRACKING_VALIDATION.md`](../archive/development/validations/REGISTRY_TRACKING_VALIDATION.md)
+- [ ] [`archive/development/validations/RESOURCE_MANAGER_VALIDATION.md`](../archive/development/validations/RESOURCE_MANAGER_VALIDATION.md)
+- [ ] [`archive/development/validations/SIMPLIFIED_SERVICES_SUMMARY.md`](../archive/development/validations/SIMPLIFIED_SERVICES_SUMMARY.md)
 - [ ] [`docs/validation-report.md`](validation-report.md)
 - [ ] [`docs/validation-summary.md`](validation-summary.md)
 - [ ] [`docs/vector_validation_master_summary.md`](vector_validation_master_summary.md)
@@ -502,8 +501,8 @@ variable "deploy_qdrant" {
 - [ ] [`docs/enhanced_visualization_implementation_summary.md`](enhanced_visualization_implementation_summary.md)
 - [ ] [`docs/unified_streamlit_implementation_summary.md`](unified_streamlit_implementation_summary.md)
 - [ ] [`docs/sample-video-enhancement-implementation-summary.md`](sample-video-enhancement-implementation-summary.md)
-- [ ] [`docs/DEPLOYED_RESOURCES_TREE_IMPLEMENTATION.md`](DEPLOYED_RESOURCES_TREE_IMPLEMENTATION.md)
-- [ ] [`docs/RESOURCE_LIFECYCLE_IMPLEMENTATION.md`](RESOURCE_LIFECYCLE_IMPLEMENTATION.md)
+- [ ] [`archive/development/implementations/DEPLOYED_RESOURCES_TREE_IMPLEMENTATION.md`](../archive/development/implementations/DEPLOYED_RESOURCES_TREE_IMPLEMENTATION.md)
+- [ ] [`archive/development/implementations/RESOURCE_LIFECYCLE_IMPLEMENTATION.md`](../archive/development/implementations/RESOURCE_LIFECYCLE_IMPLEMENTATION.md)
 
 **Refactoring Documentation:**
 - [ ] [`docs/REFACTORING_ARCHITECTURE.md`](REFACTORING_ARCHITECTURE.md)
@@ -554,14 +553,14 @@ variable "deploy_qdrant" {
 - [ ] [`docs/CLEANUP_FIX.md`](CLEANUP_FIX.md)
 
 **Duplicate/Overlapping Summary Directories:**
-- [ ] [`docs/summaries/COMPLETE_SETUP_VERIFICATION.md`](summaries/COMPLETE_SETUP_VERIFICATION.md)
-- [ ] [`docs/summaries/COMPLETE_VALIDATION_SUMMARY.md`](summaries/COMPLETE_VALIDATION_SUMMARY.md)
-- [ ] [`docs/summaries/DEMO_FUNCTIONALITY_REMOVAL_ANALYSIS.md`](summaries/DEMO_FUNCTIONALITY_REMOVAL_ANALYSIS.md)
-- [ ] [`docs/summaries/FRONTEND_BACKEND_SEPARATION_SUMMARY.md`](summaries/FRONTEND_BACKEND_SEPARATION_SUMMARY.md)
-- [ ] [`docs/summaries/FRONTEND_CLEANUP_SUMMARY.md`](summaries/FRONTEND_CLEANUP_SUMMARY.md)
-- [ ] [`docs/summaries/QUERY_SEARCH_INTEGRATION_SUMMARY.md`](summaries/QUERY_SEARCH_INTEGRATION_SUMMARY.md)
-- [ ] [`docs/summaries/RESOURCE_CLEANUP_AND_REGION_FIX.md`](summaries/RESOURCE_CLEANUP_AND_REGION_FIX.md)
-- [ ] [`docs/summaries/RESOURCE_MANAGEMENT_IMPLEMENTATION_SUMMARY.md`](summaries/RESOURCE_MANAGEMENT_IMPLEMENTATION_SUMMARY.md)
+- [ ] [`archive/development/summaries/COMPLETE_SETUP_VERIFICATION.md`](../archive/development/summaries/COMPLETE_SETUP_VERIFICATION.md)
+- [ ] [`archive/development/summaries/COMPLETE_VALIDATION_SUMMARY.md`](../archive/development/summaries/COMPLETE_VALIDATION_SUMMARY.md)
+- [ ] [`archive/development/summaries/DEMO_FUNCTIONALITY_REMOVAL_ANALYSIS.md`](../archive/development/summaries/DEMO_FUNCTIONALITY_REMOVAL_ANALYSIS.md)
+- [ ] [`archive/development/summaries/FRONTEND_BACKEND_SEPARATION_SUMMARY.md`](../archive/development/summaries/FRONTEND_BACKEND_SEPARATION_SUMMARY.md)
+- [ ] [`archive/development/summaries/FRONTEND_CLEANUP_SUMMARY.md`](../archive/development/summaries/FRONTEND_CLEANUP_SUMMARY.md)
+- [ ] [`archive/development/summaries/QUERY_SEARCH_INTEGRATION_SUMMARY.md`](../archive/development/summaries/QUERY_SEARCH_INTEGRATION_SUMMARY.md)
+- [ ] [`archive/development/summaries/RESOURCE_CLEANUP_AND_REGION_FIX.md`](../archive/development/summaries/RESOURCE_CLEANUP_AND_REGION_FIX.md)
+- [ ] [`archive/development/summaries/RESOURCE_MANAGEMENT_IMPLEMENTATION_SUMMARY.md`](../archive/development/summaries/RESOURCE_MANAGEMENT_IMPLEMENTATION_SUMMARY.md)
 
 **Integration Test Reports:**
 - [ ] [`docs/integration-test-executive-summary.md`](integration-test-executive-summary.md)
@@ -759,10 +758,7 @@ These actions can be completed in 1-2 hours and provide immediate improvement:
 mkdir -p archive/development/{validations,summaries,implementations,refactoring,sessions,consolidations,analyses}
 
 # Move validation reports
-mv docs/validations/*.md archive/development/validations/
-
-# Move summaries
-mv docs/summaries/*.md archive/development/summaries/
+# Files already moved to archive/development/
 
 # Move implementation summaries  
 mv docs/*IMPLEMENTATION*.md archive/development/implementations/

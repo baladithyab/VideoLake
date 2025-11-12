@@ -55,7 +55,7 @@
 **Impact:** Signal-to-noise ratio is abysmal. Users searching for "getting started" wade through internal development history, validation reports, and session summaries.
 
 **Evidence (File Categories):**
-- **Validation Reports:** 12+ files like [`docs/validations/ALL_RESOURCES_VALIDATION.md`](docs/validations/ALL_RESOURCES_VALIDATION.md)
+- **Validation Reports:** 12+ files like [`archive/development/validations/ALL_RESOURCES_VALIDATION.md`](../archive/development/validations/ALL_RESOURCES_VALIDATION.md)
 - **Implementation Summaries:** 15+ files like [`docs/DEMO_IMPLEMENTATION_SUMMARY.md`](docs/DEMO_IMPLEMENTATION_SUMMARY.md)
 - **Refactoring Docs:** 8+ files like [`docs/REFACTORING_RESULTS.md`](docs/REFACTORING_RESULTS.md)
 - **Session Complete:** 5+ files like [`docs/SESSION_COMPLETE.md`](docs/SESSION_COMPLETE.md)
@@ -244,8 +244,7 @@ Day 14-15: Testing & Validation
 ### 1. Archive Internal Docs (30 minutes)
 ```bash
 mkdir -p archive/development/{validations,summaries,implementations}
-mv docs/validations/*.md archive/development/validations/
-mv docs/summaries/*.md archive/development/summaries/
+# Files already moved to archive/development/
 mv docs/*IMPLEMENTATION*.md archive/development/implementations/
 ```
 **Impact:** Reduces documentation clutter by 60+ files immediately.

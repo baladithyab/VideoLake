@@ -13,8 +13,12 @@ S3Vector/
 ├── README_UNIFIED_DEMO.md             # Unified demo documentation
 │
 ├── docs/                              # Main documentation directory
-│   ├── summaries/                     # Project summaries and status reports
-│   ├── validations/                   # Validation and verification reports
+│   ├── archive/development/           # Archived development documentation
+│   │   ├── summaries/                 # Project summaries and status reports
+│   │   ├── validations/               # Validation and verification reports
+│   │   ├── implementations/           # Implementation details
+│   │   ├── consolidations/            # Consolidation reports
+│   │   └── refactoring/               # Refactoring documentation
 │   ├── API_DOCUMENTATION.md
 │   ├── DEPLOYMENT_GUIDE.md
 │   ├── PRODUCTION_READINESS_CHECKLIST.md
@@ -48,16 +52,16 @@ S3Vector/
 - `QUICKSTART.md` - Quick start guide for new users
 - `README_UNIFIED_DEMO.md` - Unified demo guide
 
-**Moved to docs/summaries/:**
-- All `*_SUMMARY.md` files
+**Moved to archive/development/summaries/:**
+- All `*_SUMMARY.md` files (development summaries)
 - All `*_STATUS.md` files
 - All `*_VERIFICATION.md` files
 - All `*_ANALYSIS.md` files
 
 ### docs/ Directory
 
-#### docs/summaries/
-Project summaries, status reports, and integration summaries:
+#### archive/development/summaries/
+Project summaries, status reports, and integration summaries (archived):
 
 - `COMPLETE_SETUP_VERIFICATION.md`
 - `COMPLETE_VALIDATION_SUMMARY.md`
@@ -76,8 +80,8 @@ Project summaries, status reports, and integration summaries:
 - `TWELVELABS_API_INTEGRATION_SUMMARY.md`
 - `WORKFLOW_RESOURCE_MANAGEMENT_SUMMARY.md`
 
-#### docs/validations/
-Validation reports and verification results:
+#### archive/development/validations/
+Validation reports and verification results (archived):
 
 - `ALL_RESOURCES_VALIDATION.md`
 - `COMPLETE_SETUP_FIX.md`
@@ -151,17 +155,17 @@ Validation reports and verification results:
 
 ### Summaries
 - Format: `{TOPIC}_SUMMARY.md`
-- Location: `docs/summaries/`
+- Location: `archive/development/summaries/` (archived development summaries)
 - Examples: `RESOURCE_MANAGEMENT_SUMMARY.md`, `FRONTEND_CLEANUP_SUMMARY.md`
 
 ### Validations
 - Format: `{TOPIC}_VALIDATION.md` or `{TOPIC}_VERIFICATION.md`
-- Location: `docs/validations/`
+- Location: `archive/development/validations/` (archived)
 - Examples: `ALL_RESOURCES_VALIDATION.md`, `COMPLETE_SETUP_VERIFICATION.md`
 
 ### Status Reports
 - Format: `{TOPIC}_STATUS.md`
-- Location: `docs/summaries/`
+- Location: `archive/development/summaries/` (archived)
 - Examples: `FINAL_PROJECT_STATUS.md`, `TASK_COMPLETION_STATUS.md`
 
 ### Technical Guides
@@ -184,22 +188,22 @@ Validation reports and verification results:
 ### By Topic
 
 **Resource Management:**
-- `docs/summaries/RESOURCE_MANAGEMENT_SUMMARY.md`
-- `docs/summaries/RESOURCE_CLEANUP_AND_REGION_FIX.md`
-- `docs/validations/RESOURCE_MANAGER_VALIDATION.md`
+- `archive/development/summaries/RESOURCE_MANAGEMENT_SUMMARY.md`
+- `archive/development/summaries/RESOURCE_CLEANUP_AND_REGION_FIX.md`
+- `archive/development/validations/RESOURCE_MANAGER_VALIDATION.md`
 - `docs/CLEANUP_FIX.md`
 - `docs/S3_BUCKET_DELETION_ISSUE.md`
 
 **Frontend:**
 - `frontend/README.md`
 - `frontend/ENHANCED_README.md`
-- `docs/summaries/FRONTEND_CLEANUP_SUMMARY.md`
+- `archive/development/summaries/FRONTEND_CLEANUP_SUMMARY.md`
 - `docs/enhanced-streamlit-architecture.md`
 
 **Marengo 2.7:**
 - `docs/marengo-2.7-research.md`
 - `docs/MARENGO_SEGMENTATION_RESEARCH.md`
-- `docs/summaries/MARENGO_ACCESS_CONFIGURATION_SUMMARY.md`
+- `archive/development/summaries/MARENGO_ACCESS_CONFIGURATION_SUMMARY.md`
 
 **OpenSearch:**
 - `docs/OPENSEARCH_S3VECTOR_INTEGRATION_RESEARCH.md`
@@ -223,15 +227,15 @@ Validation reports and verification results:
 ### Adding New Documentation
 
 1. **Determine Category:**
-   - Summary/Status → `docs/summaries/`
-   - Validation/Verification → `docs/validations/`
+   - Summary/Status → `archive/development/summaries/` (archived)
+   - Validation/Verification → `archive/development/validations/` (archived)
    - Technical Guide → `docs/`
    - Frontend-specific → `frontend/`
    - Testing → `tests/`
 
 2. **Follow Naming Convention:**
    - Use appropriate format for category
-   - Use UPPERCASE for summaries/validations
+   - Use UPPERCASE for archived summaries/validations
    - Use lowercase-with-hyphens for technical docs
 
 3. **Update This Index:**
@@ -265,8 +269,8 @@ Validation reports and verification results:
 | API documentation | `docs/API_DOCUMENTATION.md` |
 | Testing guide | `docs/testing_guide.md` |
 | Troubleshooting | `docs/troubleshooting-guide.md` |
-| Latest status | `docs/summaries/FINAL_PROJECT_STATUS.md` |
-| Resource management | `docs/summaries/RESOURCE_MANAGEMENT_SUMMARY.md` |
+| Latest status | `archive/development/summaries/FINAL_PROJECT_STATUS.md` |
+| Resource management | `archive/development/summaries/RESOURCE_MANAGEMENT_SUMMARY.md` |
 | Frontend guide | `frontend/ENHANCED_README.md` |
 | Deployment | `docs/DEPLOYMENT_GUIDE.md` |
 
