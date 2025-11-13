@@ -1,1165 +1,1957 @@
-# S3Vector Usage Examples and Tutorials
+# S3Vector/VideoLake Usage Examples
+
+> **Comprehensive, practical examples for real-world workflows with the S3Vector/VideoLake platform**
 
 ## Table of Contents
-1. [Quick Start Examples](#quick-start-examples)
-2. [Text Embedding Workflows](#text-embedding-workflows)
-3. [Video Processing Workflows](#video-processing-workflows)
-4. [Advanced Search Scenarios](#advanced-search-scenarios)
-5. [Batch Processing](#batch-processing)
-6. [Real-World Use Cases](#real-world-use-cases)
-7. [Integration Patterns](#integration-patterns)
-8. [Best Practices](#best-practices)
+1. [Quick Start Guide](#quick-start-guide)
+2. [Deployment Mode Examples](#deployment-mode-examples)
+3. [API Integration Examples](#api-integration-examples)
+4. [Video Processing Workflows](#video-processing-workflows)
+5. [Backend Comparison Scenarios](#backend-comparison-scenarios)
+6. [Best Practices](#best-practices)
+7. [Result Interpretation](#result-interpretation)
+8. [Troubleshooting](#troubleshooting)
 
-## Quick Start Examples
+---
 
-### 1. Basic Text Embedding and Search
+## Quick Start Guide
 
-```python
-#!/usr/bin/env python3
-"""
-Quickstart: Store and search text embeddings
-Runtime: ~30 seconds
-Cost: ~$0.001
-"""
+### Prerequisites
 
-from src.services.s3_vector_storage import S3VectorStorageManager
-from src.services.embedding_storage_integration import EmbeddingStorageIntegration
+Before running examples:
 
-def basic_text_search():
-    # Initialize services
-    storage = S3VectorStorageManager()
-    text_service = EmbeddingStorageIntegration()
-    
-    # Create bucket and index
-    bucket_name = "quickstart-text-vectors"
-    storage.create_vector_bucket(bucket_name)
-    
-    index_arn = storage.create_vector_index(
-        bucket_name=bucket_name,
-        index_name="quickstart-index",
-        dimensions=1024
-    )
-    print(f"✅ Created index: {index_arn}")
-    
-    # Store some sample texts
-    sample_content = [
-        "Netflix streaming service with original content",
-        "Amazon Prime Video entertainment platform", 
-        "Documentary about ocean wildlife conservation",
-        "Comedy series about workplace dynamics",
-        "Action movie with spectacular car chases"
-    ]
-    
-    # Store embeddings
-    stored_keys = []
-    for i, text in enumerate(sample_content):
-        result = text_service.store_text_embedding(
-            text=text,
-            index_arn=index_arn,
-            metadata={
-                "content_id": f"content-{i+1}",
-                "category": "entertainment" if "Netflix" in text or "Prime" in text 
-                          else "documentary" if "Documentary" in text
-                          else "comedy" if "Comedy" in text
-                          else "action"
-            },
-            vector_key=f"text-{i+1}"
-        )
-        stored_keys.append(result.vector_key)
-        print(f"✅ Stored: {result.vector_key}")
-    
-    # Search for similar content
-    query_text = "streaming platform for movies and shows"
-    search_results = text_service.search_similar_content(
-        query_text=query_text,
-        index_arn=index_arn,
-        top_k=3,
-        metadata_filters={"category": ["entertainment"]}
-    )
-    
-    print(f"\n🔍 Search results for: '{query_text}'")
-    for i, result in enumerate(search_results.results, 1):
-        print(f"{i}. {result.vector_key}")
-        print(f"   Similarity: {result.similarity_score:.3f}")
-        print(f"   Category: {result.metadata.get('category')}")
-    
-    return stored_keys, search_results
+```bash
+# 1. Clone repository
+git clone https://github.com/your-org/S3Vector.git
+cd S3Vector
 
-if __name__ == "__main__":
-    basic_text_search()
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Configure AWS credentials
+export AWS_REGION=us-east-1
+export AWS_ACCESS_KEY_ID=your_key
+export AWS_SECRET_ACCESS_KEY=your_secret
+
+# 4. (Optional) Configure TwelveLabs for video processing
+export TWELVELABS_API_KEY=your_key
 ```
 
-### 2. Simple Video Processing
+### Environment Variables
+
+Create a `.env` file:
+
+```env
+# AWS Configuration
+AWS_REGION=us-east-1
+
+# Optional: TwelveLabs for video processing
+TWELVELABS_API_KEY=your_key
+
+# Optional: Enable real AWS (vs simulation)
+USE_REAL_AWS=true
+```
+
+---
+
+## Deployment Mode Examples
+
+The S3Vector platform supports three deployment modes, each optimized for different use cases.
+
+### Mode 1: Quick Start with S3Vector Only
+
+**Best for**: Prototyping, learning, cost-conscious deployments
+
+**What gets deployed**:
+- S3 bucket for media storage
+- S3Vector bucket for vector indices
+- IAM roles for Bedrock access
+
+**Estimated time**: 5 minutes  
+**Estimated cost**: ~$0.50/month (storage only)
+
+#### Step 1: Deploy Infrastructure
+
+```bash
+cd terraform
+
+# Initialize Terraform
+terraform init
+
+# Review what will be created
+terraform plan
+
+# Deploy (S3Vector is enabled by default)
+terraform apply -auto-approve
+```
+
+**Expected output**:
+```
+Apply complete! Resources: 4 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+shared_bucket = {
+  "name" = "s3vector-demo-shared-media"
+  "arn" = "arn:aws:s3:::s3vector-demo-shared-media"
+}
+
+s3vector = {
+  "deployed" = true
+  "bucket_name" = "s3vector-demo-vectors"
+  "index_name" = "embeddings"
+  "dimension" = 1536
+}
+```
+
+#### Step 2: Upload and Process a Video
+
+**Python Example**:
 
 ```python
 #!/usr/bin/env python3
 """
-Quickstart: Process and search video content
-Runtime: ~5 minutes
-Cost: ~$0.02 (with real AWS)
+Quick Start: Upload video and perform similarity search
+Runtime: 2-3 minutes
+Cost: ~$0.02
 """
 
 import requests
-from src.services.video_embedding_storage import VideoEmbeddingStorage
+import time
 
-def basic_video_processing():
-    # Download sample video (Creative Commons)
-    video_url = "https://sample-videos.com/zip/10/mp4/SampleVideo_360x240_1mb.mp4"
-    
-    print("📥 Downloading sample video...")
-    response = requests.get(video_url)
-    with open("sample_video.mp4", "wb") as f:
-        f.write(response.content)
-    
-    # Initialize video service
-    video_service = VideoEmbeddingStorage()
-    
-    # Create bucket and index for video embeddings
-    bucket_name = "quickstart-video-vectors"
-    video_service.storage_manager.create_vector_bucket(bucket_name)
-    
-    index_arn = video_service.storage_manager.create_vector_index(
-        bucket_name=bucket_name,
-        index_name="video-segments",
-        dimensions=1024
-    )
-    
-    # Process video (simulation mode by default)
-    print("🎬 Processing video embeddings...")
-    processing_result = video_service.process_and_store_video_embeddings(
-        video_file_path="sample_video.mp4",
-        index_arn=index_arn,
-        metadata={
-            "title": "Sample Video",
-            "category": "demo",
-            "duration_sec": 30
-        },
-        segment_duration_sec=5.0
-    )
-    
-    print(f"✅ Processed {processing_result.segments_processed} video segments")
-    print(f"💰 Estimated cost: ${processing_result.cost_estimate:.4f}")
-    
-    # Search for specific video moments
-    query = "person walking in the scene"
-    search_results = video_service.search_video_content(
-        query_text=query,
-        index_arn=index_arn,
-        top_k=3
-    )
-    
-    print(f"\n🔍 Video search results for: '{query}'")
-    for result in search_results.results:
-        start_sec = result.metadata.get('start_sec', 0)
-        end_sec = result.metadata.get('end_sec', 0)
-        print(f"📹 Segment: {start_sec:.1f}s - {end_sec:.1f}s")
-        print(f"   Similarity: {result.similarity_score:.3f}")
-    
-    return processing_result
+# API base URL (adjust if needed)
+API_BASE = "http://localhost:8000"
 
-if __name__ == "__main__":
-    basic_video_processing()
-```
+# Step 1: Upload video
+print("📤 Uploading video...")
+video_url = "https://sample-videos.com/video321/mp4/480/big_buck_bunny_480p_1mb.mp4"
 
-## Text Embedding Workflows
-
-### 1. Content Library Management
-
-```python
-"""
-Manage a content library with rich metadata
-Use case: Media company content catalog
-"""
-
-from src.services.embedding_storage_integration import EmbeddingStorageIntegration
-from typing import List, Dict
-
-class ContentLibraryManager:
-    def __init__(self, index_arn: str):
-        self.text_service = EmbeddingStorageIntegration()
-        self.index_arn = index_arn
-    
-    def ingest_content_batch(self, content_items: List[Dict]) -> List[str]:
-        """Ingest a batch of content with rich metadata"""
-        stored_keys = []
-        
-        for item in content_items:
-            result = self.text_service.store_text_embedding(
-                text=item['description'],
-                index_arn=self.index_arn,
-                metadata={
-                    'title': item['title'],
-                    'genre': item['genre'],
-                    'rating': item.get('rating', 'NR'),
-                    'year': str(item.get('year', 2024)),
-                    'series_id': item.get('series_id'),
-                    'episode_number': str(item.get('episode_number', 1)),
-                    'content_type': item.get('content_type', 'movie'),
-                    'language': item.get('language', 'en'),
-                    'duration_minutes': str(item.get('duration_minutes', 120))
-                },
-                vector_key=f"content-{item['content_id']}"
-            )
-            stored_keys.append(result.vector_key)
-            print(f"✅ Ingested: {item['title']}")
-        
-        return stored_keys
-    
-    def search_content(self, query: str, filters: Dict = None) -> List[Dict]:
-        """Search content with filters"""
-        results = self.text_service.search_similar_content(
-            query_text=query,
-            index_arn=self.index_arn,
-            top_k=10,
-            metadata_filters=filters or {}
-        )
-        
-        return [
-            {
-                'title': result.metadata.get('title'),
-                'similarity': result.similarity_score,
-                'genre': result.metadata.get('genre'),
-                'year': result.metadata.get('year'),
-                'rating': result.metadata.get('rating')
-            }
-            for result in results.results
-        ]
-
-# Usage example
-def content_library_example():
-    # Sample content data
-    content_data = [
-        {
-            'content_id': 'movie-001',
-            'title': 'The Matrix',
-            'description': 'Cyberpunk action film about virtual reality and artificial intelligence',
-            'genre': 'sci-fi',
-            'rating': 'R',
-            'year': 1999,
-            'content_type': 'movie',
-            'duration_minutes': 136
-        },
-        {
-            'content_id': 'series-001-ep01',
-            'title': 'Stranger Things S1E1',
-            'description': 'Supernatural thriller about mysterious disappearances in a small town',
-            'genre': 'thriller',
-            'rating': 'TV-14',
-            'year': 2016,
-            'series_id': 'stranger-things',
-            'episode_number': 1,
-            'content_type': 'episode',
-            'duration_minutes': 47
-        },
-        {
-            'content_id': 'documentary-001',
-            'title': 'Planet Earth II',
-            'description': 'Nature documentary showcasing wildlife and natural habitats around the world',
-            'genre': 'documentary',
-            'rating': 'TV-G',
-            'year': 2016,
-            'content_type': 'documentary',
-            'duration_minutes': 60
+response = requests.post(
+    f"{API_BASE}/api/processing/process-video",
+    json={
+        "video_url": video_url,
+        "backend": "s3vector",
+        "processing_options": {
+            "video_embedding_options": ["visual"],
+            "chunk_duration_sec": 5.0
         }
-    ]
-    
-    # Initialize manager (assuming index exists)
-    index_arn = "your-content-index-arn"
-    manager = ContentLibraryManager(index_arn)
-    
-    # Ingest content
-    stored_keys = manager.ingest_content_batch(content_data)
-    
-    # Search examples
-    print("\n🔍 Search: 'science fiction movie'")
-    sci_fi_results = manager.search_content(
-        query="science fiction movie",
-        filters={'genre': ['sci-fi'], 'content_type': ['movie']}
+    }
+)
+
+job_data = response.json()
+job_id = job_data["job_id"]
+print(f"✅ Job created: {job_id}")
+
+# Step 2: Wait for processing
+print("⏳ Processing video (this may take 1-2 minutes)...")
+while True:
+    status_response = requests.get(
+        f"{API_BASE}/api/processing/status/{job_id}"
     )
+    status = status_response.json()
     
-    for result in sci_fi_results:
-        print(f"  📽️ {result['title']} ({result['year']}) - {result['similarity']:.3f}")
+    if status["status"] == "completed":
+        print("✅ Processing complete!")
+        print(f"   Segments processed: {status['segments_processed']}")
+        print(f"   Cost: ${status['cost_estimate']:.4f}")
+        break
+    elif status["status"] == "failed":
+        print(f"❌ Processing failed: {status['error']}")
+        break
     
-    print("\n🔍 Search: 'supernatural mystery series'")
-    mystery_results = manager.search_content(
-        query="supernatural mystery series",
-        filters={'content_type': ['episode']}
-    )
-    
-    for result in mystery_results:
-        print(f"  📺 {result['title']} - {result['similarity']:.3f}")
+    time.sleep(5)
+
+# Step 3: Perform similarity search
+print("\n🔍 Searching for 'rabbit running through field'...")
+search_response = requests.post(
+    f"{API_BASE}/api/search/query",
+    json={
+        "query_text": "rabbit running through field",
+        "backend": "s3vector",
+        "top_k": 5
+    }
+)
+
+results = search_response.json()
+print(f"\n📊 Found {len(results['results'])} results:")
+for i, result in enumerate(results['results'], 1):
+    print(f"{i}. Segment {result['segment_id']}")
+    print(f"   Time: {result['start_time']:.1f}s - {result['end_time']:.1f}s")
+    print(f"   Similarity: {result['similarity_score']:.3f}")
 ```
 
-### 2. Multilingual Content Processing
+**Expected output**:
+```
+📤 Uploading video...
+✅ Job created: job-abc123
+⏳ Processing video (this may take 1-2 minutes)...
+✅ Processing complete!
+   Segments processed: 12
+   Cost: $0.0156
+
+🔍 Searching for 'rabbit running through field'...
+📊 Found 5 results:
+1. Segment seg-001
+   Time: 5.0s - 10.0s
+   Similarity: 0.892
+2. Segment seg-003
+   Time: 15.0s - 20.0s
+   Similarity: 0.847
+...
+```
+
+#### Step 3: View in UI
+
+Open the web interface:
+
+```bash
+# In a new terminal, start the backend
+cd /path/to/S3Vector
+python -m uvicorn src.api.main:app --reload --port 8000
+
+# In another terminal, start the frontend
+cd frontend
+npm install
+npm run dev
+```
+
+Navigate to:
+- **Resource Management**: `http://localhost:5173/` - View deployed infrastructure
+- **Media Processing**: Upload more videos
+- **Query Search**: Perform searches
+- **Embedding Visualization**: Explore vector space
+
+---
+
+### Mode 2: Single Backend Comparison
+
+**Best for**: Evaluating a specific vector store (e.g., OpenSearch vs S3Vector)
+
+**What gets deployed**:
+- S3Vector (baseline)
+- One additional backend (OpenSearch OR Qdrant OR LanceDB)
+
+**Estimated time**: 15-20 minutes  
+**Estimated cost**: ~$10-50/month (varies by backend)
+
+#### Deploy with OpenSearch
+
+```bash
+cd terraform
+
+# Enable OpenSearch
+terraform apply -var="deploy_opensearch=true"
+```
+
+**Expected output**:
+```
+Apply complete! Resources: 8 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+opensearch = {
+  "deployed" = true
+  "endpoint" = "https://abc123.us-east-1.aoss.amazonaws.com"
+  "collection_name" = "s3vector-demo-collection"
+}
+```
+
+#### Compare Search Performance
+
+**Python Example**:
 
 ```python
+#!/usr/bin/env python3
 """
-Handle multilingual content with language-specific processing
+Compare search performance: S3Vector vs OpenSearch
+Runtime: 1-2 minutes
+Cost: ~$0.01
 """
 
-from src.services.bedrock_embedding import BedrockEmbeddingService
-from src.services.s3_vector_storage import S3VectorStorageManager
+import requests
+import time
 
-def multilingual_content_processing():
-    bedrock_service = BedrockEmbeddingService()
-    storage_manager = S3VectorStorageManager()
+API_BASE = "http://localhost:8000"
+
+# Same query against both backends
+query_text = "person walking in the park"
+backends = ["s3vector", "opensearch"]
+
+results_comparison = {}
+
+for backend in backends:
+    print(f"\n🔍 Searching {backend}...")
+    start_time = time.time()
     
-    # Create language-specific indexes
-    languages = ['en', 'es', 'fr', 'de']
-    bucket_name = "multilingual-content"
+    response = requests.post(
+        f"{API_BASE}/api/search/query",
+        json={
+            "query_text": query_text,
+            "backend": backend,
+            "top_k": 10
+        }
+    )
     
-    storage_manager.create_vector_bucket(bucket_name)
+    elapsed = time.time() - start_time
+    results = response.json()
     
-    indexes = {}
-    for lang in languages:
-        index_arn = storage_manager.create_vector_index(
-            bucket_name=bucket_name,
-            index_name=f"content-{lang}",
-            dimensions=1024
-        )
-        indexes[lang] = index_arn
-    
-    # Sample multilingual content
-    content_by_language = {
-        'en': [
-            "Action-packed superhero movie with spectacular visual effects",
-            "Romantic comedy set in contemporary New York City"
-        ],
-        'es': [
-            "Película de superhéroes llena de acción con efectos visuales espectaculares",
-            "Comedia romántica ambientada en la Nueva York contemporánea"
-        ],
-        'fr': [
-            "Film de super-héros plein d'action avec des effets visuels spectaculaires",
-            "Comédie romantique située dans le New York contemporain"
-        ],
-        'de': [
-            "Actionreicher Superheldenfilm mit spektakulären visuellen Effekten",
-            "Romantische Komödie im zeitgenössischen New York"
-        ]
+    results_comparison[backend] = {
+        "response_time": elapsed,
+        "results_count": len(results['results']),
+        "top_similarity": results['results'][0]['similarity_score'] if results['results'] else 0
     }
     
-    # Process and store multilingual content
-    for lang, texts in content_by_language.items():
-        print(f"\n🌍 Processing {lang.upper()} content...")
-        index_arn = indexes[lang]
-        
-        for i, text in enumerate(texts):
-            # Generate embedding
-            result = bedrock_service.generate_text_embedding(
-                text=text,
-                model_id="amazon.titan-embed-text-v2:0"  # Supports multilingual
-            )
-            
-            # Store with language metadata
-            vector_data = {
-                "key": f"{lang}-content-{i+1}",
-                "data": {"float32": result.embedding},
-                "metadata": {
-                    "language": lang,
-                    "content_type": "description",
-                    "category": "entertainment",
-                    "text_length": str(len(text)),
-                    "model_id": "amazon.titan-embed-text-v2:0"
-                }
-            }
-            
-            storage_manager.put_vectors_batch(index_arn, [vector_data])
-            print(f"✅ Stored: {vector_data['key']}")
-    
-    # Cross-language search example
-    print("\n🔍 Cross-language search:")
-    query = "superhero action movie"
-    
-    for lang, index_arn in indexes.items():
-        # Search in each language index
-        query_result = bedrock_service.generate_text_embedding(
-            text=query,
-            model_id="amazon.titan-embed-text-v2:0"
-        )
-        
-        search_results = storage_manager.query_similar_vectors(
-            index_arn=index_arn,
-            query_vector=query_result.embedding,
-            top_k=1
-        )
-        
-        if search_results['results']:
-            best_match = search_results['results'][0]
-            print(f"  {lang.upper()}: {best_match['vector_key']} (score: {best_match['similarity_score']:.3f})")
+    print(f"✅ Response time: {elapsed:.3f}s")
+    print(f"   Results: {len(results['results'])}")
+    print(f"   Top similarity: {results['results'][0]['similarity_score']:.3f}")
+
+# Compare results
+print("\n📊 Comparison Summary:")
+print(f"{'Backend':<15} {'Response Time':<15} {'Top Similarity':<15}")
+print("-" * 45)
+for backend, metrics in results_comparison.items():
+    print(f"{backend:<15} {metrics['response_time']:.3f}s{' ':<8} {metrics['top_similarity']:.3f}")
 ```
+
+**Expected output**:
+```
+🔍 Searching s3vector...
+✅ Response time: 0.234s
+   Results: 10
+   Top similarity: 0.876
+
+🔍 Searching opensearch...
+✅ Response time: 0.156s
+   Results: 10
+   Top similarity: 0.871
+
+📊 Comparison Summary:
+Backend         Response Time   Top Similarity 
+---------------------------------------------
+s3vector        0.234s          0.876
+opensearch      0.156s          0.871
+```
+
+---
+
+### Mode 3: Full Backend Comparison
+
+**Best for**: Comprehensive evaluation of all vector store options
+
+**What gets deployed**:
+- S3Vector
+- OpenSearch Serverless
+- Qdrant on ECS
+- LanceDB (choose: S3, EFS, or EBS backend)
+
+**Estimated time**: 20-30 minutes  
+**Estimated cost**: ~$100/month (OpenSearch is most expensive)
+
+#### Deploy All Backends
+
+```bash
+cd terraform
+
+# Enable all backends
+terraform apply \
+  -var="deploy_opensearch=true" \
+  -var="deploy_qdrant=true" \
+  -var="deploy_lancedb_s3=true"
+```
+
+#### Comprehensive Backend Comparison
+
+**Python Example**:
+
+```python
+#!/usr/bin/env python3
+"""
+Full backend comparison workflow
+Runtime: 5-10 minutes
+Cost: ~$0.10
+"""
+
+import requests
+import time
+import json
+
+API_BASE = "http://localhost:8000"
+
+# Test video
+video_url = "https://sample-videos.com/video321/mp4/480/big_buck_bunny_480p_1mb.mp4"
+
+# All available backends
+backends = ["s3vector", "opensearch", "qdrant", "lancedb_s3"]
+
+# Step 1: Upload video to all backends
+print("📤 Processing video across all backends...")
+job_ids = {}
+
+for backend in backends:
+    print(f"   Starting {backend}...")
+    response = requests.post(
+        f"{API_BASE}/api/processing/process-video",
+        json={
+            "video_url": video_url,
+            "backend": backend,
+            "processing_options": {
+                "video_embedding_options": ["visual"],
+                "chunk_duration_sec": 5.0
+            }
+        }
+    )
+    job_ids[backend] = response.json()["job_id"]
+
+# Step 2: Wait for all jobs to complete
+print("\n⏳ Waiting for processing to complete...")
+all_complete = False
+while not all_complete:
+    statuses = {}
+    for backend, job_id in job_ids.items():
+        response = requests.get(f"{API_BASE}/api/processing/status/{job_id}")
+        status = response.json()
+        statuses[backend] = status["status"]
+    
+    all_complete = all(s == "completed" for s in statuses.values())
+    if not all_complete:
+        time.sleep(5)
+
+print("✅ All jobs completed!")
+
+# Step 3: Run identical queries against all backends
+test_queries = [
+    "rabbit running through grass",
+    "outdoor nature scene",
+    "animal in motion"
+]
+
+comparison_results = {backend: [] for backend in backends}
+
+for query in test_queries:
+    print(f"\n🔍 Query: '{query}'")
+    
+    for backend in backends:
+        start = time.time()
+        response = requests.post(
+            f"{API_BASE}/api/search/query",
+            json={
+                "query_text": query,
+                "backend": backend,
+                "top_k": 5
+            }
+        )
+        elapsed = time.time() - start
+        results = response.json()
+        
+        comparison_results[backend].append({
+            "query": query,
+            "response_time": elapsed,
+            "top_score": results['results'][0]['similarity_score'] if results['results'] else 0
+        })
+        
+        print(f"   {backend:15} - {elapsed:.3f}s - score: {results['results'][0]['similarity_score'] if results['results'] else 0:.3f}")
+
+# Step 4: Generate comparison report
+print("\n" + "="*60)
+print("📊 COMPREHENSIVE BACKEND COMPARISON REPORT")
+print("="*60)
+
+for backend in backends:
+    results = comparison_results[backend]
+    avg_response_time = sum(r['response_time'] for r in results) / len(results)
+    avg_score = sum(r['top_score'] for r in results) / len(results)
+    
+    print(f"\n{backend.upper()}:")
+    print(f"  Average Response Time: {avg_response_time:.3f}s")
+    print(f"  Average Top Score: {avg_score:.3f}")
+    print(f"  Consistency: {'High' if max(r['top_score'] for r in results) - min(r['top_score'] for r in results) < 0.1 else 'Medium'}")
+
+# Save detailed results
+with open("backend_comparison_results.json", "w") as f:
+    json.dump(comparison_results, f, indent=2)
+
+print("\n💾 Detailed results saved to: backend_comparison_results.json")
+```
+
+**Expected output**:
+```
+📤 Processing video across all backends...
+   Starting s3vector...
+   Starting opensearch...
+   Starting qdrant...
+   Starting lancedb_s3...
+
+⏳ Waiting for processing to complete...
+✅ All jobs completed!
+
+🔍 Query: 'rabbit running through grass'
+   s3vector        - 0.234s - score: 0.892
+   opensearch      - 0.156s - score: 0.887
+   qdrant          - 0.189s - score: 0.895
+   lancedb_s3      - 0.312s - score: 0.883
+
+🔍 Query: 'outdoor nature scene'
+   s3vector        - 0.221s - score: 0.856
+   opensearch      - 0.142s - score: 0.851
+   qdrant          - 0.178s - score: 0.862
+   lancedb_s3      - 0.298s - score: 0.848
+
+============================================================
+📊 COMPREHENSIVE BACKEND COMPARISON REPORT
+============================================================
+
+S3VECTOR:
+  Average Response Time: 0.228s
+  Average Top Score: 0.874
+  Consistency: High
+
+OPENSEARCH:
+  Average Response Time: 0.149s
+  Average Top Score: 0.869
+  Consistency: High
+
+QDRANT:
+  Average Response Time: 0.184s
+  Average Top Score: 0.879
+  Consistency: High
+
+LANCEDB_S3:
+  Average Response Time: 0.305s
+  Average Top Score: 0.866
+  Consistency: High
+
+💾 Detailed results saved to: backend_comparison_results.json
+```
+
+---
+
+## API Integration Examples
+
+### REST API with cURL
+
+#### 1. Health Check
+
+```bash
+# Check API health
+curl http://localhost:8000/health
+
+# Check specific backend health
+curl http://localhost:8000/api/resources/health-check/s3vector
+curl http://localhost:8000/api/resources/health-check/opensearch
+```
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "backend": "s3vector",
+  "response_time_ms": 145,
+  "timestamp": "2025-11-13T17:00:00Z"
+}
+```
+
+#### 2. Get Deployed Resources
+
+```bash
+# Get all deployed infrastructure
+curl http://localhost:8000/api/resources/deployed-resources-tree
+```
+
+**Response**:
+```json
+{
+  "shared_resources": {
+    "media_bucket": {
+      "name": "s3vector-demo-shared-media",
+      "region": "us-east-1",
+      "status": "active"
+    }
+  },
+  "vector_backends": {
+    "s3vector": {
+      "deployed": true,
+      "health_status": "healthy",
+      "bucket_name": "s3vector-demo-vectors",
+      "indexes": [{
+        "name": "embeddings",
+        "dimension": 1536,
+        "vector_count": 1245
+      }]
+    },
+    "opensearch": {
+      "deployed": false
+    }
+  }
+}
+```
+
+#### 3. Generate Text Embedding
+
+```bash
+# Generate embedding for text
+curl -X POST http://localhost:8000/api/embeddings/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "A rabbit running through a field",
+    "model": "amazon.titan-embed-text-v2:0"
+  }'
+```
+
+**Response**:
+```json
+{
+  "embedding": [0.123, -0.456, 0.789, ...],
+  "dimension": 1536,
+  "model": "amazon.titan-embed-text-v2:0",
+  "input_tokens": 8
+}
+```
+
+#### 4. Process Video
+
+```bash
+# Upload and process video
+curl -X POST http://localhost:8000/api/processing/process-video \
+  -H "Content-Type: application/json" \
+  -d '{
+    "video_url": "https://example.com/video.mp4",
+    "backend": "s3vector",
+    "processing_options": {
+      "video_embedding_options": ["visual", "audio"],
+      "chunk_duration_sec": 5.0
+    }
+  }'
+```
+
+**Response**:
+```json
+{
+  "job_id": "job-abc123",
+  "status": "processing",
+  "estimated_duration_sec": 120
+}
+```
+
+#### 5. Perform Vector Search
+
+```bash
+# Search for similar videos
+curl -X POST http://localhost:8000/api/search/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query_text": "outdoor mountain hiking",
+    "backend": "s3vector",
+    "top_k": 10,
+    "filters": {
+      "category": ["nature", "sports"]
+    }
+  }'
+```
+
+**Response**:
+```json
+{
+  "query": "outdoor mountain hiking",
+  "backend": "s3vector",
+  "results": [
+    {
+      "segment_id": "seg-001",
+      "video_id": "vid-abc",
+      "start_time": 15.2,
+      "end_time": 20.5,
+      "similarity_score": 0.892,
+      "metadata": {
+        "title": "Mountain Adventures",
+        "category": "nature"
+      }
+    }
+  ],
+  "response_time_ms": 234
+}
+```
+
+### JavaScript/TypeScript Client
+
+#### Installation
+
+```bash
+npm install axios
+```
+
+#### API Client Implementation
+
+```typescript
+// src/api/client.ts
+import axios, { AxiosInstance } from 'axios';
+
+interface SearchRequest {
+  query_text: string;
+  backend: string;
+  top_k?: number;
+  filters?: Record<string, any>;
+}
+
+interface SearchResult {
+  segment_id: string;
+  video_id: string;
+  start_time: number;
+  end_time: number;
+  similarity_score: number;
+  metadata: Record<string, any>;
+}
+
+interface SearchResponse {
+  query: string;
+  backend: string;
+  results: SearchResult[];
+  response_time_ms: number;
+}
+
+class S3VectorClient {
+  private client: AxiosInstance;
+
+  constructor(baseURL = 'http://localhost:8000') {
+    this.client = axios.create({
+      baseURL,
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+
+  // Health check
+  async healthCheck(backend?: string): Promise<any> {
+    const endpoint = backend
+      ? `/api/resources/health-check/${backend}`
+      : '/health';
+    const response = await this.client.get(endpoint);
+    return response.data;
+  }
+
+  // Get deployed resources
+  async getDeployedResources(): Promise<any> {
+    const response = await this.client.get('/api/resources/deployed-resources-tree');
+    return response.data;
+  }
+
+  // Process video
+  async processVideo(
+    videoUrl: string,
+    backend: string,
+    options?: any
+  ): Promise<{ job_id: string; status: string }> {
+    const response = await this.client.post('/api/processing/process-video', {
+      video_url: videoUrl,
+      backend,
+      processing_options: options || {
+        video_embedding_options: ['visual'],
+        chunk_duration_sec: 5.0,
+      },
+    });
+    return response.data;
+  }
+
+  // Get processing status
+  async getProcessingStatus(jobId: string): Promise<any> {
+    const response = await this.client.get(`/api/processing/status/${jobId}`);
+    return response.data;
+  }
+
+  // Vector search
+  async search(request: SearchRequest): Promise<SearchResponse> {
+    const response = await this.client.post('/api/search/query', request);
+    return response.data;
+  }
+
+  // Generate embedding
+  async generateEmbedding(
+    text: string,
+    model = 'amazon.titan-embed-text-v2:0'
+  ): Promise<{ embedding: number[]; dimension: number }> {
+    const response = await this.client.post('/api/embeddings/generate', {
+      text,
+      model,
+    });
+    return response.data;
+  }
+}
+
+export default S3VectorClient;
+```
+
+#### Usage Examples
+
+```typescript
+// example.ts
+import S3VectorClient from './api/client';
+
+async function main() {
+  const client = new S3VectorClient('http://localhost:8000');
+
+  try {
+    // 1. Check health
+    console.log('Checking API health...');
+    const health = await client.healthCheck();
+    console.log('API Status:', health.status);
+
+    // 2. Get deployed resources
+    console.log('\nFetching deployed resources...');
+    const resources = await client.getDeployedResources();
+    console.log('S3Vector deployed:', resources.vector_backends.s3vector.deployed);
+
+    // 3. Process a video
+    console.log('\nProcessing video...');
+    const job = await client.processVideo(
+      'https://example.com/video.mp4',
+      's3vector'
+    );
+    console.log('Job ID:', job.job_id);
+
+    // 4. Wait for processing
+    let status = 'processing';
+    while (status === 'processing') {
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const statusData = await client.getProcessingStatus(job.job_id);
+      status = statusData.status;
+      console.log('Status:', status);
+    }
+
+    // 5. Perform search
+    console.log('\nSearching for similar content...');
+    const searchResults = await client.search({
+      query_text: 'mountain landscape',
+      backend: 's3vector',
+      top_k: 5,
+    });
+
+    console.log(`Found ${searchResults.results.length} results:`);
+    searchResults.results.forEach((result, i) => {
+      console.log(`${i + 1}. ${result.segment_id}`);
+      console.log(`   Time: ${result.start_time}s - ${result.end_time}s`);
+      console.log(`   Similarity: ${result.similarity_score.toFixed(3)}`);
+    });
+
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+main();
+```
+
+### Python SDK
+
+```python
+#!/usr/bin/env python3
+"""
+Python SDK for S3Vector API
+"""
+
+import requests
+import time
+from typing import Dict, List, Optional, Any
+from dataclasses import dataclass
+
+@dataclass
+class SearchResult:
+    segment_id: str
+    video_id: str
+    start_time: float
+    end_time: float
+    similarity_score: float
+    metadata: Dict[str, Any]
+
+class S3VectorClient:
+    """Client for interacting with S3Vector API"""
+    
+    def __init__(self, base_url: str = "http://localhost:8000"):
+        self.base_url = base_url
+        self.session = requests.Session()
+        self.session.headers.update({"Content-Type": "application/json"})
+    
+    def health_check(self, backend: Optional[str] = None) -> Dict:
+        """Check API or backend health"""
+        endpoint = f"/api/resources/health-check/{backend}" if backend else "/health"
+        response = self.session.get(f"{self.base_url}{endpoint}")
+        response.raise_for_status()
+        return response.json()
+    
+    def get_deployed_resources(self) -> Dict:
+        """Get all deployed infrastructure"""
+        response = self.session.get(f"{self.base_url}/api/resources/deployed-resources-tree")
+        response.raise_for_status()
+        return response.json()
+    
+    def process_video(
+        self,
+        video_url: str,
+        backend: str,
+        options: Optional[Dict] = None
+    ) -> str:
+        """
+        Process a video and return job ID
+        
+        Returns:
+            job_id: Job identifier for tracking status
+        """
+        payload = {
+            "video_url": video_url,
+            "backend": backend,
+            "processing_options": options or {
+                "video_embedding_options": ["visual"],
+                "chunk_duration_sec": 5.0
+            }
+        }
+        
+        response = self.session.post(
+            f"{self.base_url}/api/processing/process-video",
+            json=payload
+        )
+        response.raise_for_status()
+        return response.json()["job_id"]
+    
+    def get_processing_status(self, job_id: str) -> Dict:
+        """Get processing job status"""
+        response = self.session.get(
+            f"{self.base_url}/api/processing/status/{job_id}"
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    def wait_for_processing(
+        self,
+        job_id: str,
+        timeout: int = 300,
+        poll_interval: int = 5
+    ) -> Dict:
+        """
+        Wait for processing to complete
+        
+        Args:
+            job_id: Job identifier
+            timeout: Maximum wait time in seconds
+            poll_interval: Seconds between status checks
+            
+        Returns:
+            Final job status
+            
+        Raises:
+            TimeoutError: If processing exceeds timeout
+            RuntimeError: If processing fails
+        """
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            status = self.get_processing_status(job_id)
+            
+            if status["status"] == "completed":
+                return status
+            elif status["status"] == "failed":
+                raise RuntimeError(f"Processing failed: {status.get('error')}")
+            
+            time.sleep(poll_interval)
+        
+        raise TimeoutError(f"Processing timed out after {timeout}s")
+    
+    def search(
+        self,
+        query_text: str,
+        backend: str,
+        top_k: int = 10,
+        filters: Optional[Dict] = None
+    ) -> List[SearchResult]:
+        """
+        Perform vector similarity search
+        
+        Returns:
+            List of search results
+        """
+        payload = {
+            "query_text": query_text,
+            "backend": backend,
+            "top_k": top_k
+        }
+        
+        if filters:
+            payload["filters"] = filters
+        
+        response = self.session.post(
+            f"{self.base_url}/api/search/query",
+            json=payload
+        )
+        response.raise_for_status()
+        
+        data = response.json()
+        return [SearchResult(**result) for result in data["results"]]
+    
+    def generate_embedding(
+        self,
+        text: str,
+        model: str = "amazon.titan-embed-text-v2:0"
+    ) -> List[float]:
+        """Generate text embedding"""
+        response = self.session.post(
+            f"{self.base_url}/api/embeddings/generate",
+            json={"text": text, "model": model}
+        )
+        response.raise_for_status()
+        return response.json()["embedding"]
+
+
+# Usage example
+if __name__ == "__main__":
+    client = S3VectorClient()
+    
+    # Check health
+    health = client.health_check("s3vector")
+    print(f"Backend status: {health['status']}")
+    
+    # Process video
+    job_id = client.process_video(
+        video_url="https://example.com/video.mp4",
+        backend="s3vector"
+    )
+    print(f"Processing job: {job_id}")
+    
+    # Wait for completion
+    result = client.wait_for_processing(job_id)
+    print(f"Processed {result['segments_processed']} segments")
+    
+    # Search
+    results = client.search(
+        query_text="mountain landscape",
+        backend="s3vector",
+        top_k=5
+    )
+    
+    for i, result in enumerate(results, 1):
+        print(f"{i}. {result.segment_id} - Score: {result.similarity_score:.3f}")
+```
+
+---
 
 ## Video Processing Workflows
 
-### 1. Video Content Analysis Pipeline
+### Production-Scale Video Processing
+
+**Use case**: Batch processing of video library
+
+**Estimated time**: 30-60 minutes (depends on video count)  
+**Estimated cost**: ~$0.02 per video
 
 ```python
+#!/usr/bin/env python3
 """
-Complete video analysis pipeline with temporal search
-Use case: Video streaming platform content analysis
-"""
-
-from src.services.video_embedding_storage import VideoEmbeddingStorage
-from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
-import os
-
-class VideoAnalysisPipeline:
-    def __init__(self, bucket_name: str):
-        self.video_service = VideoEmbeddingStorage()
-        self.twelvelabs_service = TwelveLabsVideoProcessingService()
-        self.bucket_name = bucket_name
-        self.setup_indexes()
-    
-    def setup_indexes(self):
-        """Create specialized indexes for different content types"""
-        self.video_service.storage_manager.create_vector_bucket(self.bucket_name)
-        
-        self.indexes = {
-            'action': self.video_service.storage_manager.create_vector_index(
-                bucket_name=self.bucket_name,
-                index_name="action-scenes",
-                dimensions=1024
-            ),
-            'dialogue': self.video_service.storage_manager.create_vector_index(
-                bucket_name=self.bucket_name,
-                index_name="dialogue-scenes",
-                dimensions=1024
-            ),
-            'landscape': self.video_service.storage_manager.create_vector_index(
-                bucket_name=self.bucket_name,
-                index_name="landscape-shots",
-                dimensions=1024
-            )
-        }
-        print("✅ Created specialized video indexes")
-    
-    def process_video_collection(self, video_files: list):
-        """Process a collection of videos with automatic categorization"""
-        results = []
-        
-        for video_info in video_files:
-            print(f"\n🎬 Processing: {video_info['title']}")
-            
-            # Determine appropriate index based on content type
-            category = video_info.get('category', 'action')
-            index_arn = self.indexes.get(category, self.indexes['action'])
-            
-            # Process with different embedding options based on category
-            embedding_options = self._get_embedding_options(category)
-            
-            result = self.video_service.process_and_store_video_embeddings(
-                video_file_path=video_info['file_path'],
-                index_arn=index_arn,
-                metadata={
-                    'title': video_info['title'],
-                    'category': category,
-                    'series_id': video_info.get('series_id'),
-                    'episode_number': str(video_info.get('episode_number', 1)),
-                    'genre': video_info.get('genre', 'unknown'),
-                    'duration_sec': video_info.get('duration_sec', 3600)
-                },
-                segment_duration_sec=video_info.get('segment_duration', 5.0),
-                embedding_options=embedding_options
-            )
-            
-            results.append({
-                'video': video_info['title'],
-                'segments_processed': result.segments_processed,
-                'index_arn': index_arn,
-                'cost_estimate': result.cost_estimate
-            })
-            
-            print(f"✅ Processed {result.segments_processed} segments")
-            print(f"💰 Cost: ${result.cost_estimate:.4f}")
-        
-        return results
-    
-    def _get_embedding_options(self, category: str) -> list:
-        """Get optimal embedding options for content category"""
-        embedding_configs = {
-            'action': ['visual-image', 'audio'],  # Focus on visual and sound
-            'dialogue': ['visual-text', 'audio'], # Focus on speech and text
-            'landscape': ['visual-image'],        # Focus on visual only
-        }
-        return embedding_configs.get(category, ['visual-text'])
-    
-    def search_across_content(self, query: str, category: str = None, 
-                            time_filter: dict = None) -> dict:
-        """Search across video content with category and time filtering"""
-        search_indexes = [self.indexes[category]] if category else list(self.indexes.values())
-        
-        all_results = []
-        for index_arn in search_indexes:
-            results = self.video_service.search_video_content(
-                query_text=query,
-                index_arn=index_arn,
-                top_k=5,
-                temporal_filter=time_filter
-            )
-            
-            for result in results.results:
-                result.metadata['index_category'] = self._get_category_from_index(index_arn)
-                all_results.append(result)
-        
-        # Sort by similarity score
-        all_results.sort(key=lambda x: x.similarity_score, reverse=True)
-        
-        return {
-            'query': query,
-            'total_results': len(all_results),
-            'results': all_results[:10]  # Top 10
-        }
-    
-    def _get_category_from_index(self, index_arn: str) -> str:
-        """Get category from index ARN"""
-        for category, arn in self.indexes.items():
-            if arn == index_arn:
-                return category
-        return 'unknown'
-
-# Usage example
-def video_pipeline_example():
-    # Initialize pipeline
-    pipeline = VideoAnalysisPipeline("video-analysis-demo")
-    
-    # Sample video collection
-    video_collection = [
-        {
-            'title': 'Action Movie Trailer',
-            'file_path': 'videos/action_trailer.mp4',
-            'category': 'action',
-            'genre': 'action',
-            'duration_sec': 180,
-            'segment_duration': 3.0
-        },
-        {
-            'title': 'Nature Documentary Clip',
-            'file_path': 'videos/nature_doc.mp4',
-            'category': 'landscape',
-            'genre': 'documentary',
-            'duration_sec': 300,
-            'segment_duration': 5.0
-        },
-        {
-            'title': 'Drama Series Scene',
-            'file_path': 'videos/drama_scene.mp4',
-            'category': 'dialogue',
-            'genre': 'drama',
-            'series_id': 'drama-series-01',
-            'episode_number': 1,
-            'duration_sec': 240,
-            'segment_duration': 4.0
-        }
-    ]
-    
-    # Process videos
-    processing_results = pipeline.process_video_collection(video_collection)
-    
-    total_cost = sum(r['cost_estimate'] for r in processing_results)
-    total_segments = sum(r['segments_processed'] for r in processing_results)
-    print(f"\n📊 Processing Summary:")
-    print(f"   Total segments: {total_segments}")
-    print(f"   Total cost: ${total_cost:.4f}")
-    
-    # Search examples
-    search_queries = [
-        ("car chase scene", "action"),
-        ("mountain landscape", "landscape"), 
-        ("emotional conversation", "dialogue"),
-        ("dramatic moment", None)  # Search all categories
-    ]
-    
-    for query, category in search_queries:
-        print(f"\n🔍 Search: '{query}' in {category or 'all categories'}")
-        results = pipeline.search_across_content(query, category)
-        
-        for result in results['results'][:3]:  # Top 3
-            start_sec = result.metadata.get('start_sec', 0)
-            end_sec = result.metadata.get('end_sec', 0)
-            category = result.metadata.get('index_category', 'unknown')
-            title = result.metadata.get('title', 'Unknown')
-            
-            print(f"  📹 {title} [{category}]")
-            print(f"     Time: {start_sec:.1f}s - {end_sec:.1f}s")
-            print(f"     Similarity: {result.similarity_score:.3f}")
-```
-
-### 2. Real-time Video Monitoring
-
-```python
-"""
-Real-time video processing and monitoring
-Use case: Live content monitoring and analysis
+Production-scale batch video processing
+Processes multiple videos with error handling and cost tracking
 """
 
 import asyncio
-import time
-from src.services.video_embedding_storage import VideoEmbeddingStorage
+import aiohttp
+from typing import List, Dict
+from dataclasses import dataclass
+import json
+from datetime import datetime
 
-class RealTimeVideoMonitor:
-    def __init__(self, index_arn: str):
-        self.video_service = VideoEmbeddingStorage()
-        self.index_arn = index_arn
-        self.monitoring = False
-        self.alert_thresholds = {
-            'inappropriate_content': 0.8,
-            'violence': 0.75,
-            'adult_content': 0.85
-        }
+@dataclass
+class VideoJob:
+    video_url: str
+    video_id: str
+    title: str
+    category: str
+
+@dataclass
+class ProcessingResult:
+    video_id: str
+    status: str
+    segments_processed: int
+    cost: float
+    duration_sec: float
+    error: str = None
+
+class BatchVideoProcessor:
+    """Batch process videos with concurrency control"""
     
-    async def monitor_video_stream(self, video_stream_path: str):
-        """Monitor video stream for content classification"""
-        self.monitoring = True
-        segment_count = 0
+    def __init__(
+        self,
+        api_base: str = "http://localhost:8000",
+        backend: str = "s3vector",
+        max_concurrent: int = 5
+    ):
+        self.api_base = api_base
+        self.backend = backend
+        self.max_concurrent = max_concurrent
+        self.semaphore = asyncio.Semaphore(max_concurrent)
+    
+    async def process_video(
+        self,
+        session: aiohttp.ClientSession,
+        video: VideoJob
+    ) -> ProcessingResult:
+        """Process a single video"""
+        start_time = asyncio.get_event_loop().time()
         
-        print(f"🔴 Starting real-time monitoring: {video_stream_path}")
-        
-        while self.monitoring:
+        async with self.semaphore:
             try:
-                # Process current segment (simulated)
-                segment_start_time = time.time()
-                segment_duration = 5.0  # 5-second segments
+                # Start processing
+                async with session.post(
+                    f"{self.api_base}/api/processing/process-video",
+                    json={
+                        "video_url": video.video_url,
+                        "backend": self.backend,
+                        "processing_options": {
+                            "video_embedding_options": ["visual"],
+                            "chunk_duration_sec": 5.0
+                        },
+                        "metadata": {
+                            "video_id": video.video_id,
+                            "title": video.title,
+                            "category": video.category
+                        }
+                    }
+                ) as response:
+                    job_data = await response.json()
+                    job_id = job_data["job_id"]
                 
-                # In real implementation, this would capture live video
-                segment_file = f"temp_segment_{segment_count}.mp4"
-                
-                # Process segment
-                result = self.video_service.process_and_store_video_embeddings(
-                    video_file_path=segment_file,
-                    index_arn=self.index_arn,
-                    metadata={
-                        'stream_id': video_stream_path,
-                        'segment_number': segment_count,
-                        'timestamp': segment_start_time,
-                        'real_time_monitoring': True
-                    },
-                    segment_duration_sec=segment_duration
-                )
-                
-                # Check for content alerts
-                await self._check_content_alerts(segment_count, result)
-                
-                segment_count += 1
-                print(f"✅ Processed segment {segment_count}")
-                
-                # Wait for next segment
-                await asyncio.sleep(segment_duration)
-                
+                # Wait for completion
+                while True:
+                    async with session.get(
+                        f"{self.api_base}/api/processing/status/{job_id}"
+                    ) as response:
+                        status_data = await response.json()
+                    
+                    if status_data["status"] == "completed":
+                        duration = asyncio.get_event_loop().time() - start_time
+                        return ProcessingResult(
+                            video_id=video.video_id,
+                            status="completed",
+                            segments_processed=status_data["segments_processed"],
+                            cost=status_data.get("cost_estimate", 0.0),
+                            duration_sec=duration
+                        )
+                    elif status_data["status"] == "failed":
+                        return ProcessingResult(
+                            video_id=video.video_id,
+                            status="failed",
+                            segments_processed=0,
+                            cost=0.0,
+                            duration_sec=0.0,
+                            error=status_data.get("error")
+                        )
+                    
+                    await asyncio.sleep(5)
+            
             except Exception as e:
-                print(f"❌ Error processing segment {segment_count}: {e}")
-                await asyncio.sleep(1)
+                return ProcessingResult(
+                    video_id=video.video_id,
+                    status="error",
+                    segments_processed=0,
+                    cost=0.0,
+                    duration_sec=0.0,
+                    error=str(e)
+                )
     
-    async def _check_content_alerts(self, segment_number: int, processing_result):
-        """Check for content that requires alerts"""
-        alert_queries = [
-            "inappropriate content for children",
-            "violent scenes or fighting",
-            "adult or mature content"
-        ]
-        
-        for alert_type, query in zip(self.alert_thresholds.keys(), alert_queries):
-            threshold = self.alert_thresholds[alert_type]
-            
-            # Search for potentially problematic content
-            search_results = self.video_service.search_video_content(
-                query_text=query,
-                index_arn=self.index_arn,
-                top_k=1,
-                metadata_filters={'segment_number': [str(segment_number)]}
-            )
-            
-            if search_results.results and search_results.results[0].similarity_score >= threshold:
-                await self._trigger_alert(alert_type, segment_number, 
-                                         search_results.results[0].similarity_score)
-    
-    async def _trigger_alert(self, alert_type: str, segment_number: int, score: float):
-        """Trigger alert for detected content"""
-        print(f"🚨 ALERT: {alert_type.replace('_', ' ').title()}")
-        print(f"   Segment: {segment_number}")
-        print(f"   Confidence: {score:.3f}")
-        print(f"   Action: Review required")
-        
-        # In real implementation, this would:
-        # - Send notifications to moderators
-        # - Log to monitoring system
-        # - Potentially pause stream if severe
-    
-    def stop_monitoring(self):
-        """Stop real-time monitoring"""
-        self.monitoring = False
-        print("🛑 Stopping real-time monitoring")
+    async def process_batch(
+        self,
+        videos: List[VideoJob]
+    ) -> List[ProcessingResult]:
+        """Process multiple videos concurrently"""
+        async with aiohttp.ClientSession() as session:
+            tasks = [self.process_video(session, video) for video in videos]
+            results = await asyncio.gather(*tasks)
+            return results
 
 # Usage example
-async def realtime_monitoring_example():
-    # Setup monitoring
-    index_arn = "your-monitoring-index-arn"
-    monitor = RealTimeVideoMonitor(index_arn)
-    
-    # Start monitoring (this would run continuously)
-    monitor_task = asyncio.create_task(
-        monitor.monitor_video_stream("rtmp://live-stream-url")
-    )
-    
-    # Let it run for demonstration
-    await asyncio.sleep(30)  # Monitor for 30 seconds
-    
-    # Stop monitoring
-    monitor.stop_monitoring()
-    await monitor_task
-```
-
-## Advanced Search Scenarios
-
-### 1. Multi-Modal Cross-Reference Search
-
-```python
-"""
-Advanced search combining text descriptions with video content
-Use case: Content discovery and recommendation engine
-"""
-
-from src.services.embedding_storage_integration import EmbeddingStorageIntegration
-from src.services.video_embedding_storage import VideoEmbeddingStorage
-from src.services.bedrock_embedding import BedrockEmbeddingService
-
-class MultiModalSearchEngine:
-    def __init__(self, text_index_arn: str, video_index_arn: str):
-        self.text_service = EmbeddingStorageIntegration()
-        self.video_service = VideoEmbeddingStorage()
-        self.bedrock_service = BedrockEmbeddingService()
-        self.text_index_arn = text_index_arn
-        self.video_index_arn = video_index_arn
-    
-    def cross_modal_search(self, query: str, search_weights: dict = None):
-        """
-        Search across both text and video content with weighted results
-        """
-        weights = search_weights or {'text': 0.4, 'video': 0.6}
-        
-        print(f"🔍 Cross-modal search: '{query}'")
-        
-        # Search text content
-        text_results = self.text_service.search_similar_content(
-            query_text=query,
-            index_arn=self.text_index_arn,
-            top_k=10
-        )
-        
-        # Search video content
-        video_results = self.video_service.search_video_content(
-            query_text=query,
-            index_arn=self.video_index_arn,
-            top_k=10
-        )
-        
-        # Combine and weight results
-        combined_results = []
-        
-        # Process text results
-        for result in text_results.results:
-            combined_results.append({
-                'content_type': 'text',
-                'title': result.metadata.get('title', 'Unknown'),
-                'similarity_score': result.similarity_score * weights['text'],
-                'raw_score': result.similarity_score,
-                'metadata': result.metadata,
-                'source': 'text_index'
-            })
-        
-        # Process video results
-        for result in video_results.results:
-            combined_results.append({
-                'content_type': 'video',
-                'title': result.metadata.get('title', 'Unknown'),
-                'similarity_score': result.similarity_score * weights['video'],
-                'raw_score': result.similarity_score,
-                'time_segment': f"{result.metadata.get('start_sec', 0):.1f}s - {result.metadata.get('end_sec', 0):.1f}s",
-                'metadata': result.metadata,
-                'source': 'video_index'
-            })
-        
-        # Sort by weighted similarity
-        combined_results.sort(key=lambda x: x['similarity_score'], reverse=True)
-        
-        return {
-            'query': query,
-            'weights_used': weights,
-            'text_results_count': len(text_results.results),
-            'video_results_count': len(video_results.results),
-            'combined_results': combined_results[:15]  # Top 15
-        }
-    
-    def contextual_recommendation(self, user_preferences: dict, viewing_history: list):
-        """
-        Generate contextual recommendations based on user preferences and history
-        """
-        # Generate preference embedding
-        preference_text = self._create_preference_text(user_preferences)
-        preference_embedding = self.bedrock_service.generate_text_embedding(
-            text=preference_text,
-            model_id="amazon.titan-embed-text-v2:0"
-        )
-        
-        # Search based on preferences
-        text_recs = self.text_service.storage_manager.query_similar_vectors(
-            index_arn=self.text_index_arn,
-            query_vector=preference_embedding.embedding,
-            top_k=20,
-            metadata_filters={
-                'genre': user_preferences.get('preferred_genres', []),
-                'rating': user_preferences.get('acceptable_ratings', [])
-            }
-        )
-        
-        video_recs = self.video_service.storage_manager.query_similar_vectors(
-            index_arn=self.video_index_arn,
-            query_vector=preference_embedding.embedding,
-            top_k=20
-        )
-        
-        # Filter out already viewed content
-        viewed_ids = set(item['content_id'] for item in viewing_history)
-        
-        recommendations = []
-        
-        # Process text recommendations
-        for result in text_recs['results']:
-            content_id = result['metadata'].get('content_id')
-            if content_id not in viewed_ids:
-                recommendations.append({
-                    'content_id': content_id,
-                    'title': result['metadata'].get('title'),
-                    'type': 'text_content',
-                    'relevance_score': result['similarity_score'],
-                    'genre': result['metadata'].get('genre'),
-                    'rating': result['metadata'].get('rating')
-                })
-        
-        # Process video recommendations
-        for result in video_recs['results']:
-            content_id = result['metadata'].get('title')  # Use title as ID for videos
-            if content_id not in viewed_ids:
-                recommendations.append({
-                    'content_id': content_id,
-                    'title': result['metadata'].get('title'),
-                    'type': 'video_content',
-                    'relevance_score': result['similarity_score'],
-                    'time_segment': f"{result['metadata'].get('start_sec', 0):.1f}s",
-                    'category': result['metadata'].get('category')
-                })
-        
-        # Sort by relevance and remove duplicates
-        unique_recs = {}
-        for rec in recommendations:
-            if rec['content_id'] not in unique_recs:
-                unique_recs[rec['content_id']] = rec
-        
-        final_recs = list(unique_recs.values())
-        final_recs.sort(key=lambda x: x['relevance_score'], reverse=True)
-        
-        return {
-            'user_preferences': user_preferences,
-            'recommendations_count': len(final_recs),
-            'recommendations': final_recs[:10]  # Top 10
-        }
-    
-    def _create_preference_text(self, preferences: dict) -> str:
-        """Create text representation of user preferences"""
-        preference_parts = []
-        
-        if 'preferred_genres' in preferences:
-            preference_parts.append(f"genres: {', '.join(preferences['preferred_genres'])}")
-        
-        if 'preferred_themes' in preferences:
-            preference_parts.append(f"themes: {', '.join(preferences['preferred_themes'])}")
-        
-        if 'mood' in preferences:
-            preference_parts.append(f"mood: {preferences['mood']}")
-        
-        return f"Content preferences - {'; '.join(preference_parts)}"
-
-# Usage example
-def multimodal_search_example():
-    # Initialize search engine
-    search_engine = MultiModalSearchEngine(
-        text_index_arn="your-text-index-arn",
-        video_index_arn="your-video-index-arn"
-    )
-    
-    # Cross-modal search
-    search_results = search_engine.cross_modal_search(
-        query="space exploration adventure",
-        search_weights={'text': 0.3, 'video': 0.7}  # Prefer video content
-    )
-    
-    print(f"📊 Found {len(search_results['combined_results'])} total results")
-    print(f"📝 Text results: {search_results['text_results_count']}")
-    print(f"🎬 Video results: {search_results['video_results_count']}")
-    
-    print("\nTop 5 Cross-Modal Results:")
-    for i, result in enumerate(search_results['combined_results'][:5], 1):
-        print(f"{i}. [{result['content_type'].upper()}] {result['title']}")
-        print(f"   Weighted Score: {result['similarity_score']:.3f}")
-        print(f"   Raw Score: {result['raw_score']:.3f}")
-        if result['content_type'] == 'video':
-            print(f"   Segment: {result.get('time_segment', 'N/A')}")
-    
-    # Contextual recommendations
-    user_profile = {
-        'preferred_genres': ['sci-fi', 'adventure', 'thriller'],
-        'preferred_themes': ['space', 'technology', 'exploration'],
-        'acceptable_ratings': ['PG', 'PG-13', 'R'],
-        'mood': 'exciting and adventurous'
-    }
-    
-    viewing_history = [
-        {'content_id': 'movie-001', 'title': 'Interstellar'},
-        {'content_id': 'series-002-ep01', 'title': 'Star Trek Discovery S1E1'}
+async def main():
+    # Define video batch
+    videos = [
+        VideoJob(
+            video_url="https://example.com/video1.mp4",
+            video_id="vid-001",
+            title="Mountain Hiking",
+            category="nature"
+        ),
+        VideoJob(
+            video_url="https://example.com/video2.mp4",
+            video_id="vid-002",
+            title="City Timelapse",
+            category="urban"
+        ),
+        VideoJob(
+            video_url="https://example.com/video3.mp4",
+            video_id="vid-003",
+            title="Ocean Wildlife",
+            category="nature"
+        ),
+        # Add more videos...
     ]
     
-    recommendations = search_engine.contextual_recommendation(
-        user_preferences=user_profile,
-        viewing_history=viewing_history
-    )
+    # Process batch
+    processor = BatchVideoProcessor(max_concurrent=5)
     
-    print(f"\n🎯 Personalized Recommendations ({recommendations['recommendations_count']} found):")
-    for i, rec in enumerate(recommendations['recommendations'][:5], 1):
-        print(f"{i}. {rec['title']} [{rec['type']}]")
-        print(f"   Relevance: {rec['relevance_score']:.3f}")
-        print(f"   Genre: {rec.get('genre', rec.get('category', 'Unknown'))}")
+    print(f"📹 Processing {len(videos)} videos...")
+    print(f"⚙️  Max concurrent: {processor.max_concurrent}")
+    print(f"🎯 Backend: {processor.backend}\n")
+    
+    results = await processor.process_batch(videos)
+    
+    # Generate report
+    successful = [r for r in results if r.status == "completed"]
+    failed = [r for r in results if r.status in ("failed", "error")]
+    
+    total_cost = sum(r.cost for r in successful)
+    total_segments = sum(r.segments_processed for r in successful)
+    avg_duration = sum(r.duration_sec for r in successful) / len(successful) if successful else 0
+    
+    print("\n" + "="*60)
+    print("📊 BATCH PROCESSING REPORT")
+    print("="*60)
+    print(f"Total videos: {len(videos)}")
+    print(f"Successful: {len(successful)}")
+    print(f"Failed: {len(failed)}")
+    print(f"Total segments: {total_segments}")
+    print(f"Total cost: ${total_cost:.4f}")
+    print(f"Average duration: {avg_duration:.1f}s")
+    
+    if failed:
+        print(f"\n❌ Failed videos:")
+        for result in failed:
+            print(f"   {result.video_id}: {result.error}")
+    
+    # Save detailed results
+    report = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "summary": {
+            "total": len(videos),
+            "successful": len(successful),
+            "failed": len(failed),
+            "total_cost": total_cost,
+            "total_segments": total_segments
+        },
+        "results": [
+            {
+                "video_id": r.video_id,
+                "status": r.status,
+                "segments": r.segments_processed,
+                "cost": r.cost,
+                "duration_sec": r.duration_sec,
+                "error": r.error
+            }
+            for r in results
+        ]
+    }
+    
+    with open("batch_processing_report.json", "w") as f:
+        json.dump(report, f, indent=2)
+    
+    print(f"\n💾 Report saved to: batch_processing_report.json")
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
+
+---
+
+## Backend Comparison Scenarios
+
+### Cost-Performance Trade-off Analysis
+
+```python
+#!/usr/bin/env python3
+"""
+Analyze cost-performance trade-offs across backends
+Runtime: 10-15 minutes
+"""
+
+import requests
+import time
+import json
+from typing import Dict, List
+from dataclasses import dataclass, asdict
+
+@dataclass
+class BackendMetrics:
+    backend_name: str
+    avg_query_time_ms: float
+    p95_query_time_ms: float
+    p99_query_time_ms: float
+    avg_similarity_score: float
+    monthly_cost_estimate: float
+    storage_cost_per_gb: float
+    query_cost_per_1000: float
+
+API_BASE = "http://localhost:8000"
+
+def run_performance_test(
+    backend: str,
+    queries: List[str],
+    iterations: int = 10
+) -> List[float]:
+    """Run performance test for a backend"""
+    query_times = []
+    
+    for _ in range(iterations):
+        for query in queries:
+            start = time.time()
+            response = requests.post(
+                f"{API_BASE}/api/search/query",
+                json={
+                    "query_text": query,
+                    "backend": backend,
+                    "top_k": 10
+                }
+            )
+            elapsed = (time.time() - start) * 1000  # Convert to ms
+            query_times.append(elapsed)
+    
+    return query_times
+
+def calculate_costs() -> Dict[str, Dict]:
+    """Calculate estimated monthly costs per backend"""
+    return {
+        "s3vector": {
+            "storage_per_gb": 0.023,
+            "query_per_1000": 0.001,
+            "base_monthly": 0.50,
+            "description": "S3 Standard pricing + query costs"
+        },
+        "opensearch": {
+            "storage_per_gb": 0.024,
+            "query_per_1000": 0.0,  # Included in instance cost
+            "base_monthly": 100.00,  # or1.medium.search instance
+            "description": "OpenSearch Serverless ~$100/month"
+        },
+        "qdrant": {
+            "storage_per_gb": 0.10,  # EBS gp3
+            "query_per_1000": 0.0,
+            "base_monthly": 30.00,  # ECS Fargate
+            "description": "ECS Fargate + EBS storage"
+        },
+        "lancedb_s3": {
+            "storage_per_gb": 0.023,
+            "query_per_1000": 0.002,
+            "base_monthly": 30.00,  # ECS Fargate
+            "description": "ECS Fargate + S3 storage"
+        }
+    }
+
+def analyze_backend(
+    backend: str,
+    test_queries: List[str],
+    data_size_gb: float = 10.0,
+    monthly_queries: int = 100000
+) -> BackendMetrics:
+    """Comprehensive backend analysis"""
+    
+    print(f"\n📊 Analyzing {backend}...")
+    
+    # Run performance tests
+    query_times = run_performance_test(backend, test_queries, iterations=5)
+    query_times.sort()
+    
+    # Calculate percentiles
+    n = len(query_times)
+    avg_time = sum(query_times) / n
+    p95_time = query_times[int(n * 0.95)]
+    p99_time = query_times[int(n * 0.99)]
+    
+    # Get top similarity scores
+    similarity_scores = []
+    for query in test_queries[:3]:  # Sample queries
+        response = requests.post(
+            f"{API_BASE}/api/search/query",
+            json={"query_text": query, "backend": backend, "top_k": 1}
+        )
+        results = response.json()
+        if results['results']:
+            similarity_scores.append(results['results'][0]['similarity_score'])
+    
+    avg_similarity = sum(similarity_scores) / len(similarity_scores) if similarity_scores else 0
+    
+    # Calculate costs
+    costs = calculate_costs()[backend]
+    storage_cost = data_size_gb * costs["storage_per_gb"]
+    query_cost = (monthly_queries / 1000) * costs["query_per_1000"]
+    total_monthly = costs["base_monthly"] + storage_cost + query_cost
+    
+    print(f"   ✅ Avg query time: {avg_time:.1f}ms")
+    print(f"   ✅ P95 query time: {p95_time:.1f}ms")
+    print(f"   ✅ Monthly cost estimate: ${total_monthly:.2f}")
+    
+    return BackendMetrics(
+        backend_name=backend,
+        avg_query_time_ms=avg_time,
+        p95_query_time_ms=p95_time,
+        p99_query_time_ms=p99_time,
+        avg_similarity_score=avg_similarity,
+        monthly_cost_estimate=total_monthly,
+        storage_cost_per_gb=costs["storage_per_gb"],
+        query_cost_per_1000=costs["query_per_1000"]
+    )
+
+def main():
+    # Test queries
+    test_queries = [
+        "mountain landscape scenery",
+        "person walking in city",
+        "ocean waves and beach",
+        "indoor office environment",
+        "sports action scene"
+    ]
+    
+    # Available backends
+    backends = ["s3vector", "opensearch", "qdrant", "lancedb_s3"]
+    
+    # Analyze each backend
+    metrics = []
+    for backend in backends:
+        try:
+            metric = analyze_backend(
+                backend,
+                test_queries,
+                data_size_gb=10.0,
+                monthly_queries=100000
+            )
+            metrics.append(metric)
+        except Exception as e:
+            print(f"   ❌ Error analyzing {backend}: {e}")
+    
+    # Generate comparison report
+    print("\n" + "="*80)
+    print("📊 COST-PERFORMANCE ANALYSIS REPORT")
+    print("="*80)
+    
+    print(f"\n{'Backend':<15} {'Avg Query':<12} {'P95 Query':<12} {'Monthly Cost':<15} {'$/Performance':<15}")
+    print("-"*80)
+    
+    for m in metrics:
+        perf_cost_ratio = m.monthly_cost_estimate / m.avg_query_time_ms if m.avg_query_time_ms > 0 else 0
+        print(f"{m.backend_name:<15} {m.avg_query_time_ms:>8.1f}ms {m.p95_query_time_ms:>9.1f}ms ${m.monthly_cost_estimate:>12.2f} ${perf_cost_ratio:>13.4f}")
+    
+    # Recommendations
+    print("\n🎯 RECOMMENDATIONS:")
+    
+    fastest = min(metrics, key=lambda m: m.avg_query_time_ms)
+    cheapest = min(metrics, key=lambda m: m.monthly_cost_estimate)
+    best_value = min(metrics, key=lambda m: m.monthly_cost_estimate / m.avg_query_time_ms)
+    
+    print(f"   🏃 Fastest: {fastest.backend_name} ({fastest.avg_query_time_ms:.1f}ms)")
+    print(f"   💰 Cheapest: {cheapest.backend_name} (${cheapest.monthly_cost_estimate:.2f}/month)")
+    print(f"   ⭐ Best Value: {best_value.backend_name}")
+    
+    # Save detailed report
+    report = {
+        "metrics": [asdict(m) for m in metrics],
+        "recommendations": {
+            "fastest": fastest.backend_name,
+            "cheapest": cheapest.backend_name,
+            "best_value": best_value.backend_name
+        }
+    }
+    
+    with open("cost_performance_analysis.json", "w") as f:
+        json.dump(report, f, indent=2)
+    
+    print(f"\n💾 Detailed report saved to: cost_performance_analysis.json")
+
+if __name__ == "__main__":
+    main()
+```
+
+---
 
 ## Best Practices
 
 ### 1. Cost Management
 
 ```python
-"""
-Best practices for cost management and optimization
-"""
+# Set cost limits
+MAX_DAILY_COST = 10.00  # USD
+MAX_PER_OPERATION = 1.00
 
-import os
-from src.config import Config
+# Track costs
+cost_tracker = {"daily_spend": 0.0}
 
-class CostOptimizedWorkflow:
-    def __init__(self):
-        self.config = Config()
-        self.cost_limits = {
-            'daily_max_usd': float(os.getenv('MAX_DAILY_COST_USD', '10.00')),
-            'per_operation_max_usd': 1.00,
-            'simulation_mode': os.getenv('USE_REAL_AWS', 'false').lower() != 'true'
-        }
-        self.cost_tracker = {'daily_spend': 0.0}
+def cost_aware_processing(operation_cost: float) -> bool:
+    """Check if operation is within budget"""
+    if cost_tracker["daily_spend"] + operation_cost > MAX_DAILY_COST:
+        print(f"❌ Would exceed daily limit: ${operation_cost:.4f}")
+        return False
     
-    def cost_aware_processing(self, operation_type: str, estimated_cost: float):
-        """Check cost limits before processing"""
-        if self.cost_limits['simulation_mode']:
-            print(f"💰 SIMULATION MODE: Would cost ${estimated_cost:.4f}")
-            return True
-        
-        if estimated_cost > self.cost_limits['per_operation_max_usd']:
-            print(f"❌ Operation exceeds per-operation limit: ${estimated_cost:.4f}")
-            return False
-        
-        if (self.cost_tracker['daily_spend'] + estimated_cost) > self.cost_limits['daily_max_usd']:
-            print(f"❌ Would exceed daily cost limit: ${estimated_cost:.4f}")
-            return False
-        
-        self.cost_tracker['daily_spend'] += estimated_cost
-        print(f"✅ Processing approved - Cost: ${estimated_cost:.4f}")
-        print(f"💰 Daily spend: ${self.cost_tracker['daily_spend']:.4f}/{self.cost_limits['daily_max_usd']:.2f}")
-        return True
-    
-    def batch_optimize(self, items: list, optimal_batch_size: int):
-        """Optimize batch processing for cost efficiency"""
-        batches = [items[i:i + optimal_batch_size] for i in range(0, len(items), optimal_batch_size)]
-        
-        print(f"📦 Optimized batching: {len(items)} items → {len(batches)} batches")
-        print(f"💰 Estimated cost savings: {((len(items) - len(batches)) * 0.001):.4f} USD")
-        
-        return batches
-
-# Usage in workflows
-def cost_optimized_example():
-    cost_manager = CostOptimizedWorkflow()
-    
-    # Sample batch processing
-    video_files = [f"video_{i}.mp4" for i in range(50)]
-    
-    # Optimize batching
-    optimized_batches = cost_manager.batch_optimize(video_files, 10)
-    
-    for batch_num, batch in enumerate(optimized_batches, 1):
-        estimated_cost = len(batch) * 0.02  # $0.02 per video
-        
-        if cost_manager.cost_aware_processing('video_processing', estimated_cost):
-            print(f"🎬 Processing batch {batch_num}: {len(batch)} videos")
-        else:
-            print(f"⏸️ Skipping batch {batch_num} - cost limit reached")
-            break
+    cost_tracker["daily_spend"] += operation_cost
+    print(f"✅ Cost approved: ${operation_cost:.4f}")
+    print(f"💰 Daily spend: ${cost_tracker['daily_spend']:.2f}/{MAX_DAILY_COST:.2f}")
+    return True
 ```
 
-### 2. Error Handling and Resilience
+### 2. Error Handling
 
 ```python
-"""
-Best practices for robust error handling
-"""
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type
+)
+import requests
 
-from src.utils.error_handling import with_error_handling, RetryConfig
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(requests.exceptions.RequestException)
+)
+def resilient_api_call(endpoint: str, payload: dict):
+    """API call with automatic retries"""
+    response = requests.post(endpoint, json=payload, timeout=30)
+    response.raise_for_status()
+    return response.json()
+
+# Usage
+try:
+    result = resilient_api_call(
+        "http://localhost:8000/api/search/query",
+        {"query_text": "test", "backend": "s3vector", "top_k": 10}
+    )
+except Exception as e:
+    print(f"❌ Failed after retries: {e}")
+```
+
+### 3. Batch Optimization
+
+```python
+def optimize_batch_size(
+    total_items: int,
+    max_concurrent: int = 10,
+    target_duration_sec: int = 300
+) -> int:
+    """Calculate optimal batch size"""
+    # Aim for ~5min batches
+    items_per_min = total_items / (target_duration_sec / 60)
+    optimal_batch = min(max(int(items_per_min), 1), max_concurrent)
+    
+    print(f"📦 Batch optimization:")
+    print(f"   Total items: {total_items}")
+    print(f"   Optimal batch size: {optimal_batch}")
+    print(f"   Estimated batches: {total_items // optimal_batch}")
+    
+    return optimal_batch
+```
+
+### 4. Health Monitoring
+
+```python
+import time
+from typing import Dict
+
+def monitor_backend_health(backends: list) -> Dict[str, str]:
+    """Monitor health of all backends"""
+    health_status = {}
+    
+    for backend in backends:
+        try:
+            start = time.time()
+            response = requests.get(
+                f"http://localhost:8000/api/resources/health-check/{backend}",
+                timeout=3
+            )
+            elapsed_ms = (time.time() - start) * 1000
+            
+            if response.status_code == 200:
+                data = response.json()
+                if elapsed_ms < 200:
+                    status = "🟢 healthy"
+                elif elapsed_ms < 500:
+                    status = "🟡 degraded"
+                else:
+                    status = "🟠 slow"
+                health_status[backend] = f"{status} ({elapsed_ms:.0f}ms)"
+            else:
+                health_status[backend] = "🔴 unhealthy"
+        except Exception as e:
+            health_status[backend] = f"🔴 error: {str(e)[:30]}"
+    
+    return health_status
+
+# Usage
+backends = ["s3vector", "opensearch", "qdrant"]
+health = monitor_backend_health(backends)
+for backend, status in health.items():
+    print(f"{backend:15} {status}")
+```
+
+---
+
+## Result Interpretation
+
+### Understanding Similarity Scores
+
+Similarity scores range from 0.0 to 1.0:
+
+| Score Range | Interpretation | Recommendation |
+|-------------|----------------|----------------|
+| 0.9 - 1.0 | Excellent match | High confidence result |
+| 0.8 - 0.9 | Good match | Reliable result |
+| 0.7 - 0.8 | Moderate match | Review result |
+| 0.6 - 0.7 | Weak match | Use with caution |
+| < 0.6 | Poor match | Consider alternative queries |
+
+### Example Analysis
+
+```python
+def interpret_results(results: List[SearchResult]):
+    """Provide interpretation of search results"""
+    if not results:
+        print("❌ No results found. Try:")
+        print("   - Broader search terms")
+        print("   - Different backend")
+        print("   - Check if content is indexed")
+        return
+    
+    top_score = results[0].similarity_score
+    
+    if top_score >= 0.9:
+        print("✅ Excellent matches found!")
+        print("   High confidence in results")
+    elif top_score >= 0.8:
+        print("✅ Good matches found")
+        print("   Results are reliable")
+    elif top_score >= 0.7:
+        print("⚠️  Moderate matches found")
+        print("   Review results carefully")
+    else:
+        print("⚠️  Weak matches found")
+        print("   Consider:")
+        print("   - Refining query")
+        print("   - Adding more training data")
+        print("   - Using different embedding model")
+    
+    # Analyze score distribution
+    scores = [r.similarity_score for r in results]
+    score_range = max(scores) - min(scores)
+    
+    if score_range < 0.1:
+        print(f"\n📊 Tight score distribution ({score_range:.3f})")
+        print("   Results are similarly relevant")
+    else:
+        print(f"\n📊 Wide score distribution ({score_range:.3f})")
+        print("   Clear ranking of relevance")
+```
+
+### Performance Metrics
+
+```python
+def analyze_performance(response_time_ms: float, backend: str):
+    """Analyze query performance"""
+    
+    # Performance benchmarks
+    benchmarks = {
+        "s3vector": {"good": 200, "acceptable": 500},
+        "opensearch": {"good": 150, "acceptable": 400},
+        "qdrant": {"good": 180, "acceptable": 450},
+        "lancedb_s3": {"good": 300, "acceptable": 600}
+    }
+    
+    bench = benchmarks.get(backend, {"good": 200, "acceptable": 500})
+    
+    if response_time_ms < bench["good"]:
+        print(f"✅ Excellent performance: {response_time_ms:.0f}ms")
+    elif response_time_ms < bench["acceptable"]:
+        print(f"⚠️  Acceptable performance: {response_time_ms:.0f}ms")
+    else:
+        print(f"🐌 Slow performance: {response_time_ms:.0f}ms")
+        print("   Considerations:")
+        print("   - Check backend health")
+        print("   - Review index size")
+        print("   - Consider scaling resources")
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+#### 1. Backend Unavailable
+
+**Symptom**: `{"error": "Backend not accessible"}`
+
+**Diagnosis**:
+```bash
+# Check backend health
+curl http://localhost:8000/api/resources/health-check/s3vector
+
+# Check Terraform state
+cd terraform && terraform show
+```
+
+**Solutions**:
+- Ensure backend is deployed: `terraform apply -var="deploy_<backend>=true"`
+- Check AWS credentials: `aws sts get-caller-identity`
+- Verify security groups allow traffic
+- Check backend logs
+
+#### 2. Slow Query Performance
+
+**Symptom**: Query times > 1 second
+
+**Diagnosis**:
+```python
+# Run performance test
+import time
+import requests
+
+start = time.time()
+response = requests.post(
+    "http://localhost:8000/api/search/query",
+    json={"query_text": "test", "backend": "s3vector", "top_k": 10}
+)
+elapsed = time.time() - start
+print(f"Query time: {elapsed:.3f}s")
+```
+
+**Solutions**:
+- Reduce `top_k` value (fewer results = faster)
+- Optimize index (rebuild with better parameters)
+- Use faster backend (OpenSearch or Qdrant)
+- Enable caching for repeated queries
+- Check network latency to AWS region
+
+#### 3. Low Similarity Scores
+
+**Symptom**: All results have scores < 0.7
+
+**Causes and Solutions**:
+
+**Cause 1: Query-Content Mismatch**
+```python
+# Try more specific queries
+# Instead of: "video"
+# Try: "mountain landscape with snow"
+```
+
+**Cause 2: Wrong Embedding Model**
+```python
+# Use multimodal model for video
+response = requests.post(
+    f"{API_BASE}/api/embeddings/generate",
+    json={
+        "text": query,
+        "model": "amazon.titan-embed-multimodal-v1"  # Better for video
+    }
+)
+```
+
+**Cause 3: Insufficient Training Data**
+```bash
+# Add more diverse videos
+# Process at least 50-100 videos for good coverage
+```
+
+#### 4. Video Processing Fails
+
+**Symptom**: `{"status": "failed", "error": "..."}`
+
+**Common errors and fixes**:
+
+**Error: "Video download failed"**
+```python
+# Ensure video URL is accessible
+import requests
+response = requests.head(video_url)
+print(f"Status: {response.status_code}")
+print(f"Content-Type: {response.headers.get('Content-Type')}")
+
+# Fix: Use direct URL, not redirect
+```
+
+**Error: "TwelveLabs API error"**
+```bash
+# Check API key
+echo $TWELVELABS_API_KEY
+
+# Verify API quota
+curl -H "x-api-key: $TWELVELABS_API_KEY" \
+  https://api.twelvelabs.io/v1.2/tasks/limits
+```
+
+**Error: "Embedding generation timeout"**
+```python
+# Increase timeout
+processing_options = {
+    "timeout_sec": 600,  # 10 minutes
+    "chunk_duration_sec": 10.0  # Longer chunks = fewer embeddings
+}
+```
+
+#### 5. High Costs
+
+**Symptom**: AWS bill higher than expected
+
+**Cost Analysis**:
+```python
+import boto3
+
+# Check S3 storage costs
+s3 = boto3.client('s3')
+response = s3.list_buckets()
+for bucket in response['Buckets']:
+    print(f"Bucket: {bucket['Name']}")
+    # Check object count and size
+
+# Check OpenSearch costs (most expensive)
+opensearch = boto3.client('opensearch')
+domains = opensearch.list_domain_names()
+# OpenSearch can cost $100-300/month!
+```
+
+**Cost Reduction Strategies**:
+```bash
+# 1. Disable expensive backends
+cd terraform
+terraform apply -var="deploy_opensearch=false"
+
+# 2. Use S3 lifecycle rules
+# Automatically delete old processed videos after 30 days
+
+# 3. Enable S3 Intelligent-Tiering
+# Moves infrequently accessed data to cheaper storage
+
+# 4. Monitor with AWS Cost Explorer
+# Set up billing alerts
+```
+
+#### 6. Terraform State Issues
+
+**Symptom**: "Resource already exists" or "State file locked"
+
+**Solutions**:
+
+**Issue: State locked**
+```bash
+# Force unlock (use with caution)
+cd terraform
+terraform force-unlock <lock-id>
+```
+
+**Issue: Resource drift**
+```bash
+# Refresh state
+terraform refresh
+
+# If needed, import existing resource
+terraform import aws_s3_bucket.shared existing-bucket-name
+```
+
+**Issue: Corrupted state**
+```bash
+# Restore from backup
+cd terraform
+cp terraform.tfstate.backup terraform.tfstate
+
+# Or pull from remote
+terraform state pull > terraform.tfstate
+```
+
+#### 7. Memory Issues
+
+**Symptom**: "Out of memory" or "Process killed"
+
+**Solutions**:
+```python
+# Process in smaller batches
+batch_size = 10  # Instead of 100
+
+# Use streaming for large files
+# Don't load entire video into memory
+
+# Increase system swap
+# sudo fallocate -l 4G /swapfile
+```
+
+### Debug Mode
+
+Enable detailed logging:
+
+```python
 import logging
 
-# Configure structured logging
+# Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='{"timestamp":"%(asctime)s","level":"%(levelname)s","message":"%(message)s"}'
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('debug.log'),
+        logging.StreamHandler()
+    ]
 )
 
-class ResilientProcessing:
-    def __init__(self):
-        self.retry_config = RetryConfig(
-            max_attempts=5,
-            base_delay=2.0,
-            max_delay=120.0,
-            exponential_base=2.0,
-            jitter=True
-        )
-    
-    @with_error_handling("video_processing", retry_config=retry_config)
-    def process_with_retries(self, video_path: str):
-        """Example of processing with automatic retries"""
-        # This will automatically retry on failures
-        result = self.video_service.process_video(video_path)
-        return result
-    
-    def graceful_degradation_example(self, query: str):
-        """Example of graceful degradation"""
-        try:
-            # Try primary search method
-            results = self.primary_search(query)
-        except Exception as e:
-            logging.warning(f"Primary search failed: {e}")
-            try:
-                # Fallback to secondary method
-                results = self.secondary_search(query)
-                logging.info("Using fallback search method")
-            except Exception as e2:
-                logging.error(f"All search methods failed: {e2}")
-                # Return empty results rather than crashing
-                results = {'results': [], 'fallback_used': True}
-        
-        return results
-    
-    def circuit_breaker_pattern(self, service_func, failure_threshold=5):
-        """Circuit breaker pattern for external services"""
-        failure_count = getattr(self, '_failure_count', 0)
-        
-        if failure_count >= failure_threshold:
-            logging.warning("Circuit breaker OPEN - service temporarily disabled")
-            return None
-        
-        try:
-            result = service_func()
-            # Reset counter on success
-            self._failure_count = 0
-            return result
-        except Exception as e:
-            self._failure_count = failure_count + 1
-            logging.error(f"Service call failed ({self._failure_count}/{failure_threshold}): {e}")
-            raise
+logger = logging.getLogger(__name__)
+
+# Use in your code
+logger.debug("Processing video: %s", video_id)
+logger.info("Job completed: %s", job_id)
+logger.warning("Slow response time: %.2fs", elapsed)
+logger.error("Processing failed: %s", error)
 ```
 
-### 3. Performance Optimization
+### Getting Help
 
-```python
-"""
-Performance optimization best practices
-"""
+If issues persist:
 
-import asyncio
-import concurrent.futures
-from typing import List
+1. **Check Documentation**:
+   - [`docs/troubleshooting-guide.md`](troubleshooting-guide.md)
+   - [`docs/FAQ.md`](FAQ.md)
+   - [`terraform/README.md`](../terraform/README.md)
 
-class PerformanceOptimizedWorkflow:
-    def __init__(self, max_workers: int = 4):
-        self.max_workers = max_workers
-    
-    async def parallel_processing(self, items: List, process_func):
-        """Process items in parallel with controlled concurrency"""
-        semaphore = asyncio.Semaphore(self.max_workers)
-        
-        async def process_item(item):
-            async with semaphore:
-                return await process_func(item)
-        
-        tasks = [process_item(item) for item in items]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Filter out exceptions
-        successful_results = [r for r in results if not isinstance(r, Exception)]
-        failed_count = len(results) - len(successful_results)
-        
-        if failed_count > 0:
-            print(f"⚠️ {failed_count} items failed processing")
-        
-        return successful_results
-    
-    def memory_efficient_batch_processing(self, large_dataset: List, 
-                                        batch_size: int = 100):
-        """Process large datasets in memory-efficient batches"""
-        for i in range(0, len(large_dataset), batch_size):
-            batch = large_dataset[i:i + batch_size]
-            print(f"📦 Processing batch {i//batch_size + 1}: {len(batch)} items")
-            
-            # Process batch
-            yield self.process_batch(batch)
-            
-            # Optional: garbage collection for large datasets
-            if i % (batch_size * 10) == 0:  # Every 10 batches
-                import gc
-                gc.collect()
-    
-    def caching_strategy(self, cache_key: str, expensive_operation):
-        """Simple caching for expensive operations"""
-        cache = getattr(self, '_cache', {})
-        
-        if cache_key in cache:
-            print(f"💾 Cache hit for: {cache_key}")
-            return cache[cache_key]
-        
-        print(f"🔄 Computing: {cache_key}")
-        result = expensive_operation()
-        
-        # Simple LRU cache (keep last 100 items)
-        if len(cache) > 100:
-            # Remove oldest item
-            oldest_key = next(iter(cache))
-            del cache[oldest_key]
-        
-        cache[cache_key] = result
-        self._cache = cache
-        return result
+2. **Review Logs**:
+   ```bash
+   # Backend logs
+   tail -f logs/api.log
+   
+   # Terraform logs
+   cd terraform && terraform show
+   ```
 
-# Usage examples
-async def performance_example():
-    optimizer = PerformanceOptimizedWorkflow(max_workers=8)
-    
-    # Parallel processing example
-    video_files = [f"video_{i}.mp4" for i in range(20)]
-    
-    async def process_video(video_path):
-        # Simulate processing
-        await asyncio.sleep(1)
-        return f"processed_{video_path}"
-    
-    results = await optimizer.parallel_processing(video_files, process_video)
-    print(f"✅ Processed {len(results)} videos in parallel")
-    
-    # Memory-efficient batch processing
-    large_dataset = list(range(1000))
-    
-    for batch_result in optimizer.memory_efficient_batch_processing(large_dataset, 50):
-        print(f"Batch processed: {len(batch_result) if batch_result else 0} items")
-```
+3. **Validate Setup**:
+   ```bash
+   # Run validation script
+   python examples/vector_validation.py --mode quick
+   ```
 
-This comprehensive documentation provides practical examples and tutorials for using S3Vector in various scenarios. Each example includes cost estimates, performance considerations, and best practices for production deployment.
+4. **Community Support**:
+   - GitHub Issues
+   - Project Discord/Slack
+   - Stack Overflow tag: `s3vector`
+
+---
+
+## Summary
+
+This guide provided comprehensive examples for:
+
+✅ **Deployment Modes**: Quick start (Mode 1), Single comparison (Mode 2), Full comparison (Mode 3)  
+✅ **API Integration**: REST API (cURL), JavaScript/TypeScript, Python SDK  
+✅ **Video Processing**: Single video, batch processing, production-scale workflows  
+✅ **Backend Comparison**: Performance testing, cost analysis  
+✅ **Best Practices**: Cost management, error handling, optimization  
+✅ **Result Interpretation**: Understanding scores, performance metrics  
+✅ **Troubleshooting**: Common issues, solutions, debug techniques  
+
+### Next Steps
+
+1. Start with [Quick Start Guide](#quick-start-guide) for Mode 1 deployment
+2. Explore [API Integration Examples](#api-integration-examples) for your use case
+3. Review [Best Practices](#best-practices) before production deployment
+4. Reference [Troubleshooting](#troubleshooting) when issues arise
+
+### Additional Resources
+
+- **Architecture**: [docs/ARCHITECTURE.md](ARCHITECTURE.md)
+- **Deployment**: [docs/DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
+- **API Documentation**: [docs/API_DOCUMENTATION.md](API_DOCUMENTATION.md)
+- **Testing**: [docs/testing_guide.md](testing_guide.md)
+
+---
+
+**Happy Building! 🚀**

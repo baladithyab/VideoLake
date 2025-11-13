@@ -1,395 +1,433 @@
-# Enhanced Streamlit Testing Guide
+# S3Vector Testing Guide
 
 ## Overview
 
-This comprehensive testing guide covers the validation and quality assurance approach for the enhanced Streamlit workflow with multi-vector capabilities. The testing strategy ensures reliability, performance, and security across all components.
+This testing guide covers the comprehensive testing strategy for the S3Vector-first architecture with optional vector store comparison capabilities. The testing approach ensures reliability, performance, and proper integration across all components.
 
 ## Test Architecture
 
-### Testing Pyramid Structure
+### S3Vector-First Philosophy
+
+**S3Vector is the primary backend** - All core functionality tests target S3Vector as the default vector store with built-in AWS integration.
+
+**Optional backends** (OpenSearch, Qdrant, LanceDB) are **comparison backends only**, used for performance benchmarking and architectural validation. These require Terraform deployment before testing.
+
+### Testing Pyramid
 
 ```
          /\
-        /E2E\      <- Integration & End-to-End Tests
-       /------\     (Complete workflow validation)
-      /Perform.\   <- Performance & Load Tests
-     /----------\   (Scalability & resource usage)
-    / Unit+Sec  \  <- Unit Tests & Security Tests
-   /--------------\ (Component validation & vulnerability testing)
+        /E2E\      <- End-to-End Integration Tests
+       /------\     (S3Vector + Optional Backend Workflows)
+      /  Unit  \   <- Unit Tests & Component Tests
+     /----------\   (S3Vector Operations, Service Integration)
+    / Core Tests \ <- S3Vector Core Functionality
+   /--------------\ (Primary backend, no infrastructure required)
 ```
 
 ## Test Suite Components
 
-### 1. Unit Tests (`test_enhanced_streamlit.py`)
+### 1. Core S3Vector Tests (Primary)
 
-**Purpose**: Validate individual component functionality
-- Multi-vector processing functions
-- S3Vector multi-index operations
-- Query type detection logic
-- Embedding visualization components
-- Data model validation
+**Location**: [`tests/test_e2e_vector_store_workflows.py`](../tests/test_e2e_vector_store_workflows.py)
+
+**Purpose**: Validate S3Vector core functionality with mocked dependencies
+
+**Infrastructure Required**: None (S3Vector is built-in)
 
 **Key Test Classes**:
-- `TestEnhancedStreamlitApp`: Core application functionality
-- `TestMultiVectorProcessing`: Multi-embedding type handling
-- `TestEmbeddingVisualization`: PCA/t-SNE visualization components
-- `TestUserExperienceScenarios`: UX workflow validation
+- `TestS3VectorWorkflow`: Complete ingestion and search workflows
+- `TestS3VectorIndexManagement`: Index creation and management
+- `TestS3VectorEmbedding`: Embedding storage and retrieval
+- `TestS3VectorSearch`: Search query functionality
 
 **Coverage Requirements**:
-- Statements: >85%
-- Branches: >80%
-- Functions: >85%
-- Lines: >85%
+- S3Vector operations: >90%
+- Core workflows: 100%
+- Error handling: >85%
 
-### 2. Integration Tests (`test_streamlit_integration.py`)
+**Run**:
+```bash
+pytest tests/test_e2e_vector_store_workflows.py -v
+```
 
-**Purpose**: Validate complete end-to-end workflows
-- Multi-index S3Vector coordination
-- TwelveLabs API integration with Marengo 2.7
-- Complete workflow: selection → upload → processing → retrieval
-- Real AWS service integration (mocked)
+### 2. Optional Backend Tests (Comparison Only)
 
-**Key Test Classes**:
-- `TestCompleteWorkflowIntegration`: Full pipeline testing
-- `TestPerformanceIntegration`: Large-scale operation testing
-- `TestErrorHandlingIntegration`: Failure recovery validation
+**Location**: [`tests/test_real_aws_e2e_workflows.py`](../tests/test_real_aws_e2e_workflows.py)
 
-**Test Scenarios**:
-- Complete video processing workflow
-- Multi-index search coordination
-- Batch processing with multiple videos
-- Temporal and video-to-video search
-- Error recovery and partial failures
+**Purpose**: Test S3Vector against optional backends for comparison
 
-### 3. Performance Tests (`test_streamlit_performance.py`)
+**Infrastructure Required**: Terraform deployment
 
-**Purpose**: Validate performance and scalability
-- Multi-vector processing scalability
-- Visualization performance with large embedding sets
-- Memory usage during PCA/t-SNE computation
-- S3Vector index query performance
-- Concurrent user simulation
+**Prerequisites**:
+```bash
+cd terraform
+terraform apply -var="deployment_mode=mode2"  # or mode3
+terraform output  # Verify deployment
+```
 
 **Key Test Classes**:
-- `TestEmbeddingPerformance`: Vector generation and processing
-- `TestVisualizationPerformance`: Large dataset visualization
-- `TestSearchPerformance`: Search operation efficiency
-- `TestMemoryUsagePerformance`: Resource consumption patterns
-- `TestConcurrentPerformance`: Multi-user scenarios
+- `TestRealS3VectorWorkflow`: S3Vector with real AWS (primary)
+- `TestRealLanceDBWorkflow`: LanceDB comparison (optional)
+- `TestRealQdrantWorkflow`: Qdrant comparison (optional)
+- `TestRealOpenSearchWorkflow`: OpenSearch comparison (optional, expensive!)
+- `TestRealProviderComparison`: Cross-backend performance analysis
 
-**Performance Benchmarks**:
-- Embedding generation: <5s for 1000x1024 vectors
-- Visualization: <10s for 500-point PCA/t-SNE
-- Search simulation: <1s for 1000-video collections
-- Memory usage: <500MB peak for large operations
-- Concurrent access: Support 8+ concurrent operations
+**Cost Estimates**:
+- S3Vector tests: $0.01-0.02 (no infrastructure)
+- LanceDB tests: $0.01 (if deployed)
+- Qdrant tests: $0.02-0.05 (if deployed)
+- OpenSearch tests: $1.00+/hour ⚠️ (if deployed)
 
-### 4. Security Tests (`test_streamlit_security.py`)
+**Run**:
+```bash
+# Core S3Vector only (no infrastructure needed)
+pytest tests/test_real_aws_e2e_workflows.py::TestRealS3VectorWorkflow -v --real-aws
 
-**Purpose**: Validate security measures and vulnerability protection
-- Input validation and sanitization
-- XSS prevention in user inputs
-- Path traversal protection
-- Session state security
-- API parameter validation
-- Resource access controls
+# With optional backends (requires Terraform deployment)
+pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
+```
 
-**Key Test Classes**:
-- `TestInputValidation`: Malicious input handling
-- `TestSessionSecurity`: Session isolation and data protection
-- `TestAPISecurityValidation`: Parameter validation
-- `TestResourceAccessControl`: File and resource access limits
-- `TestErrorDisclosurePrevention`: Information leak prevention
+### 3. Integration Tests
 
-**Security Test Coverage**:
-- XSS attack vectors: 10+ payload types
-- SQL injection attempts: 10+ payload variations
-- Path traversal attacks: 10+ directory traversal patterns
-- Buffer overflow protection: Large input handling
-- Session isolation validation
+**Location**: [`tests/test_aws_service_integrations.py`](../tests/test_aws_service_integrations.py)
+
+**Purpose**: Validate AWS service integration
+
+**What it tests**:
+- S3Vector API integration
+- Bedrock embedding generation
+- S3 bucket operations
+- IAM permissions and policies
+
+**Run**:
+```bash
+pytest tests/test_aws_service_integrations.py -v
+```
+
+### 4. Resource Management Tests
+
+**Location**: [`tests/test_resource_registry_tracking.py`](../tests/test_resource_registry_tracking.py)
+
+**Purpose**: Verify resource tracking and registry updates
+
+**What it tests**:
+- S3Vector resource creation logging
+- Resource deletion tracking
+- Registry JSON integrity
+- Status transitions
+
+**Run**:
+```bash
+python tests/test_resource_registry_tracking.py
+```
 
 ## Test Infrastructure
 
-### Test Fixtures (`test_fixtures.py`)
+### Test Fixtures (`conftest.py`)
 
-**Mock Data Generators**:
-- `TestDataGenerator`: Creates realistic test data
-- `MockVideoFile`: Simulated video file metadata
-- `MockEmbedding`: Realistic embedding vectors with clustering
-- `MockSearchResult`: Structured search results
-- `SecurityTestPayloads`: Attack vectors and malicious inputs
+**Location**: [`tests/conftest.py`](../tests/conftest.py)
 
-**Data Collections**:
-- Video files: Small (30-120s), Medium (2-10min), Large (10-60min)
-- Processed videos: Simulation and real processing types
-- Embeddings: Clustered datasets for visualization testing
-- Search results: Text-to-video, video-to-video, temporal searches
-
-### Test Configuration (`test_config.py`)
-
-**Configuration Management**:
-- Environment settings (test/debug modes)
-- Performance limits (timeouts, memory limits)
-- Security settings (malicious input testing)
-- Mock configurations (AWS, external APIs)
-- Output settings (HTML reports, metrics export)
-
-**Test Environment**:
-- Automated setup/teardown
-- Temporary file management
-- Mock service factories
-- Environment variable management
-- Logging configuration
-
-## Running Tests
-
-### Individual Test Suites
-
-```bash
-# Unit tests
-python tests/test_enhanced_streamlit.py
-
-# Integration tests
-python tests/test_streamlit_integration.py
-
-# Performance tests
-python tests/test_streamlit_performance.py
-
-# Security tests
-python tests/test_streamlit_security.py
-```
-
-### Complete Test Suite
-
-```bash
-# Run all tests with pytest
-pytest tests/ -v --html=tests/output/report.html
-
-# Run specific test categories
-pytest tests/ -k "unit" -v
-pytest tests/ -k "performance" -v
-pytest tests/ -k "security" -v
-```
-
-### Custom Test Runner
-
-```python
-from tests.test_config import TestRunner, TestConfig
-
-# Create custom configuration
-config = TestConfig(
-    debug_mode=True,
-    generate_html_report=True,
-    save_performance_metrics=True
-)
-
-# Run tests with custom runner
-runner = TestRunner(config)
-result = runner.run_test_class(TestEnhancedStreamlitApp)
-report = runner.generate_report()
-```
-
-## Test Metrics and Reporting
-
-### Success Criteria
-
-**Unit Tests**:
-- Success rate: >95%
-- Performance: All tests complete <30s
-- Memory usage: <100MB peak during testing
-
-**Integration Tests**:
-- Success rate: >90%
-- Workflow completion: All major workflows tested
-- Error handling: All failure scenarios covered
-
-**Performance Tests**:
-- Scalability: Handle 1000+ videos in collections
-- Response time: <5s for large operations
-- Memory efficiency: <500MB for stress tests
-- Concurrent support: 8+ parallel operations
-
-**Security Tests**:
-- Input validation: 100% malicious inputs handled
-- Attack prevention: No successful XSS, injection, or traversal attacks
-- Information disclosure: No sensitive data in error messages
-
-### Automated Reporting
-
-The test suite generates comprehensive reports including:
-
-**HTML Test Report**:
-- Overall success rate and statistics
-- Test suite breakdown with individual results
-- Performance metrics and benchmarks
-- Failed test details with error messages
-- Visual progress indicators
-
-**Performance Metrics**:
-- Operation throughput (ops/second)
-- Memory usage patterns (peak/delta)
-- CPU utilization during tests
-- Scalability trend analysis
-
-**Security Assessment**:
-- Attack vector coverage
-- Vulnerability test results
-- Input sanitization effectiveness
-- Access control validation
-
-## Best Practices
-
-### Test Design Principles
-
-1. **Independence**: Tests don't depend on each other
-2. **Repeatability**: Same results every run
-3. **Fast Execution**: Unit tests <100ms, integration tests <5s
-4. **Clear Assertions**: One concept per test
-5. **Realistic Data**: Use representative test data
+**Provides**:
+- S3Vector client fixtures
+- Mock AWS service fixtures
+- Test data generators
+- Cleanup utilities
+- Pytest configuration
 
 ### Mock Strategy
 
-1. **External Services**: Always mock AWS, TwelveLabs APIs
-2. **File System**: Use temporary directories and files
-3. **Network Calls**: Mock all HTTP requests
-4. **Time-Dependent**: Use fixed timestamps for reproducibility
-5. **Random Data**: Use seeded random generators
+**Always Mock**:
+- External API calls (TwelveLabs, Bedrock)
+- File system operations
+- Network requests
+- Time-dependent operations
 
-### Performance Testing Guidelines
+**Never Mock** (for real AWS tests):
+- S3Vector operations (primary backend)
+- S3 bucket operations
+- AWS service interactions
 
-1. **Baseline Metrics**: Establish performance baselines
-2. **Stress Testing**: Test with 10x expected load
-3. **Memory Profiling**: Monitor memory leaks and usage patterns
-4. **Concurrent Testing**: Validate multi-user scenarios
-5. **Resource Limits**: Test resource exhaustion scenarios
+## Running Tests
 
-### Security Testing Approach
+### Development Testing (Daily)
 
-1. **Input Fuzzing**: Test with malformed, malicious inputs
-2. **Boundary Testing**: Test parameter limits and edge cases
-3. **Injection Testing**: Comprehensive injection attack coverage
-4. **Access Control**: Verify authorization and resource protection
-5. **Error Handling**: Ensure no sensitive information disclosure
+Run core S3Vector tests with mocks:
 
-## Continuous Integration
+```bash
+# All core tests
+pytest tests/test_e2e_vector_store_workflows.py -v
 
-### Automated Testing Pipeline
+# Specific workflow
+pytest tests/test_e2e_vector_store_workflows.py::TestS3VectorWorkflow -v
 
-```yaml
-# Example CI/CD configuration
-test_pipeline:
-  stages:
-    - unit_tests:
-        - Run unit tests
-        - Generate coverage report
-        - Validate >85% coverage
-    
-    - integration_tests:
-        - Set up test environment
-        - Run integration test suite
-        - Validate workflow completion
-    
-    - performance_tests:
-        - Run performance benchmarks
-        - Compare against baselines
-        - Flag performance regressions
-    
-    - security_tests:
-        - Run security test suite
-        - Validate vulnerability coverage
-        - Check for new attack vectors
-    
-    - reporting:
-        - Generate comprehensive report
-        - Archive test artifacts
-        - Notify on failures
+# With coverage
+pytest tests/test_e2e_vector_store_workflows.py --cov=src --cov-report=html
 ```
 
-### Quality Gates
+### Pre-Release Validation (Weekly)
 
-Before deployment, ensure:
-- [ ] >95% unit test success rate
-- [ ] >90% integration test success rate
-- [ ] No performance regressions >20%
-- [ ] 100% security test coverage
-- [ ] All critical workflows validated
-- [ ] Documentation updated
+Run real AWS tests for S3Vector:
+
+```bash
+# Core S3Vector validation
+pytest tests/test_real_aws_e2e_workflows.py::TestRealS3VectorWorkflow -v --real-aws
+
+# Error handling
+pytest tests/test_real_aws_e2e_workflows.py::TestRealErrorHandling -v --real-aws
+```
+
+**Cost**: ~$0.02-0.05, **Duration**: 5 minutes
+
+### Backend Comparison Testing (Monthly/As Needed)
+
+**Prerequisites**: Deploy optional backends via Terraform first!
+
+```bash
+# Step 1: Deploy backends
+cd terraform
+terraform apply -var="deployment_mode=mode2"  # or mode3
+
+# Step 2: Verify deployment
+terraform output
+
+# Step 3: Run comparison tests
+cd ..
+pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
+
+# Step 4: Performance comparison
+pytest tests/test_real_aws_e2e_workflows.py::TestRealProviderComparison -v --real-aws
+
+# Step 5: Clean up
+cd terraform
+terraform destroy
+```
+
+**Cost**: $0.05-0.10 (without OpenSearch), **Duration**: 10-15 minutes
+
+### CI/CD Integration
+
+**On Every Commit**:
+```bash
+# Fast, mocked core tests only
+pytest tests/test_e2e_vector_store_workflows.py -v -m "not expensive"
+```
+
+**Weekly Scheduled**:
+```bash
+# Real AWS validation (S3Vector core only)
+pytest tests/test_real_aws_e2e_workflows.py::TestRealS3VectorWorkflow -v --real-aws
+```
+
+**Pre-Release**:
+```bash
+# Full test suite with optional backends (requires Terraform)
+# Run after: terraform apply -var="deployment_mode=mode2"
+pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
+```
+
+## Test Organization by Deployment Mode
+
+### Mode 1: S3Vector Only
+
+**Tests**:
+- Core S3Vector workflows (mocked)
+- Real AWS S3Vector validation
+- Resource management
+- Integration tests
+
+**Commands**:
+```bash
+pytest tests/test_e2e_vector_store_workflows.py::TestS3VectorWorkflow -v
+pytest tests/test_real_aws_e2e_workflows.py::TestRealS3VectorWorkflow -v --real-aws
+```
+
+**Infrastructure**: None required
+
+### Mode 2: S3Vector + One Optional Backend
+
+**Prerequisites**:
+```bash
+terraform apply -var="deployment_mode=mode2" -var="primary_backend=lancedb"
+```
+
+**Tests**:
+- All Mode 1 tests
+- Optional backend workflow (LanceDB or Qdrant)
+- Limited comparison tests
+
+**Commands**:
+```bash
+pytest tests/test_real_aws_e2e_workflows.py::TestRealS3VectorWorkflow -v --real-aws
+pytest tests/test_real_aws_e2e_workflows.py::TestRealLanceDBWorkflow -v --real-aws
+```
+
+### Mode 3: Full Comparison
+
+**Prerequisites**:
+```bash
+terraform apply -var="deployment_mode=mode3"
+```
+
+**Tests**:
+- All Mode 1 and Mode 2 tests
+- All optional backends (including expensive OpenSearch)
+- Full performance comparison
+
+**Commands**:
+```bash
+# Without OpenSearch (recommended)
+pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
+
+# With OpenSearch (expensive!)
+SKIP_EXPENSIVE_TESTS=0 pytest tests/test_real_aws_e2e_workflows.py -v --real-aws
+```
+
+## Success Criteria
+
+### Core S3Vector Tests (Required)
+- ✅ Success rate: >95%
+- ✅ All S3Vector workflows tested
+- ✅ Performance: <5s for core operations
+- ✅ Memory usage: <100MB for mocked tests
+
+### Optional Backend Tests (When Needed)
+- ✅ Terraform deployment successful
+- ✅ Backend connectivity validated
+- ✅ Comparison metrics collected
+- ✅ Clean teardown via `terraform destroy`
+
+### Integration Tests
+- ✅ AWS service integration working
+- ✅ Resource tracking accurate
+- ✅ Error handling comprehensive
+
+## Best Practices
+
+### 1. S3Vector-First Development
+
+- Always test S3Vector functionality first
+- Use mocked tests for rapid development
+- Only test optional backends for comparison needs
+- S3Vector requires no infrastructure setup
+
+### 2. Terraform-First Infrastructure
+
+**✅ CORRECT**:
+```bash
+cd terraform
+terraform apply -var="deployment_mode=mode2"
+terraform output
+# Then run tests
+```
+
+**❌ INCORRECT**:
+```python
+# Don't create infrastructure via API
+manager.create_opensearch_collection(...)
+manager.create_qdrant_cluster(...)
+```
+
+### 3. Cost-Conscious Testing
+
+- Run S3Vector mocked tests frequently (free)
+- Run real S3Vector tests weekly ($0.02-0.05)
+- Run optional backend tests monthly ($0.05-0.10)
+- Skip OpenSearch tests unless absolutely necessary ($1+/hour)
+
+### 4. Test Isolation
+
+- Each test creates uniquely named resources
+- Automatic cleanup via fixtures
+- No shared state between tests
+- Independent test execution
+
+### 5. CI/CD Strategy
+
+**Every Commit**:
+- Core S3Vector mocked tests
+- Fast (<1 minute)
+- No AWS costs
+
+**Weekly Schedule**:
+- Real AWS S3Vector validation
+- ~$0.05 cost
+- 5-10 minutes
+
+**Pre-Release**:
+- Full test suite with Terraform-deployed backends
+- ~$0.10 cost (skip OpenSearch)
+- 15-20 minutes
 
 ## Troubleshooting
 
-### Common Issues
+### Test Failures
 
-**Test Failures**:
-1. Check mock configurations
-2. Verify test data setup
-3. Review environment variables
-4. Check temporary file permissions
+**S3Vector Tests Failing**:
+1. Check AWS credentials: `aws sts get-caller-identity`
+2. Verify region: `echo $AWS_REGION`
+3. Check S3Vectors service: `aws s3vectors list-vector-buckets --region us-east-1`
 
-**Performance Issues**:
-1. Monitor memory usage during tests
-2. Check for resource leaks
-3. Verify mock efficiency
-4. Review test data sizes
+**Optional Backend Tests Failing**:
+1. Verify Terraform deployment: `terraform output`
+2. Check backend connectivity
+3. Ensure backends are healthy
+4. Review deployment logs
 
-**Security Test Failures**:
-1. Update attack vector payloads
-2. Review input validation logic
-3. Check sanitization effectiveness
-4. Verify access control implementation
+### Cost Issues
 
-### Debug Mode
+**Unexpected Costs**:
+1. Check if OpenSearch tests ran
+2. Verify resources were cleaned up
+3. Check `terraform state` for orphaned resources
+4. Review AWS Cost Explorer
 
-Enable detailed debugging:
+**Cleanup**:
+```bash
+# S3Vector resources
+python scripts/cleanup_all_resources.py --prefix test-real-e2e
 
-```python
-config = TestConfig(
-    debug_mode=True,
-    verbose_output=True,
-    export_test_data=True
-)
+# Terraform-deployed backends
+cd terraform && terraform destroy
 ```
 
-This provides:
-- Detailed logging output
-- Test data export for analysis
-- Memory usage tracking
-- Performance profiling data
+### Performance Issues
+
+**Slow Tests**:
+1. Use mocked tests for development
+2. Run real AWS tests selectively
+3. Check network connectivity
+4. Verify AWS service health
+
+## Documentation References
+
+- **Main Test README**: [`tests/README.md`](../tests/README.md)
+- **Real AWS Tests Guide**: [`tests/README_REAL_AWS_TESTS.md`](../tests/README_REAL_AWS_TESTS.md)
+- **Quick Start**: [`tests/REAL_AWS_TESTS_QUICKSTART.md`](../tests/REAL_AWS_TESTS_QUICKSTART.md)
+- **Terraform Guide**: [`terraform/MIGRATION_GUIDE.md`](../terraform/MIGRATION_GUIDE.md)
 
 ## Maintenance
 
 ### Regular Updates
 
-1. **Monthly**: Review and update test data
-2. **Quarterly**: Update security payloads and attack vectors
+1. **Monthly**: Review test data and fixtures
+2. **Quarterly**: Update cost estimates
 3. **Semi-annually**: Performance baseline updates
 4. **Annually**: Complete test strategy review
 
 ### Test Data Refresh
 
-```python
-# Generate fresh test datasets
-from tests.test_fixtures import TestDataGenerator
-
-generator = TestDataGenerator(seed=new_seed)
-fresh_data = generator.create_comprehensive_test_suite()
-```
-
-### Performance Baseline Updates
-
-```python
-# Update performance baselines
-from tests.test_streamlit_performance import run_comprehensive_performance_benchmarks
-
-new_baselines = run_comprehensive_performance_benchmarks()
-# Store as new reference metrics
-```
+Keep test data current with production patterns:
+- Update sample videos
+- Refresh embedding dimensions
+- Update mock responses
+- Review test coverage
 
 ## Conclusion
 
-This comprehensive testing strategy ensures the enhanced Streamlit workflow is:
-- **Reliable**: Through comprehensive unit and integration testing
-- **Performant**: Via scalability and performance validation
-- **Secure**: Through extensive security and vulnerability testing
-- **Maintainable**: With clear test structure and documentation
+This testing strategy ensures the S3Vector-first architecture is:
+- **Reliable**: Through comprehensive S3Vector core testing
+- **Performant**: Via optional backend comparison when needed
+- **Cost-Effective**: By focusing on S3Vector with minimal infrastructure
+- **Maintainable**: With clear test organization and Terraform-first approach
 
-The multi-layered testing approach provides confidence in the system's ability to handle real-world usage scenarios while maintaining security and performance standards.
+The testing approach prioritizes S3Vector as the primary backend while allowing optional backend testing for comparison and validation purposes.
