@@ -41,7 +41,7 @@ variable "environment" {
 variable "project_name" {
   description = "Project name prefix for resources"
   type        = string
-  default     = "s3vector-demo"
+  default     = "videolake"
 }
 
 #------------------------------------------------------------------------------
@@ -135,7 +135,7 @@ variable "web_allowed_origins" {
 variable "s3vector_bucket_name" {
   description = "S3Vector bucket name"
   type        = string
-  default     = "s3vector-demo-vectors"
+  default     = "videolake-vectors"
 }
 
 #------------------------------------------------------------------------------
@@ -145,7 +145,7 @@ variable "s3vector_bucket_name" {
 variable "opensearch_domain_name" {
   description = "OpenSearch domain name"
   type        = string
-  default     = "s3vector-demo"
+  default     = "videolake"
 }
 
 variable "opensearch_instance_type" {
@@ -193,7 +193,7 @@ variable "opensearch_master_password" {
 variable "qdrant_deployment_name" {
   description = "Qdrant deployment name"
   type        = string
-  default     = "s3vector-demo-qdrant"
+  default     = "videolake-qdrant"
 }
 
 variable "qdrant_instance_type" {
@@ -221,7 +221,7 @@ variable "qdrant_version" {
 variable "lancedb_deployment_name" {
   description = "Base name for LanceDB deployments"
   type        = string
-  default     = "s3vector-demo-lancedb"
+  default     = "videolake-lancedb"
 }
 
 variable "lancedb_storage_gb" {

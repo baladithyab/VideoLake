@@ -1,5 +1,5 @@
 # =============================================================================
-# S3Vector Platform - Terraform Infrastructure Configuration
+# Videolake Platform - Terraform Infrastructure Configuration
 # =============================================================================
 #
 # DEPLOYMENT PHILOSOPHY: Modular "Opt-In" Architecture
@@ -68,7 +68,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project   = "S3Vector"
+      Project   = "Videolake"
       ManagedBy = "Terraform"
       Demo      = "VectorStoreComparison"
       Environment = var.environment

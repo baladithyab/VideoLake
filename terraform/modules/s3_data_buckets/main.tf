@@ -23,7 +23,7 @@ resource "aws_s3_bucket" "data" {
 
   tags = merge(var.tags, {
     Name      = var.bucket_name
-    Purpose   = "S3Vector Demo Data Storage"
+    Purpose   = "Videolake Data Storage"
     ManagedBy = "Terraform"
   })
 }

@@ -1,4 +1,4 @@
-# Terraform Outputs for S3Vector Infrastructure
+# Terraform Outputs for Videolake Infrastructure
 
 #------------------------------------------------------------------------------
 # SHARED MEDIA BUCKET (Always Created)

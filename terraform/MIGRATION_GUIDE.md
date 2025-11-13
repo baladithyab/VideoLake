@@ -4,6 +4,8 @@
 
 This guide helps you migrate from the old Terraform configuration (where all resources were always deployed) to the new conditional deployment model.
 
+> **Historical Note**: This project was previously named "S3Vector" but has been rebranded to "Videolake" to better reflect its purpose as a multi-backend video search platform. The AWS S3 Vectors service (the underlying storage technology) retains its original name. Throughout this guide, "S3Vector" refers to the old project name, while "Videolake" refers to the current project name.
+
 ## What Changed?
 
 ### 1. Shared S3 Bucket (Always Created)
@@ -16,7 +18,7 @@ data_bucket_name = "media-lake-demo-data"
 **After:**
 ```hcl
 # New variable - more descriptive name
-shared_bucket_name = "s3vector-demo-shared-media"
+shared_bucket_name = "videolake-shared-media"
 
 # Or use default: ${project_name}-shared-media
 ```
@@ -65,8 +67,9 @@ deploy_lancedb_s3  = true
 deploy_lancedb_efs = true
 deploy_lancedb_ebs = true
 
-# Keep existing bucket name for compatibility
-shared_bucket_name = "media-lake-demo-data"
+# Keep existing bucket name for compatibility (or use new naming)
+shared_bucket_name = "media-lake-demo-data"  # Old naming
+# shared_bucket_name = "videolake-shared-media"  # New naming
 ```
 
 **Steps:**
@@ -85,7 +88,7 @@ deploy_s3vector = true
 # All others default to false
 
 # Use new naming convention
-shared_bucket_name = "s3vector-demo-shared-media"
+shared_bucket_name = "videolake-shared-media"
 ```
 
 **Steps:**
@@ -303,8 +306,8 @@ terraform state list
 # Check deployment flags
 grep "deploy_" terraform.tfvars
 
-# Verify in AWS Console
-aws resource-groups get-resources --query 'ResourceTagMappingList[?Tags[?Key==`Project` && Value==`S3Vector`]]'
+# Verify in AWS Console (look for Videolake project tag)
+aws resource-groups get-resources --query 'ResourceTagMappingList[?Tags[?Key==`Project` && Value==`Videolake`]]'
 ```
 
 ## Rollback Procedure

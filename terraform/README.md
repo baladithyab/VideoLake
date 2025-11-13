@@ -1,8 +1,8 @@
-# Terraform Infrastructure for S3Vector Demo
+# Terraform Infrastructure for Videolake
 
 ## Overview
 
-This directory contains Terraform modules for deploying and managing vector store infrastructure. The configuration now supports **conditional deployment** of vector stores while **always creating** a shared S3 bucket for media and artifacts.
+This directory contains Terraform modules for deploying and managing Videolake's multi-backend vector store infrastructure. The configuration supports **conditional deployment** of vector stores while **always creating** a shared S3 bucket for media and artifacts.
 
 ### Key Features
 - ✅ **Shared S3 Bucket**: Always created for videos, TwelveLabs I/O, datasets, and async artifacts
@@ -164,8 +164,8 @@ terraform plan
 terraform apply
 
 # Output:
-# - Shared bucket: s3vector-demo-shared-media
-# - S3Vector bucket: s3vector-demo-vectors (with default 1536D index)
+# - Shared bucket: videolake-shared-media
+# - S3Vector bucket: videolake-vectors (with default 1536D index)
 ```
 
 ### 2. Custom Deployment
@@ -275,7 +275,7 @@ Navigate to `http://localhost:3000/resource-management` to see:
 ### General Configuration
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `project_name` | string | `"s3vector-demo"` | Project prefix for resources |
+| `project_name` | string | `"videolake"` | Project prefix for resources |
 | `aws_region` | string | `"us-east-1"` | AWS region |
 | `environment` | string | `"dev"` | Environment name |
 
@@ -307,7 +307,7 @@ data_bucket_name = "media-lake-demo-data"
 ### After (New Configuration)
 ```hcl
 # Shared bucket replaces data_bucket
-shared_bucket_name = "s3vector-demo-shared-media"
+shared_bucket_name = "videolake-shared-media"
 
 # Explicit control over deployments
 deploy_s3vector    = true   # Only S3Vector by default
@@ -343,8 +343,8 @@ Shared Resources
 
 Vector Store Backends
 ├─ S3 Vectors [healthy] 156ms
-│  ├─ s3vector-demo-vectors
-│  └─ s3vector-demo-vectors/embeddings [1536 dim, 0 vectors]
+│  ├─ videolake-vectors
+│  └─ videolake-vectors/embeddings [1536 dim, 0 vectors]
 ├─ OpenSearch [not_deployed]
 ├─ Qdrant [healthy] 245ms
 │  └─ qdrant-i-12345678 [endpoint: http://34.123.45.67:6333]
