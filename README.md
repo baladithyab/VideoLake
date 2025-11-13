@@ -1,16 +1,18 @@
-# S3Vector: AWS Vector Store Comparison Platform
+# Videolake: AWS Vector Store Comparison Platform
 
 > **Hands-on platform for evaluating and comparing AWS vector storage solutions with real multimodal data**
 
 An interactive demonstration platform that helps you evaluate and choose between AWS vector storage options (S3Vector, OpenSearch Serverless, Qdrant, LanceDB) using real video processing and semantic search workloads.
 
-![S3Vector Architecture](https://img.shields.io/badge/AWS-S3%20Vectors-orange) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Tests](https://img.shields.io/badge/tests-134%2B-brightgreen) ![Cost Savings](https://img.shields.io/badge/savings-90%25%2B-gold)
+> **Note:** This project was previously known as S3Vector. The rebrand to Videolake better reflects its purpose as a comprehensive comparison platform for multiple AWS vector storage backends, not just a single backend implementation.
+
+![Videolake Architecture](https://img.shields.io/badge/AWS-S3%20Vectors-orange) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Tests](https://img.shields.io/badge/tests-134%2B-brightgreen) ![Cost Savings](https://img.shields.io/badge/savings-90%25%2B-gold)
 
 ## 🎯 What This Platform Does
 
 This platform provides a **practical, side-by-side comparison** of AWS vector storage solutions:
 
-- **Fast Default Setup**: Deploy S3Vector-only stack in < 5 minutes for quick testing
+- **Fast Default Setup**: Deploy AWS S3Vector-only stack in < 5 minutes for quick testing
 - **Full Comparison Mode**: Deploy all 4 vector stores to compare performance and features
 - **Real Workloads**: Process actual videos with TwelveLabs API and AWS Bedrock embeddings
 - **Interactive UI**: Modern React interface for exploring search quality and performance
@@ -98,7 +100,7 @@ This platform provides a **practical, side-by-side comparison** of AWS vector st
 
 ### 🆕 Recent Architecture Improvements
 
-The S3 Vector storage system has been refactored using the **Facade Pattern** for improved maintainability:
+The vector storage system has been refactored using the **Facade Pattern** for improved maintainability:
 
 - **85.7% LOC Reduction**: Main file reduced from 2,467 → 352 lines
 - **Specialized Managers**: Bucket, Index, and Vector operations separated into focused modules
@@ -199,7 +201,7 @@ STRUCTURED_LOGGING=true
 
 ## 🚀 Quick Start (< 15 minutes)
 
-**Fast Path - S3Vector Only:**
+**Fast Path - AWS S3Vector Only:**
 ```bash
 # 1. Deploy infrastructure (< 5 min)
 cd terraform && terraform init && terraform apply -auto-approve
@@ -213,7 +215,7 @@ cd .. && ./start.sh
 ```
 
 **Full Comparison - All 4 Vector Stores:**
-See [QUICKSTART.md](QUICKSTART.md) for complete setup including OpenSearch, Qdrant, and LanceDB.
+See [QUICKSTART.md](QUICKSTART.md) for complete setup including all backends: AWS S3Vector, OpenSearch, Qdrant, and LanceDB.
 
 ### Infrastructure Management
 
@@ -249,8 +251,8 @@ See [QUICKSTART.md](QUICKSTART.md) for complete setup including OpenSearch, Qdra
 
 ## Core Components
 
-### ✅ **S3 Vector Storage Manager** (`src/services/s3_vector_storage.py`)
-- Complete S3 Vector bucket and index management
+### ✅ **AWS S3 Vector Storage Manager** (`src/services/s3_vector_storage.py`)
+- Complete AWS S3 Vector bucket and index management
 - Optimized vector storage and retrieval operations
 - Built-in retry logic with exponential backoff
 - Cost-effective alternative to traditional vector databases
@@ -281,7 +283,7 @@ See [QUICKSTART.md](QUICKSTART.md) for complete setup including OpenSearch, Qdra
 
 ## AWS Services Used
 
-- **S3 Vectors**: Vector storage and similarity search
+- **AWS S3 Vectors**: Vector storage and similarity search
 - **Amazon Bedrock**: Text and multimodal embeddings
 - **TwelveLabs Marengo**: Video content embeddings
 - **OpenSearch**: Advanced search and analytics
@@ -292,7 +294,7 @@ See [QUICKSTART.md](QUICKSTART.md) for complete setup including OpenSearch, Qdra
 This platform implements several cost optimization strategies with **proven results**:
 
 ### **Real Cost Savings**
-- **S3 Vectors**: 90%+ cost reduction vs traditional vector databases ($0.023/GB/month)
+- **AWS S3 Vectors**: 90%+ cost reduction vs traditional vector databases ($0.023/GB/month)
 - **Video Processing**: ~$0.01 for 15-second video processing with TwelveLabs Marengo
 - **Text Embeddings**: $0.0001 per 1K tokens with Amazon Titan Text V2
 - **Total Platform Cost**: Under $0.02 for complete video pipeline demonstration
@@ -328,7 +330,7 @@ This platform implements several cost optimization strategies with **proven resu
 - S3 Vector service access in supported regions
 
 ### **AWS Permissions Required**
-- **S3 Vectors**: `s3vectors:*` for bucket/index operations
+- **AWS S3 Vectors**: `s3vectors:*` for bucket/index operations
 - **Bedrock**: `bedrock:InvokeModel` for embedding generation
 - **S3**: `s3:*` for video file storage and TwelveLabs output
 - **IAM**: Cross-service permissions for Bedrock → S3 access
@@ -336,7 +338,7 @@ This platform implements several cost optimization strategies with **proven resu
 ### **Supported AWS Regions**
 - `us-east-1` (primary testing region)
 - `us-west-2` (TwelveLabs Marengo availability)
-- Other regions with S3 Vector and Bedrock support
+- Other regions with AWS S3 Vector and Bedrock support
 
 ## Testing
 
@@ -363,7 +365,7 @@ python -m pytest tests/integration_test_end_to_end_text_processing.py -v  # End-
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          S3 Vector Embedding POC                             │
+│                    Videolake: AWS Vector Store Comparison                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────────┐    │
@@ -379,12 +381,13 @@ python -m pytest tests/integration_test_end_to_end_text_processing.py -v  # End-
 │                                                             │                │
 │                                                             ▼                │
 │           ┌─────────────────────────────────────────────────────────────┐   │
-│           │              S3 Vector Storage & Search                     │   │
+│           │         Multi-Backend Vector Storage & Search              │   │
 │           │  ┌─────────────────┐    ┌─────────────────────────────────┐ │   │
 │           │  │  Vector Buckets │    │        Vector Indexes           │ │   │
-│           │  │  - Cost Optimized│    │  - Text Index (natural lang)   │ │   │
-│           │  │  - Serverless   │    │  - Video Index (temporal)      │ │   │
-│           │  │  - Managed      │    │  - Similarity Search           │ │   │
+│           │  │  - AWS S3Vector │    │  - Text Index (natural lang)   │ │   │
+│           │  │  - OpenSearch   │    │  - Video Index (temporal)      │ │   │
+│           │  │  - Qdrant       │    │  - Similarity Search           │ │   │
+│           │  │  - LanceDB      │    │  - Performance Comparison      │ │   │
 │           │  └─────────────────┘    └─────────────────────────────────┘ │   │
 │           └─────────────────────────────────────────────────────────────┘   │
 │                                       │                                      │

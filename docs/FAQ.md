@@ -53,6 +53,102 @@ See [QUICKSTART](../QUICKSTART.md#prerequisites) for detailed setup.
 
 ## Architecture & Design
 
+### Which backend should I use?
+
+**It depends on your use case.** Videolake is a **comparison platform** designed to help you evaluate all options:
+
+**S3Vector (Always Deployed, Baseline):**
+- ✅ Best for: Quick testing, demos, small-medium datasets
+- ✅ Cost: ~$0.50/month (cheapest)
+- ✅ Deployment: Direct API, no containers
+- ⚠️ Limitations: Performance degrades with very large datasets (>500K vectors)
+
+**OpenSearch Serverless:**
+- ✅ Best for: Hybrid search (text + vectors), complex filtering
+- ✅ Cost: ~$40-100/month
+- ✅ Deployment: Runs on ECS
+- ⚠️ Limitations: Most expensive, 10-15 min cold start
+
+**Qdrant on ECS:**
+- ✅ Best for: Lowest latency, highest throughput, performance-critical apps
+- ✅ Cost: ~$30/month
+- ✅ Deployment: Runs on ECS Fargate
+- ⚠️ Limitations: Requires container management
+
+**LanceDB (Choose Storage Backend):**
+- **LanceDB-S3**: Cheapest storage (~$5-10/month), higher latency
+- **LanceDB-EFS**: Shared storage (~$15-20/month), multi-AZ
+- **LanceDB-EBS**: Best performance (~$30-40/month), single-AZ
+- ✅ All run on ECS Fargate
+- ⚠️ Limitations: Storage choice affects performance significantly
+
+> 📖 **Detailed Comparison:** See [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) for comprehensive architecture, performance characteristics, and selection guidance.
+
+---
+
+### Why does Videolake use ECS for LanceDB/Qdrant?
+
+**ECS-Centric Architecture Design Choice:**
+
+1. **Consistent Deployment Model**
+   - All backends (except S3Vector) use same ECS Fargate pattern
+   - Simplifies infrastructure management
+   - Unified monitoring and scaling
+
+2. **Apples-to-Apples Comparison**
+   - Same compute resources across backends
+   - Fair performance comparison
+   - Controlled testing environment
+
+3. **Production-Like Setup**
+   - Demonstrates real-world container deployment
+   - Scalable and manageable
+   - Industry-standard approach
+
+4. **Storage Flexibility (LanceDB)**
+   - ECS allows multiple storage backends (S3, EFS, EBS)
+   - Compare storage performance impact
+   - Demonstrates different storage patterns
+
+**S3Vector is the exception** - it uses direct API access because it's AWS-native and serverless.
+
+> 📖 **Architecture Details:** See [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) for the complete ECS-centric architecture explanation.
+
+---
+
+### Can I use local LanceDB instead of ECS?
+
+**Short answer:** Not in this platform's current design, but you could modify it.
+
+**Why ECS deployment?**
+
+This is a **comparison platform** focused on:
+- Fair, controlled comparisons between backends
+- Production-like deployment patterns
+- Demonstrating AWS infrastructure management
+- Evaluating AWS-native solutions
+
+**The three LanceDB variants demonstrate different storage backends:**
+- LanceDB-S3: Cloud-native storage
+- LanceDB-EFS: Shared network storage
+- LanceDB-EBS: Local block storage
+
+All run on ECS to maintain consistent compute environment.
+
+**For local development:**
+- You could modify the code to support local LanceDB
+- Would require changes to service providers
+- Would break comparison fairness (local vs cloud backends)
+
+**Recommendation:** Deploy what you need:
+- Mode 1: Just S3Vector (serverless, no containers)
+- Mode 2: Add one backend for comparison
+- Mode 3: All backends for full evaluation
+
+> 📖 **Deployment Modes:** See [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md#deployment-modes) for mode selection guidance.
+
+---
+
 ### Why is S3Vector the only default deployment?
 
 **Three key reasons:**
@@ -64,17 +160,19 @@ See [QUICKSTART](../QUICKSTART.md#prerequisites) for detailed setup.
 **The platform uses a modular "opt-in" architecture:**
 - Fast default: S3Vector only (serverless, minimal cost)
 - Optional comparison: Add OpenSearch, Qdrant, LanceDB as needed
-- Full evaluation: Deploy all 4 stores for comprehensive comparison
+- Full evaluation: Deploy all 7 backend configurations for comprehensive comparison
 
 This isn't a limitation—it's a feature. Deploy only what you need.
+
+> 📖 **Backend Selection:** See [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) for detailed comparison of all 7 configurations.
 
 ---
 
 ### Can I add other vector stores?
 
-**Yes!** All 4 vector stores are available:
+**Yes!** All 7 backend configurations are available:
 
-**OpenSearch Serverless:**
+**OpenSearch Serverless (on ECS):**
 ```bash
 terraform apply -var="deploy_opensearch=true"
 ```
@@ -83,7 +181,7 @@ terraform apply -var="deploy_opensearch=true"
 - Cost: ~$50+/month
 - Deploy time: 10-15 minutes
 
-**Qdrant on ECS Fargate:**
+**Qdrant (on ECS Fargate):**
 ```bash
 terraform apply -var="deploy_qdrant=true"
 ```
@@ -92,23 +190,23 @@ terraform apply -var="deploy_qdrant=true"
 - Cost: ~$20+/month
 - Deploy time: 5-10 minutes
 
-**LanceDB (choose storage):**
+**LanceDB on ECS (choose storage backend):**
 ```bash
-# S3 storage (cheapest)
+# S3 storage (cheapest, highest latency)
 terraform apply -var="deploy_lancedb_s3=true"
 
-# EFS storage (balanced)
+# EFS storage (balanced, shared)
 terraform apply -var="deploy_lancedb_efs=true"
 
-# EBS storage (fastest)
+# EBS storage (fastest, local)
 terraform apply -var="deploy_lancedb_ebs=true"
 ```
-- Columnar vector database
+- Columnar vector database on ECS Fargate
 - Arrow-native integration
 - Cost: ~$5-40/month depending on storage
 - Deploy time: 5-10 minutes
 
-See [DEMO_GUIDE](DEMO_GUIDE.md#deployment-modes) for detailed comparison.
+> 📖 **Detailed Comparison:** See [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) for architecture, performance, and cost comparison of all configurations.
 
 ---
 
@@ -129,11 +227,15 @@ This is an **AWS Vector Store Comparison Platform** designed for:
 - Organizations prototyping multimodal AI applications
 
 **What it demonstrates:**
-- S3Vector (always deployed, fully functional)
-- Optional backends for comparison (OpenSearch, Qdrant, LanceDB)
+- S3Vector (always deployed, baseline, direct API)
+- Optional backends for fair comparison (OpenSearch, Qdrant, LanceDB on ECS)
+- ECS-centric architecture (all backends except S3Vector)
+- 3 storage backend variants for LanceDB (S3, EFS, EBS)
 - Terraform-first infrastructure management
 - Multimodal search (video + text)
 - Real-time health monitoring
+
+> 📖 **Platform Architecture:** See [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) for the complete multi-backend architecture overview.
 
 See [README](../README.md#project-scope--purpose) for full scope definition.
 

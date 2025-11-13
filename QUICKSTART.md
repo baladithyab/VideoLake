@@ -1,6 +1,6 @@
-# S3Vector Quick Start Guide
+# Videolake Quick Start Guide
 
-Get started with the S3Vector AWS Vector Store Comparison Platform in under 15 minutes.
+Get started with the Videolake AWS Vector Store Comparison Platform in under 15 minutes.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ Get started with the S3Vector AWS Vector Store Comparison Platform in under 15 m
 ## What You'll Deploy
 
 By default, this quick start deploys:
-- ✅ **S3 Vector Storage** (S3Vectors library) - Fast deployment (< 5 minutes)
+- ✅ **AWS S3 Vector Storage** (S3Vectors library) - Fast deployment (< 5 minutes)
 - ✅ **Media Processing Pipeline** (TwelveLabs API integration)
 - ✅ **Embedding Generation** (AWS Bedrock)
 - ✅ **React UI** (Modern search and visualization interface)
