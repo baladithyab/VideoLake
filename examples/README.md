@@ -1,6 +1,6 @@
-# S3Vector Examples
+# Videolake Examples
 
-This directory contains consolidated demonstrations and examples of S3Vector capabilities using real AWS resources.
+This directory contains consolidated demonstrations and examples of Videolake capabilities using real AWS resources.
 
 ## 🚀 **Quick Start - Vector Validation**
 
@@ -36,7 +36,7 @@ python examples/vector_validation.py --mode all --output results.json
 ## 📊 **Specialized Demos**
 
 ### `comprehensive_real_demo.py` (Main Demo)
-**Complete S3Vector functionality demonstration using real AWS resources.**
+**Complete Videolake functionality demonstration using real AWS resources.**
 
 Features:
 - Text embedding generation and storage
@@ -110,8 +110,8 @@ python examples/vector_validation.py --mode all --output results.json
 
 ## 📊 **Specialized Demos**
 
-### `comprehensive_real_demo.py` (Main S3Vector Demo)
-**Complete S3Vector functionality demonstration.**
+### `comprehensive_real_demo.py` (Main Videolake Demo)
+**Complete Videolake functionality demonstration.**
 
 Features:
 - Text embedding generation and storage

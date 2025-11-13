@@ -4,22 +4,32 @@
 
 ## Overview
 
-The `test_real_aws_e2e_workflows.py` file contains comprehensive end-to-end integration tests that use actual AWS services instead of mocks. These tests validate the complete video retrieval workflow using real resources.
+The [`test_real_aws_e2e_workflows.py`](test_real_aws_e2e_workflows.py) file contains comprehensive end-to-end integration tests that use actual AWS services instead of mocks. These tests validate the complete video retrieval workflow using real resources.
+
+### S3Vector-First Architecture
+
+**S3Vector is the primary backend** - Core tests validate S3Vector functionality with no additional infrastructure required.
+
+**Optional backends** (OpenSearch, Qdrant, LanceDB) are **comparison backends only** and require Terraform deployment before testing.
 
 ## Estimated Costs
 
-| Test Type | Estimated Cost | Duration | Notes |
-|-----------|---------------|----------|-------|
-| **S3Vector Workflow** | $0.01-0.02 | 2-5 min | Basic vector storage + processing |
-| **LanceDB Workflow** | $0.01 | 1-2 min | S3 storage only |
-| **OpenSearch Workflow** | $1.00+/hour | 10-20 min | ⚠️ VERY EXPENSIVE! Domain creation |
-| **Provider Comparison** | $0.05 | 5 min | Multiple operations |
-| **Full Test Suite** (no OpenSearch) | $0.05-0.10 | 10 min | All basic tests |
-| **Full Test Suite** (with OpenSearch) | $2-5 | 20-30 min | ⚠️ Includes expensive tests |
+| Test Type | Estimated Cost | Duration | Infrastructure Required | Notes |
+|-----------|---------------|----------|------------------------|-------|
+| **S3Vector Workflow (Core)** | $0.01-0.02 | 2-5 min | None (built-in) | Primary backend test |
+| **LanceDB Workflow (Optional)** | $0.01 | 1-2 min | Terraform deployment | S3 storage only |
+| **Qdrant Workflow (Optional)** | $0.02-0.05 | 2-5 min | Terraform deployment | Memory-based storage |
+| **OpenSearch Workflow (Optional)** | $1.00+/hour | 10-20 min | Terraform deployment | ⚠️ VERY EXPENSIVE! |
+| **Provider Comparison** | $0.05 | 5 min | Depends on mode | Compares deployed backends |
+| **Core Tests Only** | $0.02-0.05 | 5 min | None | S3Vector only |
+| **Full Suite (no OpenSearch)** | $0.05-0.10 | 10 min | Mode 2/3 deployment | Includes optional backends |
+| **Full Suite (with OpenSearch)** | $2-5 | 20-30 min | Mode 3 deployment | ⚠️ Includes expensive tests |
 
 ## Prerequisites
 
-### 1. AWS Credentials
+### Core Prerequisites (For S3Vector Tests)
+
+These are required for all tests:
 
 You need AWS credentials with the following permissions:
 
@@ -52,6 +62,48 @@ You need AWS credentials with the following permissions:
   ]
 }
 ```
+
+**Note**: S3Vector tests work immediately with these permissions - no additional infrastructure setup required.
+
+### Optional Backend Prerequisites (For Comparison Tests)
+
+**Required before running optional backend tests:**
+
+1. **Terraform Deployment**
+   ```bash
+   cd terraform
+   
+   # Mode 2: S3Vector + one optional backend
+   terraform apply -var="deployment_mode=mode2" -var="primary_backend=lancedb"
+   
+   # Mode 3: S3Vector + multiple backends for comparison
+   terraform apply -var="deployment_mode=mode3"
+   ```
+
+2. **Verify Deployment**
+   ```bash
+   terraform output
+   # Should show: opensearch_endpoint, qdrant_endpoint, lancedb_bucket, etc.
+   ```
+
+3. **Additional AWS Permissions** (if using optional backends)
+   ```json
+   {
+     "Effect": "Allow",
+     "Action": [
+       "aoss:CreateCollection",
+       "aoss:DeleteCollection",
+       "aoss:BatchGetCollection",
+       "ec2:CreateVpc",
+       "ec2:CreateSubnet",
+       "ecs:CreateCluster",
+       "ecs:CreateService"
+     ],
+     "Resource": "*"
+   }
+   ```
+
+See [`terraform/MIGRATION_GUIDE.md`](../terraform/MIGRATION_GUIDE.md) for detailed deployment instructions.
 
 ### 2. AWS Region
 
@@ -95,47 +147,92 @@ pip install pytest boto3 requests python-dotenv
 
 ## Running Tests Safely
 
-### First Time Setup
+### Phase 1: Core S3Vector Tests (No Infrastructure Required)
+
+**Start here - these tests work immediately:**
 
 1. **Check Prerequisites** (dry run):
 ```bash
 pytest tests/test_real_aws_e2e_workflows.py --collect-only
 ```
 
-2. **Run Single Test First**:
+2. **Run Core S3Vector Tests**:
 ```bash
-# Start with the smallest test
-pytest tests/test_real_aws_e2e_workflows.py::TestRealErrorHandling::test_invalid_video_handling -v --real-aws
+# S3Vector workflow only (primary backend, no extra infrastructure)
+pytest tests/test_real_aws_e2e_workflows.py::TestRealS3VectorWorkflow -v --real-aws
+
+# Error handling tests (cheapest, ~$0.01)
+pytest tests/test_real_aws_e2e_workflows.py::TestRealErrorHandling -v --real-aws
 ```
 
-### Running All Tests
+**Cost**: ~$0.02-0.05, **Duration**: 5 minutes, **Infrastructure**: None required
 
-**⚠️ Without OpenSearch (Recommended):**
+### Phase 2: Optional Backend Tests (Requires Terraform)
+
+**Only proceed if you need backend comparison testing:**
+
+1. **Deploy Optional Backends**:
 ```bash
-# Run all non-expensive tests (~$0.10, 10 minutes)
+cd terraform
+
+# Mode 2: S3Vector + one optional backend
+terraform apply -var="deployment_mode=mode2" -var="primary_backend=lancedb"
+
+# Mode 3: Full comparison (includes expensive OpenSearch)
+terraform apply -var="deployment_mode=mode3"
+```
+
+2. **Verify Deployment**:
+```bash
+terraform output
+# Confirm endpoints are available before running tests
+```
+
+3. **Run Optional Backend Tests**:
+```bash
+cd ..
+
+# LanceDB workflow (if deployed via Terraform)
+pytest tests/test_real_aws_e2e_workflows.py::TestRealLanceDBWorkflow -v --real-aws
+
+# Qdrant workflow (if deployed via Terraform)
+pytest tests/test_real_aws_e2e_workflows.py::TestRealQdrantWorkflow -v --real-aws
+
+# Performance comparison across backends
+pytest tests/test_real_aws_e2e_workflows.py::TestRealProviderComparison -v --real-aws
+```
+
+**⚠️ OpenSearch Tests (Very Expensive!):**
+```bash
+# Only run if you deployed Mode 3 and accept $1+/hour costs!
+pytest tests/test_real_aws_e2e_workflows.py::TestRealOpenSearchWorkflow -v --real-aws
+```
+
+4. **Clean Up After Testing**:
+```bash
+cd terraform
+terraform destroy
+```
+
+### Running All Tests at Once
+
+**⚠️ Core Only (Recommended):**
+```bash
+# Run all S3Vector tests, no optional backends (~$0.05, 5 minutes)
+pytest tests/test_real_aws_e2e_workflows.py::TestRealS3VectorWorkflow -v --real-aws
+pytest tests/test_real_aws_e2e_workflows.py::TestRealErrorHandling -v --real-aws
+```
+
+**⚠️ With Optional Backends (Requires Terraform deployment):**
+```bash
+# Requires terraform apply first!
 pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
 ```
 
-**⚠️ With OpenSearch (Expensive!):**
+**⚠️ Full Suite Including OpenSearch (Expensive!):**
 ```bash
-# Only run if you accept $2-5 in costs!
+# Requires Mode 3 deployment, $2-5 in costs!
 SKIP_EXPENSIVE_TESTS=0 pytest tests/test_real_aws_e2e_workflows.py -v --real-aws
-```
-
-### Running Specific Tests
-
-```bash
-# S3Vector workflow only
-pytest tests/test_real_aws_e2e_workflows.py::TestRealS3VectorWorkflow -v --real-aws
-
-# LanceDB workflow only  
-pytest tests/test_real_aws_e2e_workflows.py::TestRealLanceDBWorkflow -v --real-aws
-
-# Performance comparison
-pytest tests/test_real_aws_e2e_workflows.py::TestRealProviderComparison -v --real-aws
-
-# Error handling tests (cheapest)
-pytest tests/test_real_aws_e2e_workflows.py::TestRealErrorHandling -v --real-aws
 ```
 
 ### Keeping Resources for Debugging
@@ -146,8 +243,16 @@ KEEP_TEST_RESOURCES=1 pytest tests/test_real_aws_e2e_workflows.py -v --real-aws
 ```
 
 **Manual cleanup after debugging:**
+
+For S3Vector resources:
 ```bash
 python scripts/cleanup_all_resources.py --prefix test-real-e2e
+```
+
+For Terraform-deployed backends:
+```bash
+cd terraform
+terraform destroy
 ```
 
 ## Safety Features
@@ -396,29 +501,45 @@ jobs:
 
 ## Best Practices
 
-1. **Default to Mocked Tests**
-   - Use `test_e2e_vector_store_workflows.py` for regular development
-   - Use real AWS tests for validation only
+1. **S3Vector-First Testing**
+   - Always test S3Vector core functionality first
+   - Only test optional backends when doing comparison analysis
+   - S3Vector tests require no additional infrastructure
 
-2. **Run Real Tests Sparingly**
+2. **Use Terraform for Optional Backends**
+   - Never create optional backend infrastructure via API
+   - Always deploy via Terraform: `terraform apply`
+   - Verify deployment before running tests: `terraform output`
+   - Clean up with: `terraform destroy`
+
+3. **Default to Mocked Tests**
+   - Use [`test_e2e_vector_store_workflows.py`](test_e2e_vector_store_workflows.py) for regular development
+   - Use real AWS tests for validation only
+   - Mocked tests are free and fast
+
+4. **Run Real Tests Sparingly**
    - Before major releases
    - After AWS service updates
    - When mocked tests show discrepancies
+   - Weekly/monthly scheduled validation
 
-3. **Monitor Costs**
+5. **Monitor Costs**
    - Set up AWS Cost Anomaly Detection
    - Review AWS Cost Explorer regularly
    - Set budget alerts
+   - Skip expensive tests in CI: `-m "not expensive"`
 
-4. **Clean Up Regularly**
+6. **Clean Up Properly**
+   - S3Vector resources: Use cleanup scripts
+   - Optional backends: Use `terraform destroy`
    - Check for orphaned resources weekly
    - Use tagging for easy identification
-   - Automate cleanup with Lambda functions
 
-5. **Document Failures**
+7. **Document Failures**
    - Real AWS failures may indicate actual bugs
    - Compare with mock test results
    - Update mocks based on real behavior
+   - File issues for infrastructure problems
 
 ## Support
 

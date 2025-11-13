@@ -1,4 +1,4 @@
-# Similarity Search Comparison Scripts
+# Videolake Comparison Scripts
 
 This directory contains scripts for comparing similarity search performance between S3Vector and OpenSearch indexes using the Marengo 2.7 embedding model.
 

@@ -2,11 +2,11 @@
 
 ## Overview
 
-This guide explains how to test the complete AWS resource lifecycle for the S3Vector application. All tests use **REAL AWS API calls** - no mocks or simulations.
+This guide explains how to test the complete AWS resource lifecycle for the Videolake application. All tests use **REAL AWS API calls** - no mocks or simulations.
 
 ## Required Resources
 
-The S3Vector application requires these AWS resources:
+The Videolake application requires these AWS resources:
 
 1. **S3 Bucket** - For storing uploaded media files (videos, images, audio)
 2. **S3Vector Bucket** - For storing vector indices
@@ -67,7 +67,7 @@ python tests/test_complete_resource_workflow.py --cleanup-only
 
 **File:** `tests/test_simplified_resource_manager.py`
 
-**Purpose:** Tests the SimplifiedResourceManager component used by the Streamlit frontend.
+**Purpose:** Tests the SimplifiedResourceManager component used by the frontend.
 
 **Usage:**
 
