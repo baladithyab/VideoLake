@@ -53,7 +53,7 @@ class AWSConfiguration:
     session_token: Optional[str] = None
     
     # S3 and S3Vector settings
-    s3_bucket: str = "s3vector-production-bucket"
+    s3_bucket: str = "videolake-production-bucket"
     s3_prefix: str = "vectors/"
     s3_vectors_bucket: Optional[str] = None
     s3vector_endpoint: Optional[str] = None
@@ -144,7 +144,7 @@ class StorageConfiguration:
     opensearch_endpoint: Optional[str] = None
     opensearch_username: Optional[str] = None
     opensearch_password: Optional[str] = None
-    opensearch_index_prefix: str = "s3vector"
+    opensearch_index_prefix: str = "videolake"
     opensearch_max_results: int = 100
     
     # Storage patterns
@@ -190,7 +190,7 @@ class FeatureConfiguration:
 class UIConfiguration:
     """User interface configuration."""
     # Application settings
-    app_title: str = "S3Vector"
+    app_title: str = "Videolake"
     app_icon: str = "🔍"
     page_layout: str = "wide"
     sidebar_state: str = "expanded"

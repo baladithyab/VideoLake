@@ -1,4 +1,4 @@
-# S3Vector Configuration
+# Videolake Configuration
 # This file contains default configuration settings that can be overridden
 # by environment variables or environment-specific config files.
 
@@ -12,8 +12,8 @@ port: 8501
 # AWS Configuration
 aws:
   region: us-east-1
-  s3_bucket: s3vector-production-bucket
-  s3_vectors_bucket: s3vector-production-bucket
+  s3_bucket: videolake-production-bucket
+  s3_vectors_bucket: videolake-production-bucket
   s3_prefix: vectors/
   bedrock_model_id: amazon.titan-embed-text-v1
   bedrock_max_tokens: 8192
@@ -76,7 +76,7 @@ twelvelabs:
 
 # OpenSearch Configuration
 opensearch:
-  index_prefix: s3vector
+  index_prefix: videolake
   max_results: 100
 
 # Feature Flags
@@ -95,7 +95,7 @@ features:
 
 # UI Configuration
 ui:
-  app_title: "S3Vector"
+  app_title: "Videolake"
   app_icon: "🔍"
   page_layout: wide
   sidebar_state: expanded
