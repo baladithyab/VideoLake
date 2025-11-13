@@ -1,9 +1,10 @@
 """
-LanceDB Vector Store Provider
+Videolake LanceDB Backend Provider
 
-Implementation of the VectorStoreProvider interface for LanceDB.
-LanceDB is a high-performance columnar vector database with SQL-like
-filtering capabilities and support for local and S3-backed storage.
+Implementation of the Videolake VectorStoreProvider interface for LanceDB.
+LanceDB is a high-performance columnar vector database integrated into the
+Videolake platform, offering SQL-like filtering capabilities and support
+for both local and S3-backed storage as a flexible backend option.
 """
 
 import os
@@ -24,12 +25,12 @@ logger = get_logger(__name__)
 
 class LanceDBProvider(VectorStoreProvider):
     """
-    LanceDB implementation of VectorStoreProvider.
+    LanceDB backend implementation for Videolake platform.
 
-    Features:
+    Features integrated into Videolake:
     - High-performance columnar storage
-    - Local and S3-backed storage
-    - SQL-like filtering
+    - Local and S3-backed storage options
+    - SQL-like filtering for complex queries
     - Efficient data handling with PyArrow
     - Multiple distance metrics (cosine, euclidean, dot product)
     """
@@ -73,7 +74,7 @@ class LanceDBProvider(VectorStoreProvider):
 
     def create(self, config: VectorStoreConfig) -> VectorStoreStatus:
         """
-        Create a new LanceDB table.
+        Create a new LanceDB table for Videolake.
 
         Args:
             config: Vector store configuration
@@ -316,9 +317,9 @@ class LanceDBProvider(VectorStoreProvider):
     
     def validate_connectivity(self) -> Dict[str, Any]:
         """
-        Validate connectivity to LanceDB storage.
+        Validate connectivity to LanceDB storage backend.
         
-        Tests:
+        Tests the Videolake platform's connection to LanceDB backend:
         - Storage backend accessibility (local or S3)
         - Database connection
         - Table listing capability

@@ -1,9 +1,10 @@
 """
-Unified Vector Store Manager
+Videolake Unified Vector Store Manager
 
-Provides a unified interface for managing multiple vector store types
-using the provider pattern. This is the main entry point for vector
-store operations in the application.
+Provides a unified interface for managing multiple vector store backends in the
+Videolake platform using the provider pattern. This is the main entry point for
+all vector store operations, supporting AWS S3Vector, OpenSearch, LanceDB, and
+Qdrant backends seamlessly.
 """
 
 from typing import Dict, Any, Optional, List
@@ -33,16 +34,17 @@ logger = get_logger(__name__)
 
 class VectorStoreManager:
     """
-    Unified manager for all vector store operations.
+    Unified manager for all Videolake vector store operations.
     
     This class provides a single interface for working with multiple
-    vector store backends. It uses the provider pattern to delegate
-    operations to the appropriate provider implementation.
+    vector store backends in the Videolake platform. It uses the provider
+    pattern to delegate operations to the appropriate backend implementation
+    (AWS S3Vector, OpenSearch, LanceDB, or Qdrant).
     
     Example usage:
         manager = VectorStoreManager()
         
-        # Create an S3 Vector store
+        # Create an AWS S3 Vector store
         config = VectorStoreConfig(
             store_type=VectorStoreType.S3_VECTOR,
             name="my-vector-bucket",

@@ -1,7 +1,9 @@
 """
-OpenSearch Provider Implementation
+Videolake OpenSearch Backend Provider
 
-Implements the VectorStoreProvider interface for Amazon OpenSearch Service.
+Implements the Videolake VectorStoreProvider interface for Amazon OpenSearch Service,
+enabling the platform to leverage OpenSearch's powerful vector search capabilities
+as one of its supported vector store backends.
 """
 
 from typing import Dict, Any, Optional, List
@@ -26,7 +28,13 @@ logger = get_logger(__name__)
 
 
 class OpenSearchProvider(VectorStoreProvider):
-    """OpenSearch implementation of the vector store provider."""
+    """
+    Amazon OpenSearch backend implementation for Videolake platform.
+    
+    Provides integration with Amazon OpenSearch Service, allowing Videolake to
+    utilize OpenSearch's vector search and analytics capabilities as a flexible
+    backend option.
+    """
     
     def __init__(self):
         """Initialize the OpenSearch provider."""
@@ -43,7 +51,7 @@ class OpenSearchProvider(VectorStoreProvider):
     
     def create(self, config: VectorStoreConfig) -> VectorStoreStatus:
         """
-        Create a new OpenSearch domain.
+        Create a new Amazon OpenSearch domain for Videolake.
         
         Args:
             config: Configuration for the OpenSearch domain
@@ -301,9 +309,9 @@ class OpenSearchProvider(VectorStoreProvider):
     
     def validate_connectivity(self) -> Dict[str, Any]:
         """
-        Validate connectivity to OpenSearch service.
+        Validate connectivity to Amazon OpenSearch service.
         
-        Tests:
+        Tests the Videolake platform's connection to OpenSearch backend:
         - OpenSearch service accessibility
         - Domain listing capability
         - Cluster health check if domains exist

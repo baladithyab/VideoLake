@@ -1,9 +1,11 @@
 """
-Vector Store Provider Abstraction
+Videolake Vector Store Provider Abstraction
 
-Provides a unified interface for multiple vector store backends using the
-Strategy/Provider pattern. This allows easy addition of new vector store
-types (Pinecone, Weaviate, Qdrant, etc.) without changing client code.
+Provides a unified interface for multiple vector store backends in the Videolake
+platform using the Strategy/Provider pattern. This architecture enables seamless
+integration of diverse vector store backends (AWS S3Vector, OpenSearch, LanceDB,
+Qdrant, etc.) without changing client code, supporting Videolake's multi-backend
+vector search capabilities.
 """
 
 from abc import ABC, abstractmethod
@@ -82,11 +84,12 @@ class VectorStoreStatus:
 
 class VectorStoreProvider(ABC):
     """
-    Abstract base class for vector store providers.
+    Abstract base class for Videolake vector store providers.
     
-    All vector store implementations must inherit from this class and
-    implement the required methods. This ensures a consistent interface
-    across different vector store backends.
+    All vector store backend implementations in the Videolake platform must
+    inherit from this class and implement the required methods. This ensures
+    a consistent interface across different vector store backends (AWS S3Vector,
+    OpenSearch, LanceDB, Qdrant, etc.).
     """
     
     @property
@@ -258,10 +261,11 @@ class VectorStoreProvider(ABC):
 
 class VectorStoreProviderFactory:
     """
-    Factory for creating vector store providers.
+    Factory for creating Videolake vector store providers.
     
-    This factory maintains a registry of available providers and creates
-    instances based on the requested store type.
+    This factory maintains a registry of available backend providers in the
+    Videolake platform and creates instances based on the requested store type,
+    enabling dynamic backend selection for multi-backend vector operations.
     """
     
     _providers: Dict[VectorStoreType, type] = {}

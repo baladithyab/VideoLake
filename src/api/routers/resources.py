@@ -3,7 +3,7 @@ Resource Management API Router - READ-ONLY
 
 ⚠️  TERRAFORM-FIRST ARCHITECTURE ⚠️
 
-This router provides READ-ONLY access to deployed infrastructure.
+This router provides READ-ONLY access to Videolake's deployed infrastructure.
 ALL infrastructure creation, modification, and deletion is handled
 EXCLUSIVELY through Terraform.
 
@@ -716,12 +716,12 @@ async def get_deployed_resources_tree():
     """
     Get hierarchical view of deployed resources from Terraform state.
     
-    Reads terraform/terraform.tfstate and parses deployed infrastructure to
-    provide a true view of what's actually deployed via Terraform.
+    Reads terraform/terraform.tfstate and parses Videolake's deployed infrastructure
+    to provide a true view of what's actually deployed via Terraform.
     
     Returns tree structure showing:
     - Shared media buckets (from module.shared_bucket)
-    - Vector backends:
+    - Vector backends available for comparison:
       - S3 Vector (from module.s3vector[0])
       - OpenSearch (from module.opensearch[0])
       - Qdrant (from module.qdrant[0])
@@ -987,11 +987,17 @@ async def store_embeddings_to_index(
     """
     Store completed processing job embeddings to specified index.
     
-    This endpoint provides a complete workflow:
+    This endpoint provides a complete Videolake workflow:
     1. Get job results from processing service
     2. Extract embeddings from job
     3. Store to specified index via appropriate backend provider
     4. Return storage status
+    
+    Supports all Videolake backends:
+    - s3_vector: AWS S3 Vector native service
+    - opensearch: OpenSearch with S3Vector backend
+    - qdrant: Qdrant cloud-native vector database
+    - lancedb: LanceDB columnar database
     
     Args:
         request: StoreEmbeddingsToIndexRequest with:

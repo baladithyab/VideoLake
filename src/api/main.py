@@ -1,8 +1,8 @@
 """
-FastAPI REST API for S3Vector Application.
+FastAPI REST API for Videolake Application.
 
 This module provides REST API endpoints for the React frontend to interact
-with all backend services.
+with all backend services including multiple vector store backends.
 """
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks

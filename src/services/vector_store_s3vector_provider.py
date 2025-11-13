@@ -1,7 +1,9 @@
 """
-S3Vector Provider Implementation
+Videolake AWS S3Vector Backend Provider
 
-Implements the VectorStoreProvider interface for AWS S3 Vectors.
+Implements the Videolake VectorStoreProvider interface for AWS S3 Vectors service,
+enabling the platform to leverage AWS's native vector storage capabilities as one
+of its supported vector store backends.
 """
 
 from typing import Dict, Any, Optional, List
@@ -25,7 +27,12 @@ logger = get_logger(__name__)
 
 
 class S3VectorProvider(VectorStoreProvider):
-    """S3Vector implementation of the vector store provider."""
+    """
+    AWS S3Vector backend implementation for Videolake platform.
+    
+    Provides integration with AWS S3 Vectors service, allowing Videolake to
+    utilize AWS's native vector storage as a high-performance backend option.
+    """
     
     def __init__(self):
         """Initialize the S3Vector provider."""
@@ -42,7 +49,7 @@ class S3VectorProvider(VectorStoreProvider):
     
     def create(self, config: VectorStoreConfig) -> VectorStoreStatus:
         """
-        Create a new S3 Vector bucket.
+        Create a new AWS S3 Vector bucket for Videolake.
         
         Args:
             config: Configuration for the S3 Vector bucket
@@ -258,9 +265,9 @@ class S3VectorProvider(VectorStoreProvider):
     
     def validate_connectivity(self) -> Dict[str, Any]:
         """
-        Validate connectivity to S3 Vectors service.
+        Validate connectivity to AWS S3 Vectors service.
         
-        Tests:
+        Tests the Videolake platform's connection to AWS S3 Vectors backend:
         - S3 bucket listing functionality
         - S3Vectors client accessibility
         - Response time measurement

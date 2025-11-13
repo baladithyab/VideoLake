@@ -1,8 +1,8 @@
 """
 Infrastructure Management API Endpoints
 
-Provides REST API for programmatic Terraform operations.
-Enables UI to deploy/destroy vector stores on demand.
+Provides REST API for programmatic Terraform operations for the Videolake platform.
+Enables UI to deploy/destroy vector store backends on demand for performance comparison.
 
 Endpoints:
 - POST /infrastructure/deploy - Deploy vector stores
@@ -106,7 +106,10 @@ async def deploy_infrastructure(
     background_tasks: BackgroundTasks
 ):
     """
-    Deploy selected vector stores with real-time log streaming.
+    Deploy selected vector store backends with real-time log streaming.
+
+    Videolake supports multiple backends for performance comparison.
+    This endpoint deploys the selected backends via Terraform.
 
     Args:
         request: Deployment request with selected stores
@@ -168,8 +171,9 @@ async def destroy_infrastructure(
     background_tasks: BackgroundTasks
 ):
     """
-    Destroy selected vector stores with real-time log streaming.
+    Destroy selected vector store backends with real-time log streaming.
 
+    Removes Videolake backend infrastructure via Terraform.
     Requires confirm=True for safety.
 
     Args:
@@ -368,8 +372,9 @@ async def stream_operation_logs(operation_id: str):
     """
     Stream real-time logs for a Terraform operation via Server-Sent Events (SSE).
 
-    The UI connects to this endpoint when a deploy/destroy operation starts.
-    Logs are streamed in real-time as Terraform executes.
+    The Videolake UI connects to this endpoint when a deploy/destroy operation starts.
+    Logs are streamed in real-time as Terraform executes, providing visibility
+    into backend deployment progress.
 
     Args:
         operation_id: Operation ID to stream logs for

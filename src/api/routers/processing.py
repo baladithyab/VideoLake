@@ -1,7 +1,8 @@
 """
 Media Processing API Router.
 
-Handles video upload and processing with TwelveLabs Marengo.
+Handles video upload and processing with TwelveLabs Marengo for the
+Videolake multi-backend video search platform.
 """
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Depends

@@ -1,7 +1,9 @@
 """
 Embeddings API Router.
 
-Handles embedding visualization and analysis.
+Handles embedding visualization and analysis for the Videolake platform.
+Provides tools to visualize and understand vector embeddings across
+multiple backend types.
 """
 
 from fastapi import APIRouter, HTTPException

@@ -1,7 +1,9 @@
 """
 Search API Router.
 
-Handles multi-modal search queries and similarity search.
+Handles multi-modal search queries and similarity search across multiple
+vector store backends (S3 Vector, OpenSearch, Qdrant, LanceDB) for the
+Videolake platform.
 """
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -88,9 +90,9 @@ async def search_query(
     """
     Execute search query on specified backend.
 
-    Supports:
-    - s3_vector: AWS S3 Vector (direct)
-    - opensearch: OpenSearch with S3Vector backend
+    Videolake supports multiple vector store backends:
+    - s3_vector: AWS S3 Vector (native AWS service)
+    - opensearch: OpenSearch with S3Vector backend integration
     - lancedb: LanceDB columnar database
     - qdrant: Qdrant cloud-native vector database
     """
@@ -299,11 +301,11 @@ async def list_backends():
     """
     List all available vector store backends.
 
-    Returns information about each supported backend including:
-    - s3_vector: AWS S3 Vector (direct)
-    - opensearch: OpenSearch with S3Vector backend
-    - lancedb: LanceDB columnar database
-    - qdrant: Qdrant cloud-native vector database
+    Videolake supports multiple backends for performance comparison:
+    - s3_vector: AWS S3 Vector (native AWS service)
+    - opensearch: OpenSearch with S3Vector backend integration
+    - lancedb: LanceDB columnar database for high-performance queries
+    - qdrant: Qdrant cloud-native vector database with advanced filtering
     """
     from src.services.vector_store_manager import VectorStoreManager
 
@@ -347,6 +349,9 @@ async def compare_backends(
 ):
     """
     Compare query performance across multiple backends.
+
+    Videolake's key feature - compare the same query across different
+    vector store backends to analyze performance and accuracy trade-offs.
 
     Args:
         query_text: Search query

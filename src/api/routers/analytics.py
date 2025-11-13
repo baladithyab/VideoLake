@@ -1,7 +1,8 @@
 """
 Analytics API Router.
 
-Handles performance monitoring, cost tracking, and system analytics.
+Handles performance monitoring, cost tracking, and system analytics for
+the Videolake multi-backend video search platform.
 """
 
 from fastapi import APIRouter, HTTPException

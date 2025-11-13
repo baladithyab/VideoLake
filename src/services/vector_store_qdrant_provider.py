@@ -1,9 +1,10 @@
 """
-Qdrant Vector Store Provider
+Videolake Qdrant Backend Provider
 
-Implementation of the VectorStoreProvider interface for Qdrant.
-Qdrant is a cloud-native vector database with advanced filtering,
-HNSW indexing, and support for both local and cloud deployments.
+Implementation of the Videolake VectorStoreProvider interface for Qdrant.
+Qdrant is a cloud-native vector database integrated into the Videolake platform,
+offering advanced filtering, HNSW indexing, and support for both local and cloud
+deployments as a flexible backend option.
 """
 
 import os
@@ -25,15 +26,15 @@ logger = get_logger(__name__)
 
 class QdrantProvider(VectorStoreProvider):
     """
-    Qdrant implementation of VectorStoreProvider.
+    Qdrant backend implementation for Videolake platform.
 
-    Features:
+    Features integrated into Videolake:
     - Cloud-native architecture
     - Local and cloud deployment support
-    - Advanced metadata filtering
+    - Advanced metadata filtering capabilities
     - HNSW indexing for fast similarity search
     - Multiple distance metrics (cosine, euclidean, dot product)
-    - Payload-based filtering
+    - Payload-based filtering for complex queries
     """
 
     def __init__(self):
@@ -87,7 +88,7 @@ class QdrantProvider(VectorStoreProvider):
 
     def create(self, config: VectorStoreConfig) -> VectorStoreStatus:
         """
-        Create a new Qdrant collection.
+        Create a new Qdrant collection for Videolake.
 
         Args:
             config: Vector store configuration
@@ -359,9 +360,9 @@ class QdrantProvider(VectorStoreProvider):
     
     def validate_connectivity(self) -> Dict[str, Any]:
         """
-        Validate connectivity to Qdrant service.
+        Validate connectivity to Qdrant service backend.
         
-        Tests:
+        Tests the Videolake platform's connection to Qdrant backend:
         - Qdrant endpoint accessibility
         - Collection listing capability
         - Service health check
