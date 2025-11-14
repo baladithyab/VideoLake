@@ -220,8 +220,9 @@ module "qdrant" {
 
   aws_region      = var.aws_region
   deployment_name = var.qdrant_deployment_name
-  task_cpu        = 2048 # 2 vCPU
-  task_memory_mb  = 4096 # 4 GB
+  # Scale Qdrant to 4 vCPU / 8 GB to improve QPS for benchmark workloads.
+  task_cpu        = 4096 # 4 vCPU
+  task_memory_mb  = 8192 # 8 GB
   qdrant_version  = var.qdrant_version
 
   tags = {
@@ -256,8 +257,9 @@ module "lancedb_s3" {
   aws_region      = var.aws_region
   deployment_name = "${var.lancedb_deployment_name}-s3"
   backend_type    = "s3"
-  task_cpu        = 2048
-  task_memory_mb  = 4096
+  # Scale LanceDB S3 backend to 4 vCPU / 16 GB when enabled.
+  task_cpu        = 4096
+  task_memory_mb  = 16384
 
   tags = {
     VectorStore = "LanceDB"
@@ -274,8 +276,9 @@ module "lancedb_efs" {
   aws_region      = var.aws_region
   deployment_name = "${var.lancedb_deployment_name}-efs"
   backend_type    = "efs"
-  task_cpu        = 2048
-  task_memory_mb  = 4096
+  # Scale LanceDB EFS backend (currently used) to 4 vCPU / 16 GB.
+  task_cpu        = 4096
+  task_memory_mb  = 16384
 
   tags = {
     VectorStore = "LanceDB"
@@ -292,8 +295,9 @@ module "lancedb_ebs" {
   aws_region      = var.aws_region
   deployment_name = "${var.lancedb_deployment_name}-ebs"
   backend_type    = "ebs"
-  task_cpu        = 2048
-  task_memory_mb  = 4096
+  # Scale LanceDB EBS backend to 4 vCPU / 16 GB when enabled.
+  task_cpu        = 4096
+  task_memory_mb  = 16384
 
   tags = {
     VectorStore = "LanceDB"
