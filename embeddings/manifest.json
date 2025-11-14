@@ -1,0 +1,32 @@
+{
+  "dataset": "benchmark-100",
+  "generated_at": "2025-11-13T23:42:48.697094",
+  "format_version": "1.0",
+  "statistics": {
+    "total_videos": 100,
+    "embedding_dimension": 1024,
+    "modalities": [
+      "text",
+      "image",
+      "audio"
+    ],
+    "total_embeddings": 300
+  },
+  "files": {
+    "full": "test-embeddings.json",
+    "by_modality": {
+      "text": "test-embeddings-text.json",
+      "image": "test-embeddings-image.json",
+      "audio": "test-embeddings-audio.json"
+    }
+  },
+  "usage": {
+    "description": "Synthetic embeddings for backend benchmarking",
+    "ready_for_indexing": true,
+    "backends_compatible": [
+      "s3vector",
+      "qdrant",
+      "lancedb"
+    ]
+  }
+}

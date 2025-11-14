@@ -35,7 +35,7 @@ variable "task_memory_mb" {
 variable "lancedb_api_image" {
   description = "Docker image for LanceDB API wrapper"
   type        = string
-  default     = "lancedb/lancedb-api:latest"  # Custom image needed
+  default     = "386931836011.dkr.ecr.us-east-1.amazonaws.com/videolake-lancedb-api:latest"
 }
 
 variable "allowed_cidr_blocks" {

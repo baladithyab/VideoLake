@@ -152,16 +152,16 @@ class S3VectorProvider(VectorStoreProvider):
             VectorStoreStatus with current state
         """
         try:
-            response = self.s3vectors_client.list_buckets()
-            buckets = response.get('Buckets', [])
+            response = self.s3vectors_client.list_vector_buckets()
+            buckets = response.get('vectorBuckets', [])
             
             for bucket in buckets:
-                if bucket.get('Name') == name:
+                if bucket.get('vectorBucketName') == name:
                     return VectorStoreStatus(
                         store_type=VectorStoreType.S3_VECTOR,
                         name=name,
                         state=VectorStoreState.ACTIVE,
-                        arn=bucket.get('Arn'),
+                        arn=bucket.get('vectorBucketArn'),
                         region=self.region,
                         metadata=bucket,
                         progress_percentage=100
@@ -192,16 +192,16 @@ class S3VectorProvider(VectorStoreProvider):
             List of VectorStoreStatus objects
         """
         try:
-            response = self.s3vectors_client.list_buckets()
-            buckets = response.get('Buckets', [])
+            response = self.s3vectors_client.list_vector_buckets()
+            buckets = response.get('vectorBuckets', [])
             
             stores = []
             for bucket in buckets:
                 stores.append(VectorStoreStatus(
                     store_type=VectorStoreType.S3_VECTOR,
-                    name=bucket.get('Name'),
+                    name=bucket.get('vectorBucketName'),
                     state=VectorStoreState.ACTIVE,
-                    arn=bucket.get('Arn'),
+                    arn=bucket.get('vectorBucketArn'),
                     region=self.region,
                     metadata=bucket,
                     progress_percentage=100
@@ -286,8 +286,8 @@ class S3VectorProvider(VectorStoreProvider):
             response_time_ms = (time.time() - start_time) * 1000
             
             # Check if we got a valid response
-            if 'Buckets' in response:
-                bucket_count = len(response.get('Buckets', []))
+            if 'vectorBuckets' in response:
+                bucket_count = len(response.get('vectorBuckets', []))
                 
                 return {
                     "accessible": True,
