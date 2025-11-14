@@ -27,13 +27,23 @@ structured_logger = get_structured_logger(__name__)
 class S3VectorOperations:
     """Manages core S3 vector storage operations (CRUD)."""
 
-    def __init__(self):
-        """Initialize vector operations manager with AWS clients."""
+    def __init__(self, s3vectors_client=None):
+        """Initialize vector operations manager with AWS client.
+
+        Args:
+            s3vectors_client: Optional boto3 S3 Vectors client. When not provided,
+                a client will be created via aws_client_factory. This hook exists
+                primarily for tests and for callers that want to reuse a shared
+                client instance.
+        """
         structured_logger.log_function_entry("vector_operations_init")
 
         try:
-            structured_logger.log_aws_api_call("s3vectors", "get_client")
-            self.s3vectors_client = aws_client_factory.get_s3vectors_client()
+            if s3vectors_client is not None:
+                self.s3vectors_client = s3vectors_client
+            else:
+                structured_logger.log_aws_api_call("s3vectors", "get_client")
+                self.s3vectors_client = aws_client_factory.get_s3vectors_client()
 
             structured_logger.log_operation(
                 "s3vector_operations_initialized",
@@ -302,12 +312,16 @@ class S3VectorOperations:
             index_params = self._parse_index_identifier(index_arn)
 
             # Prepare request parameters
+            # Always request both distance scores and metadata so callers have
+            # rich results. This is also what the storage manager tests expect.
             request_params = {
                 **index_params,
                 'queryVector': {
                     'float32': query_vector
                 },
-                'topK': top_k
+                'topK': top_k,
+                'returnDistance': True,
+                'returnMetadata': True,
             }
 
             # Add metadata filter if provided
@@ -332,7 +346,12 @@ class S3VectorOperations:
                     operation_name=f"query_vectors_{index_arn}"
                 )
 
-                results = response.get('results', [])
+                # S3 Vectors currently returns matches in a 'vectors' field.
+                # For backward compatibility, also honor a 'results' field if present.
+                results = response.get("results")
+                if results is None:
+                    results = response.get("vectors", [])
+
                 structured_logger.log_resource_operation(
                     "vectors",
                     "query_success",
@@ -342,12 +361,22 @@ class S3VectorOperations:
                 )
                 logger.info(f"Query returned {len(results)} results")
 
+                # Normalize response structure for callers and tests.
+                # "vectors" and "results_count" are the primary fields used by
+                # S3VectorStorageManager tests, while "results"/"result_count"
+                # are kept for backward compatibility with earlier callers.
                 result = {
                     "index_arn": index_arn,
                     "top_k": top_k,
+                    "query_vector_dimensions": len(query_vector),
+                    "results_count": len(results),
+                    "vectors": results,
                     "result_count": len(results),
                     "results": results,
-                    "response": response
+                    "metadata_filter": metadata_filter,
+                    "return_distance": True,
+                    "return_metadata": True,
+                    "response": response,
                 }
 
                 structured_logger.log_function_exit("query_vectors", result_count=len(results))

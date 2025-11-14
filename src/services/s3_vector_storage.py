@@ -55,14 +55,14 @@ class S3VectorStorageManager:
         structured_logger.log_function_entry("s3vector_storage_manager_init")
 
         try:
+            # Initialize AWS clients first so we can share them with sub-managers.
+            self.s3vectors_client = aws_client_factory.get_s3vectors_client()
+            self.s3_client = aws_client_factory.get_s3_client()
+
             # Initialize specialized managers
             self.bucket_manager = S3VectorBucketManager()
             self.index_manager = S3VectorIndexManager()
-            self.vector_ops = S3VectorOperations()
-
-            # Keep AWS clients for any direct operations needed
-            self.s3vectors_client = aws_client_factory.get_s3vectors_client()
-            self.s3_client = aws_client_factory.get_s3_client()
+            self.vector_ops = S3VectorOperations(self.s3vectors_client)
 
             # Multi-index coordination (for advanced features)
             self.index_registry: Dict[str, Dict[str, Any]] = {}

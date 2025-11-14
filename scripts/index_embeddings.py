@@ -30,6 +30,14 @@ BACKEND_CONFIGS = {
     }
 }
 
+# Default S3Vector index names per embedding modality
+MODALITY_S3VECTOR_INDEX = {
+    "text": "videolake-benchmark-visual-text",
+    "image": "videolake-benchmark-visual-image",
+    "audio": "videolake-benchmark-audio",
+}
+
+
 
 def index_to_backend(backend_name: str, embeddings: list, collection_name: str) -> bool:
     """
@@ -140,9 +148,7 @@ def main():
 
 
     args = parser.parse_args()
-    # Apply any endpoint/index overrides before using BACKEND_CONFIGS
-    if args.s3vector_index:
-        BACKEND_CONFIGS['s3vector']['index'] = args.s3vector_index
+    # Apply REST endpoint overrides before using BACKEND_CONFIGS
     if args.qdrant_endpoint:
         BACKEND_CONFIGS['qdrant']['endpoint'] = args.qdrant_endpoint
     if args.lancedb_endpoint:
@@ -155,6 +161,9 @@ def main():
     print(f"Loading embeddings from: {args.embeddings}")
     print(f"{'='*60}")
 
+    modality = None
+    dataset = "unknown"
+
     try:
         with open(args.embeddings) as f:
             data = json.load(f)
@@ -162,14 +171,25 @@ def main():
         # Handle both formats: with 'embeddings' key or direct array
         if isinstance(data, dict) and 'embeddings' in data:
             embeddings = data['embeddings']
-            print(f"Dataset: {data.get('dataset', 'unknown')}")
-            print(f"Modality: {data.get('modality', 'unknown')}")
+            dataset = data.get('dataset', 'unknown')
+            modality = data.get('modality')
+            print(f"Dataset: {dataset}")
+            print(f"Modality: {modality or 'unknown'}")
             print(f"Dimension: {data.get('embedding_dimension', 'unknown')}")
         elif isinstance(data, list):
             embeddings = data
         else:
             print(f"❌ Invalid data format - expected list or dict with 'embeddings' key")
             return 1
+
+        # Derive S3Vector index name from modality if not explicitly provided
+        s3vector_index = args.s3vector_index
+        if s3vector_index is None and modality:
+            s3vector_index = MODALITY_S3VECTOR_INDEX.get(modality)
+        if s3vector_index:
+            BACKEND_CONFIGS['s3vector']['index'] = s3vector_index
+
+        print(f"Using S3Vector index: {BACKEND_CONFIGS['s3vector'].get('index', 'embeddings')}\n")
 
         print(f"Loaded {len(embeddings)} embeddings")
 

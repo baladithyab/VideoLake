@@ -91,20 +91,33 @@ def main() -> int:
 
     # Accumulate flat embeddings per modality (text/image/audio)
     flat_by_modality: Dict[str, List[Dict[str, Any]]] = {}
+    per_video_stats: Dict[str, Dict[str, Any]] = {}
+    failed_videos: List[Dict[str, str]] = []
+    zero_embedding_videos: List[str] = []
+
     for emb_type in args.embedding_types:
         modality = EMBEDDING_TO_MODALITY.get(emb_type, emb_type)
         flat_by_modality.setdefault(modality, [])
 
     for idx, key in enumerate(media_keys, start=1):
         video_id = Path(key).stem
+        video_filename = Path(key).name
         s3_uri = f"s3://{args.input_bucket}/{key}"
         print(f"\n[{idx}/{len(media_keys)}] Processing {s3_uri}")
+
+        # Initialize per-video stats entry
+        video_stats = per_video_stats.setdefault(
+            video_id,
+            {"filename": video_filename, "modality_counts": {}},
+        )
 
         if args.output_bucket:
             out_prefix = args.output_prefix.rstrip("/")
             output_s3_uri = f"s3://{args.output_bucket}/{out_prefix}/{video_id}/"
         else:
             output_s3_uri = None
+
+        total_embeddings_for_video = 0
 
         try:
             embeddings_by_type = service.process_video_with_multiple_embeddings(
@@ -114,11 +127,14 @@ def main() -> int:
                 timeout_sec=args.timeout_sec,
             )
         except Exception as e:
-            print(f"✗ Failed to process {s3_uri}: {e}")
+            err_msg = str(e)
+            print(f"✗ Failed to process {s3_uri}: {err_msg}")
+            failed_videos.append({"video_id": video_id, "s3_uri": s3_uri, "error": err_msg})
             continue
 
         for emb_type, segments in embeddings_by_type.items():
             if not segments:
+                print(f"  No segments produced for {video_id} ({emb_type})")
                 continue
             modality = EMBEDDING_TO_MODALITY.get(emb_type, emb_type)
             target_list = flat_by_modality.setdefault(modality, [])
@@ -138,6 +154,7 @@ def main() -> int:
                     "dimension": len(values),
                     "metadata": {
                         "source_s3_uri": s3_uri,
+                        "source_filename": video_filename,
                         "embedding_option": emb_type,
                         "segment_index": seg_idx,
                     },
@@ -147,6 +164,42 @@ def main() -> int:
                     if field in seg:
                         record["metadata"][field] = seg[field]
                 target_list.append(record)
+
+                # Update per-video statistics
+                modality_counts = video_stats.setdefault("modality_counts", {})
+                modality_counts[modality] = modality_counts.get(modality, 0) + 1
+                total_embeddings_for_video += 1
+
+
+        if total_embeddings_for_video == 0:
+            print(f"  No embeddings produced for {s3_uri} (all embedding types empty)")
+            zero_embedding_videos.append(video_id)
+
+    # Print per-video summary
+    if per_video_stats:
+        print("\nEmbedding summary by video:")
+        for vid, stats in per_video_stats.items():
+            filename = stats.get("filename", vid)
+            modality_counts = stats.get("modality_counts", {})
+            if modality_counts:
+                counts_str = ", ".join(
+                    f"{modality}: {count}" for modality, count in sorted(modality_counts.items())
+                )
+            else:
+                counts_str = "no embeddings"
+            print(f"  {filename} ({vid}): {counts_str}")
+
+    if failed_videos:
+        print("\nVideos that failed processing:")
+        for item in failed_videos:
+            print(f"  {item['s3_uri']}: {item['error']}")
+
+    if zero_embedding_videos:
+        print("\nVideos with zero embeddings (no segments produced):")
+        for vid in zero_embedding_videos:
+            stats = per_video_stats.get(vid, {})
+            filename = stats.get("filename", vid)
+            print(f"  {filename} ({vid})")
 
     # Write per-modality JSON files compatible with index_embeddings.py
     output_dir = Path(args.output_dir)
