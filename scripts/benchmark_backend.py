@@ -37,9 +37,10 @@ from scripts.backend_adapters import (
 class BackendBenchmark:
     """Benchmark runner for a single backend using unified adapter interface"""
     
-    def __init__(self, backend: str, endpoint: Optional[str] = None, config: Optional[Dict] = None):
+    def __init__(self, backend: str, endpoint: Optional[str] = None, config: Optional[Dict] = None, collection: Optional[str] = None):
         self.backend = backend
         self.config = config or {}
+        self.collection = collection
         
         # Add endpoint to config if provided
         if endpoint:
@@ -52,26 +53,28 @@ class BackendBenchmark:
             print(f"Initialized {backend} backend adapter:")
             print(f"  Type: {endpoint_info.get('type', 'unknown')}")
             print(f"  Endpoint: {endpoint_info.get('endpoint', 'N/A')}")
+            if self.collection:
+                print(f"  Collection: {self.collection}")
         except Exception as e:
             raise RuntimeError(f"Failed to initialize backend adapter for {backend}: {e}")
         
         self.results: Dict[str, Any] = {}
     
-    def generate_vectors(self, count: int, dimensions: int = 512) -> np.ndarray:
+    def generate_vectors(self, count: int, dimensions: int = 1024) -> np.ndarray:
         """Generate random test vectors"""
         return np.random.rand(count, dimensions).astype(np.float32)
     
-    def benchmark_index(self, vector_count: int) -> Dict[str, Any]:
+    def benchmark_index(self, vector_count: int, dimensions: int = 1024) -> Dict[str, Any]:
         """Benchmark vector indexing operation using backend adapter"""
-        print(f"Benchmarking index operation: {vector_count} vectors")
+        print(f"Benchmarking index operation: {vector_count} vectors ({dimensions}D)")
         
-        vectors = self.generate_vectors(vector_count)
+        vectors = self.generate_vectors(vector_count, dimensions)
         metadata = [{"id": i} for i in range(vector_count)]
         
         start_time = time.time()
         try:
             # Use adapter to index vectors
-            result = self.adapter.index_vectors(vectors.tolist(), metadata)
+            result = self.adapter.index_vectors(vectors.tolist(), metadata, collection=self.collection)
             duration = time.time() - start_time
             
             # Merge timing with result
@@ -92,11 +95,13 @@ class BackendBenchmark:
                 "backend": self.backend
             }
     
-    def benchmark_search(self, query_count: int, top_k: int = 10) -> Dict[str, Any]:
+    def benchmark_search(self, query_count: int, top_k: int = 10, dimensions: int = 1024) -> Dict[str, Any]:
         """Benchmark vector search operation using backend adapter"""
-        print(f"Benchmarking search operation: {query_count} queries, top_k={top_k}")
+        print(f"Benchmarking search operation: {query_count} queries, top_k={top_k} ({dimensions}D)")
+        if self.collection:
+            print(f"  Using collection: {self.collection}")
         
-        query_vectors = self.generate_vectors(query_count)
+        query_vectors = self.generate_vectors(query_count, dimensions)
         latencies = []
         successful_queries = 0
         
@@ -106,7 +111,7 @@ class BackendBenchmark:
                 query_start = time.time()
                 
                 # Use adapter to search
-                results = self.adapter.search_vectors(query_vector.tolist(), top_k)
+                results = self.adapter.search_vectors(query_vector.tolist(), top_k, collection=self.collection)
                 
                 query_duration = time.time() - query_start
                 latencies.append(query_duration * 1000)  # Convert to ms
@@ -151,9 +156,11 @@ class BackendBenchmark:
                 "backend": self.backend
             }
     
-    def benchmark_mixed_workload(self, duration_seconds: int = 60) -> Dict[str, Any]:
+    def benchmark_mixed_workload(self, duration_seconds: int = 60, dimensions: int = 1024) -> Dict[str, Any]:
         """Run mixed read/write workload for specified duration using backend adapter"""
-        print(f"Benchmarking mixed workload: {duration_seconds}s")
+        print(f"Benchmarking mixed workload: {duration_seconds}s ({dimensions}D)")
+        if self.collection:
+            print(f"  Using collection: {self.collection}")
         
         start_time = time.time()
         operations = {"index": 0, "search": 0, "errors": 0}
@@ -163,9 +170,9 @@ class BackendBenchmark:
                 # 80% reads, 20% writes
                 if np.random.rand() < 0.8:
                     # Search operation
-                    query_vector = self.generate_vectors(1)[0]
+                    query_vector = self.generate_vectors(1, dimensions)[0]
                     try:
-                        results = self.adapter.search_vectors(query_vector.tolist(), 10)
+                        results = self.adapter.search_vectors(query_vector.tolist(), 10, collection=self.collection)
                         if results:
                             operations["search"] += 1
                         else:
@@ -174,10 +181,10 @@ class BackendBenchmark:
                         operations["errors"] += 1
                 else:
                     # Index operation
-                    vectors = self.generate_vectors(10)
+                    vectors = self.generate_vectors(10, dimensions)
                     metadata = [{"id": i} for i in range(10)]
                     try:
-                        result = self.adapter.index_vectors(vectors.tolist(), metadata)
+                        result = self.adapter.index_vectors(vectors.tolist(), metadata, collection=self.collection)
                         if result.get("success", False):
                             operations["index"] += 1
                         else:
@@ -268,6 +275,16 @@ def main():
         help="Number of results to retrieve per query"
     )
     parser.add_argument(
+        "--dimension",
+        type=int,
+        default=1024,
+        help="Vector dimension (default: 1024)"
+    )
+    parser.add_argument(
+        "--collection",
+        help="Collection name for backends that support collections (e.g., Qdrant)"
+    )
+    parser.add_argument(
         "--endpoint",
         help="Backend endpoint URL (auto-detected if not provided)"
     )
@@ -290,7 +307,7 @@ def main():
     
     # Create benchmark runner
     try:
-        benchmark = BackendBenchmark(args.backend, args.endpoint, config)
+        benchmark = BackendBenchmark(args.backend, args.endpoint, config, args.collection)
     except Exception as e:
         print(f"\n✗ Failed to initialize backend: {e}")
         return 1
@@ -307,11 +324,11 @@ def main():
     
     # Run requested operation
     if args.operation == "index":
-        results = benchmark.benchmark_index(args.vectors)
+        results = benchmark.benchmark_index(args.vectors, args.dimension)
     elif args.operation == "search":
-        results = benchmark.benchmark_search(args.queries, args.top_k)
+        results = benchmark.benchmark_search(args.queries, args.top_k, args.dimension)
     elif args.operation == "mixed":
-        results = benchmark.benchmark_mixed_workload(args.duration)
+        results = benchmark.benchmark_mixed_workload(args.duration, args.dimension)
     else:
         print(f"Unknown operation: {args.operation}")
         return 1

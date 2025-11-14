@@ -26,7 +26,7 @@ BACKEND_CONFIGS = {
     },
     'lancedb': {
         'type': 'rest',
-        'endpoint': 'http://18.234.151.118:8000'
+        'endpoint': 'http://3.91.12.124:8000'
     }
 }
 

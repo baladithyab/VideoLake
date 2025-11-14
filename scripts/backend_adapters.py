@@ -438,10 +438,10 @@ DEFAULT_ENDPOINTS = {
     'qdrant': 'http://52.90.39.152:6333',
     'qdrant-efs': 'http://52.90.39.152:6333',
     'qdrant-ebs': 'http://52.90.39.152:6333',
-    'lancedb': 'http://18.234.151.118:8000',
-    'lancedb-efs': 'http://18.234.151.118:8000',
-    'lancedb-s3': 'http://18.234.151.118:8000',
-    'lancedb-ebs': 'http://18.234.151.118:8000'
+    'lancedb': 'http://3.91.12.124:8000',
+    'lancedb-efs': 'http://3.91.12.124:8000',
+    'lancedb-s3': 'http://3.91.12.124:8000',
+    'lancedb-ebs': 'http://3.91.12.124:8000'
 }
 
 
