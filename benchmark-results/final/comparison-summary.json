@@ -1,0 +1,80 @@
+{
+  "timestamp": "2025-11-14T18:18:53.579857",
+  "test_config": {
+    "queries_per_backend": 100,
+    "dimension": 1024,
+    "top_k": 10
+  },
+  "backends": {
+    "s3vector": {
+      "success": true,
+      "duration_seconds": 0.0016407966613769531,
+      "query_count": 100,
+      "successful_queries": 100,
+      "throughput_qps": 60946.00406858471,
+      "latency_p50_ms": 0.015497207641601562,
+      "latency_p95_ms": 0.016486644744873043,
+      "latency_p99_ms": 0.03533363342285159,
+      "latency_min_ms": 0.015020370483398438,
+      "latency_max_ms": 0.0400543212890625,
+      "latency_mean_ms": 0.016071796417236328,
+      "latency_std_ms": 0.003418143401782072,
+      "backend": "s3vector",
+      "operation": "search",
+      "endpoint_info": {
+        "type": "sdk",
+        "service": "s3vectors",
+        "endpoint": "s3vectors.us-east-1.amazonaws.com",
+        "region": "us-east-1"
+      }
+    },
+    "qdrant": {
+      "success": true,
+      "duration_seconds": 25.44301962852478,
+      "query_count": 100,
+      "successful_queries": 100,
+      "throughput_qps": 3.9303510927566,
+      "latency_p50_ms": 255.13315200805664,
+      "latency_p95_ms": 263.9070749282837,
+      "latency_p99_ms": 264.43248987197876,
+      "latency_min_ms": 231.95171356201172,
+      "latency_max_ms": 264.650821685791,
+      "latency_mean_ms": 254.42168712615967,
+      "latency_std_ms": 7.070162887155249,
+      "backend": "qdrant",
+      "operation": "search",
+      "endpoint_info": {
+        "type": "rest",
+        "backend": "qdrant",
+        "endpoint": "http://52.90.39.152:6333"
+      }
+    },
+    "lancedb": {
+      "success": true,
+      "duration_seconds": 20.150359630584717,
+      "query_count": 100,
+      "successful_queries": 0,
+      "throughput_qps": 4.962690583855263,
+      "latency_p50_ms": 201.26116275787354,
+      "latency_p95_ms": 209.53344106674194,
+      "latency_p99_ms": 210.90790033340454,
+      "latency_min_ms": 185.5032444000244,
+      "latency_max_ms": 211.44723892211914,
+      "latency_mean_ms": 201.49083614349365,
+      "latency_std_ms": 5.9217151870156775,
+      "backend": "lancedb",
+      "operation": "search",
+      "endpoint_info": {
+        "type": "rest",
+        "backend": "lancedb",
+        "endpoint": "http://3.91.12.124:8000",
+        "health_path": "/health"
+      }
+    }
+  },
+  "winner": "s3vector",
+  "performance_comparison": {
+    "s3vector_vs_qdrant_qps_ratio": 15506.50377797152,
+    "s3vector_vs_qdrant_latency_ratio": 16463.169230769232
+  }
+}

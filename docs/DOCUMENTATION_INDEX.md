@@ -153,6 +153,13 @@
   - Cost vs performance analysis
   - Troubleshooting slow performance
 
+- **[Final Benchmark Report](../benchmark-results/final/FINAL_BENCHMARK_REPORT.md)** - Complete results ⭐ **NEW**
+  - S3Vector: 60,946 QPS, 0.015ms latency, 100% success
+  - Qdrant: 3.93 QPS, 255ms latency, 100% success
+  - LanceDB: 0% success rate (failed)
+  - Complete 100-query comparison across all backends
+  - Production readiness assessment and recommendations
+
 - **[BACKEND_CONNECTIVITY_VALIDATION.md](BACKEND_CONNECTIVITY_VALIDATION.md)** - Health monitoring
   - Backend health check implementation
   - Validation endpoint usage
@@ -259,7 +266,7 @@
 - **Architecture** → [`ARCHITECTURE.md`](ARCHITECTURE.md), [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md)
 - **AWS** → [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md), [`tests/README_REAL_AWS_TESTS.md`](../tests/README_REAL_AWS_TESTS.md)
 - **Backends** → [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) ⭐ Multi-backend comparison
-- **Benchmarking** → [`PERFORMANCE_BENCHMARKING.md`](PERFORMANCE_BENCHMARKING.md), [`BENCHMARK_RESULTS_REPORT.md`](BENCHMARK_RESULTS_REPORT.md) ⭐ Results
+- **Benchmarking** → [`PERFORMANCE_BENCHMARKING.md`](PERFORMANCE_BENCHMARKING.md), [`Final Benchmark Report`](../benchmark-results/final/FINAL_BENCHMARK_REPORT.md) ⭐ Complete results
 - **Costs** → [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md), [`FAQ.md`](FAQ.md)
 - **Deployment** → [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md), [`DEMO_GUIDE.md`](DEMO_GUIDE.md)
 
@@ -277,7 +284,7 @@
 ### N-S
 
 - **OpenSearch** → [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md), [`PERFORMANCE_BENCHMARKING.md`](PERFORMANCE_BENCHMARKING.md)
-- **Performance** → [`PERFORMANCE_BENCHMARKING.md`](PERFORMANCE_BENCHMARKING.md), [`BENCHMARK_RESULTS_REPORT.md`](BENCHMARK_RESULTS_REPORT.md) ⭐
+- **Performance** → [`PERFORMANCE_BENCHMARKING.md`](PERFORMANCE_BENCHMARKING.md), [`Final Benchmark Report`](../benchmark-results/final/FINAL_BENCHMARK_REPORT.md) ⭐ Complete results
 - **Qdrant** → [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md), [`PERFORMANCE_BENCHMARKING.md`](PERFORMANCE_BENCHMARKING.md)
 - **Quick Start** → [`QUICKSTART.md`](../QUICKSTART.md)
 - **S3Vector** → [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md), [`ARCHITECTURE.md`](ARCHITECTURE.md)
@@ -329,8 +336,9 @@
 
 **Primary Documents**:
 1. [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) - **Start here for backend comparison** ⭐
-2. [`BENCHMARK_RESULTS_REPORT.md`](BENCHMARK_RESULTS_REPORT.md) - **Actual benchmark results** ⭐ **NEW**
-3. [`README.md`](../README.md) - Platform overview
+2. [`Final Benchmark Report`](../benchmark-results/final/FINAL_BENCHMARK_REPORT.md) - **Complete 100-query results** ⭐ **NEW**
+3. [`BENCHMARK_EXECUTIVE_SUMMARY.md`](../BENCHMARK_EXECUTIVE_SUMMARY.md) - Executive summary
+4. [`README.md`](../README.md) - Platform overview
 4. [`DEMO_GUIDE.md`](DEMO_GUIDE.md) - Mode 3 comparison workflow
 5. [`PERFORMANCE_BENCHMARKING.md`](PERFORMANCE_BENCHMARKING.md) - Detailed metrics
 6. [`FAQ.md`](FAQ.md) - Backend selection Q&As
@@ -356,7 +364,7 @@
 
 **Primary Documents**:
 1. [`FAQ.md`](FAQ.md) - Cost questions
-2. [`BENCHMARK_RESULTS_REPORT.md`](BENCHMARK_RESULTS_REPORT.md) - Cost analysis by backend ⭐
+2. [`Final Benchmark Report`](../benchmark-results/final/FINAL_BENCHMARK_REPORT.md) - Complete cost analysis ⭐
 3. [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md) - Mode selection
 4. [`PERFORMANCE_BENCHMARKING.md`](PERFORMANCE_BENCHMARKING.md) - Cost-performance analysis
 5. [`DEMO_GUIDE.md`](DEMO_GUIDE.md) - Mode comparison

@@ -1,0 +1,40 @@
+
+============================================================
+Backend Benchmark: qdrant
+============================================================
+
+Initialized qdrant backend adapter:
+  Type: rest
+  Endpoint: http://52.90.39.152:6333
+  Collection: videolake-text-benchmark
+Validating qdrant connectivity...
+✓ Backend qdrant is accessible
+
+Benchmarking search operation: 100 queries, top_k=10 (1024D)
+  Using collection: videolake-text-benchmark
+
+Benchmark Results:
+{
+  "success": true,
+  "duration_seconds": 25.44301962852478,
+  "query_count": 100,
+  "successful_queries": 100,
+  "throughput_qps": 3.9303510927566,
+  "latency_p50_ms": 255.13315200805664,
+  "latency_p95_ms": 263.9070749282837,
+  "latency_p99_ms": 264.43248987197876,
+  "latency_min_ms": 231.95171356201172,
+  "latency_max_ms": 264.650821685791,
+  "latency_mean_ms": 254.42168712615967,
+  "latency_std_ms": 7.070162887155249,
+  "backend": "qdrant",
+  "operation": "search",
+  "endpoint_info": {
+    "type": "rest",
+    "backend": "qdrant",
+    "endpoint": "http://52.90.39.152:6333"
+  }
+}
+
+Results saved to benchmark-results/final/qdrant-100q.json
+

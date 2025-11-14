@@ -1,0 +1,242 @@
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+Search failed: HTTP 500
+
+
+============================================================
+Backend Benchmark: lancedb
+============================================================
+
+Initialized lancedb backend adapter:
+  Type: rest
+  Endpoint: http://3.91.12.124:8000
+  Collection: videolake-text-benchmark
+Validating lancedb connectivity...
+✓ Backend lancedb is accessible
+
+Benchmarking search operation: 100 queries, top_k=10 (1024D)
+  Using collection: videolake-text-benchmark
+Query 1/100 returned no results
+Query 2/100 returned no results
+Query 3/100 returned no results
+Query 4/100 returned no results
+Query 5/100 returned no results
+Query 6/100 returned no results
+Query 7/100 returned no results
+Query 8/100 returned no results
+Query 9/100 returned no results
+Query 10/100 returned no results
+Query 11/100 returned no results
+Query 12/100 returned no results
+Query 13/100 returned no results
+Query 14/100 returned no results
+Query 15/100 returned no results
+Query 16/100 returned no results
+Query 17/100 returned no results
+Query 18/100 returned no results
+Query 19/100 returned no results
+Query 20/100 returned no results
+Query 21/100 returned no results
+Query 22/100 returned no results
+Query 23/100 returned no results
+Query 24/100 returned no results
+Query 25/100 returned no results
+Query 26/100 returned no results
+Query 27/100 returned no results
+Query 28/100 returned no results
+Query 29/100 returned no results
+Query 30/100 returned no results
+Query 31/100 returned no results
+Query 32/100 returned no results
+Query 33/100 returned no results
+Query 34/100 returned no results
+Query 35/100 returned no results
+Query 36/100 returned no results
+Query 37/100 returned no results
+Query 38/100 returned no results
+Query 39/100 returned no results
+Query 40/100 returned no results
+Query 41/100 returned no results
+Query 42/100 returned no results
+Query 43/100 returned no results
+Query 44/100 returned no results
+Query 45/100 returned no results
+Query 46/100 returned no results
+Query 47/100 returned no results
+Query 48/100 returned no results
+Query 49/100 returned no results
+Query 50/100 returned no results
+Query 51/100 returned no results
+Query 52/100 returned no results
+Query 53/100 returned no results
+Query 54/100 returned no results
+Query 55/100 returned no results
+Query 56/100 returned no results
+Query 57/100 returned no results
+Query 58/100 returned no results
+Query 59/100 returned no results
+Query 60/100 returned no results
+Query 61/100 returned no results
+Query 62/100 returned no results
+Query 63/100 returned no results
+Query 64/100 returned no results
+Query 65/100 returned no results
+Query 66/100 returned no results
+Query 67/100 returned no results
+Query 68/100 returned no results
+Query 69/100 returned no results
+Query 70/100 returned no results
+Query 71/100 returned no results
+Query 72/100 returned no results
+Query 73/100 returned no results
+Query 74/100 returned no results
+Query 75/100 returned no results
+Query 76/100 returned no results
+Query 77/100 returned no results
+Query 78/100 returned no results
+Query 79/100 returned no results
+Query 80/100 returned no results
+Query 81/100 returned no results
+Query 82/100 returned no results
+Query 83/100 returned no results
+Query 84/100 returned no results
+Query 85/100 returned no results
+Query 86/100 returned no results
+Query 87/100 returned no results
+Query 88/100 returned no results
+Query 89/100 returned no results
+Query 90/100 returned no results
+Query 91/100 returned no results
+Query 92/100 returned no results
+Query 93/100 returned no results
+Query 94/100 returned no results
+Query 95/100 returned no results
+Query 96/100 returned no results
+Query 97/100 returned no results
+Query 98/100 returned no results
+Query 99/100 returned no results
+Query 100/100 returned no results
+
+Benchmark Results:
+{
+  "success": true,
+  "duration_seconds": 20.150359630584717,
+  "query_count": 100,
+  "successful_queries": 0,
+  "throughput_qps": 4.962690583855263,
+  "latency_p50_ms": 201.26116275787354,
+  "latency_p95_ms": 209.53344106674194,
+  "latency_p99_ms": 210.90790033340454,
+  "latency_min_ms": 185.5032444000244,
+  "latency_max_ms": 211.44723892211914,
+  "latency_mean_ms": 201.49083614349365,
+  "latency_std_ms": 5.9217151870156775,
+  "backend": "lancedb",
+  "operation": "search",
+  "endpoint_info": {
+    "type": "rest",
+    "backend": "lancedb",
+    "endpoint": "http://3.91.12.124:8000",
+    "health_path": "/health"
+  }
+}
+
+Results saved to benchmark-results/final/lancedb-100q.json
+
