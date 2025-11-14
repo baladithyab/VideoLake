@@ -68,9 +68,9 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project   = "Videolake"
-      ManagedBy = "Terraform"
-      Demo      = "VectorStoreComparison"
+      Project     = "Videolake"
+      ManagedBy   = "Terraform"
+      Demo        = "VectorStoreComparison"
       Environment = var.environment
     }
   }
@@ -85,7 +85,7 @@ data "aws_availability_zones" "available" {
 locals {
   shared_bucket_name = coalesce(
     var.shared_bucket_name,
-    var.data_bucket_name,  # Backward compatibility
+    var.data_bucket_name, # Backward compatibility
     "${var.project_name}-shared-media"
   )
 }
@@ -112,7 +112,7 @@ module "shared_bucket" {
   allowed_origins   = var.web_allowed_origins
 
   tags = {
-    Purpose = "Shared Media and Artifact Storage"
+    Purpose       = "Shared Media and Artifact Storage"
     AlwaysCreated = "true"
   }
 }
@@ -152,6 +152,7 @@ module "data_bucket" {
 #   - var.deploy_lancedb_s3 (default: false)
 #   - var.deploy_lancedb_efs (default: false)
 #   - var.deploy_lancedb_ebs (default: false)
+#   - var.deploy_benchmark_runner (default: false)
 
 # 1. S3Vector (Direct) - Native AWS vector storage (ALWAYS DEFAULT)
 #    Recommended to always enable (cheap, serverless, < 5 min deployment)
@@ -185,14 +186,14 @@ module "opensearch" {
   count  = var.deploy_opensearch ? 1 : 0
   source = "./modules/opensearch"
 
-  domain_name            = var.opensearch_domain_name
-  engine_version         = "OpenSearch_2.19" # Required for S3Vector
-  instance_type          = var.opensearch_instance_type
-  instance_count         = var.opensearch_instance_count
-  multi_az               = var.opensearch_multi_az
+  domain_name                = var.opensearch_domain_name
+  engine_version             = "OpenSearch_2.19" # Required for S3Vector
+  instance_type              = var.opensearch_instance_type
+  instance_count             = var.opensearch_instance_count
+  multi_az                   = var.opensearch_multi_az
   enable_fine_grained_access = var.opensearch_enable_auth
-  master_user_name       = var.opensearch_master_user
-  master_user_password   = var.opensearch_master_password
+  master_user_name           = var.opensearch_master_user
+  master_user_password       = var.opensearch_master_password
 
   tags = {
     VectorStore = "OpenSearch-S3Vector-Backend"
@@ -219,8 +220,8 @@ module "qdrant" {
 
   aws_region      = var.aws_region
   deployment_name = var.qdrant_deployment_name
-  task_cpu        = 2048  # 2 vCPU
-  task_memory_mb  = 4096  # 4 GB
+  task_cpu        = 2048 # 2 vCPU
+  task_memory_mb  = 4096 # 4 GB
   qdrant_version  = var.qdrant_version
 
   tags = {
@@ -298,5 +299,18 @@ module "lancedb_ebs" {
     VectorStore = "LanceDB"
     Deployment  = "ECS-Fargate"
     Backend     = "EBS"
+  }
+}
+
+# Benchmark Runner ECS (OPTIONAL)
+module "benchmark_runner" {
+  count  = var.deploy_benchmark_runner ? 1 : 0
+  source = "./modules/benchmark_runner_ecs"
+
+  aws_region      = var.aws_region
+  deployment_name = "videolake-benchmark-runner"
+
+  tags = {
+    Component = "BenchmarkRunner"
   }
 }

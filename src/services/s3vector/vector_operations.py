@@ -57,13 +57,16 @@ class S3VectorOperations:
         if identifier.startswith('arn:'):
             return {"indexArn": identifier}
         else:
-            # Try parsing as ARN first
+            # Try parsing as ARN first using helpers that understand both ARN and
+            # resource-id formats. We always return parameters matching the
+            # official S3 Vectors API: vectorBucketName + indexName, or indexArn.
             bucket = ARNParser.extract_bucket_name(identifier)
             index = ARNParser.extract_index_name(identifier)
 
             if bucket and index:
+                # Mapped from either ARN or resource-id; use vectorBucketName for AWS API
                 return {
-                    "bucket": bucket,
+                    "vectorBucketName": bucket,
                     "indexName": index
                 }
 
@@ -71,7 +74,7 @@ class S3VectorOperations:
             parts = identifier.split('/')
             if len(parts) == 4 and parts[0] == 'bucket' and parts[2] == 'index':
                 return {
-                    "bucket": parts[1],
+                    "vectorBucketName": parts[1],
                     "indexName": parts[3]
                 }
 

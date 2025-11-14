@@ -173,7 +173,7 @@ class ARNParser:
             >>> ARNParser.build_s3vector_arn("my-bucket", "my-index", "us-west-2", "123456789")
             'arn:aws:s3vectors:us-west-2:123456789:bucket/my-bucket/index/my-index'
         """
-        return f"{partition}:aws:s3vectors:{region}:{account}:bucket/{bucket}/index/{index}"
+        return f"arn:{partition}:s3vectors:{region}:{account}:bucket/{bucket}/index/{index}"
 
     @classmethod
     def to_resource_id(cls, bucket: str, index: str) -> str:

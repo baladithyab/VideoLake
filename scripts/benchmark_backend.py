@@ -36,16 +36,16 @@ from scripts.backend_adapters import (
 
 class BackendBenchmark:
     """Benchmark runner for a single backend using unified adapter interface"""
-    
+
     def __init__(self, backend: str, endpoint: Optional[str] = None, config: Optional[Dict] = None, collection: Optional[str] = None):
         self.backend = backend
         self.config = config or {}
         self.collection = collection
-        
+
         # Add endpoint to config if provided
         if endpoint:
             self.config['endpoint'] = endpoint
-        
+
         # Get appropriate backend adapter
         try:
             self.adapter = get_backend_adapter(backend, self.config)
@@ -57,35 +57,35 @@ class BackendBenchmark:
                 print(f"  Collection: {self.collection}")
         except Exception as e:
             raise RuntimeError(f"Failed to initialize backend adapter for {backend}: {e}")
-        
+
         self.results: Dict[str, Any] = {}
-    
+
     def generate_vectors(self, count: int, dimensions: int = 1024) -> np.ndarray:
         """Generate random test vectors"""
         return np.random.rand(count, dimensions).astype(np.float32)
-    
+
     def benchmark_index(self, vector_count: int, dimensions: int = 1024) -> Dict[str, Any]:
         """Benchmark vector indexing operation using backend adapter"""
         print(f"Benchmarking index operation: {vector_count} vectors ({dimensions}D)")
-        
+
         vectors = self.generate_vectors(vector_count, dimensions)
         metadata = [{"id": i} for i in range(vector_count)]
-        
+
         start_time = time.time()
         try:
             # Use adapter to index vectors
             result = self.adapter.index_vectors(vectors.tolist(), metadata, collection=self.collection)
             duration = time.time() - start_time
-            
+
             # Merge timing with result
             result["duration_seconds"] = duration
             result["vectors_count"] = vector_count
-            
+
             if result.get("success", False):
                 result["vectors_per_second"] = vector_count / duration if duration > 0 else 0
-            
+
             return result
-            
+
         except Exception as e:
             return {
                 "success": False,
@@ -94,35 +94,35 @@ class BackendBenchmark:
                 "error": str(e),
                 "backend": self.backend
             }
-    
+
     def benchmark_search(self, query_count: int, top_k: int = 10, dimensions: int = 1024) -> Dict[str, Any]:
         """Benchmark vector search operation using backend adapter"""
         print(f"Benchmarking search operation: {query_count} queries, top_k={top_k} ({dimensions}D)")
         if self.collection:
             print(f"  Using collection: {self.collection}")
-        
+
         query_vectors = self.generate_vectors(query_count, dimensions)
         latencies = []
         successful_queries = 0
-        
+
         start_time = time.time()
         try:
             for i, query_vector in enumerate(query_vectors):
                 query_start = time.time()
-                
+
                 # Use adapter to search
                 results = self.adapter.search_vectors(query_vector.tolist(), top_k, collection=self.collection)
-                
+
                 query_duration = time.time() - query_start
                 latencies.append(query_duration * 1000)  # Convert to ms
-                
+
                 if results:
                     successful_queries += 1
                 else:
                     print(f"Query {i+1}/{query_count} returned no results")
-            
+
             total_duration = time.time() - start_time
-            
+
             if latencies:
                 return {
                     "success": True,
@@ -155,16 +155,16 @@ class BackendBenchmark:
                 "error": str(e),
                 "backend": self.backend
             }
-    
+
     def benchmark_mixed_workload(self, duration_seconds: int = 60, dimensions: int = 1024) -> Dict[str, Any]:
         """Run mixed read/write workload for specified duration using backend adapter"""
         print(f"Benchmarking mixed workload: {duration_seconds}s ({dimensions}D)")
         if self.collection:
             print(f"  Using collection: {self.collection}")
-        
+
         start_time = time.time()
         operations = {"index": 0, "search": 0, "errors": 0}
-        
+
         try:
             while time.time() - start_time < duration_seconds:
                 # 80% reads, 20% writes
@@ -191,10 +191,10 @@ class BackendBenchmark:
                             operations["errors"] += 1
                     except:
                         operations["errors"] += 1
-            
+
             actual_duration = time.time() - start_time
             total_ops = operations["index"] + operations["search"]
-            
+
             return {
                 "success": True,
                 "duration_seconds": actual_duration,
@@ -212,14 +212,14 @@ class BackendBenchmark:
                 "error": str(e),
                 "backend": self.backend
             }
-    
+
     def validate_backend(self) -> Dict[str, Any]:
         """Validate backend connectivity before benchmarking"""
         print(f"Validating {self.backend} connectivity...")
         try:
             is_healthy = self.adapter.health_check()
             endpoint_info = self.adapter.get_endpoint_info()
-            
+
             return {
                 "accessible": is_healthy,
                 "endpoint_info": endpoint_info,
@@ -238,7 +238,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Benchmark individual backend operations"
     )
-    
+
     parser.add_argument(
         "--backend",
         required=True,
@@ -285,6 +285,15 @@ def main():
         help="Collection name for backends that support collections (e.g., Qdrant)"
     )
     parser.add_argument(
+        "--s3vector-bucket",
+        help="S3Vector bucket name override (default: videolake-vectors)"
+    )
+    parser.add_argument(
+        "--s3vector-index",
+        help="S3Vector index name override (default: embeddings)"
+    )
+
+    parser.add_argument(
         "--endpoint",
         help="Backend endpoint URL (auto-detected if not provided)"
     )
@@ -292,26 +301,30 @@ def main():
         "--output",
         help="Output file for results (JSON format)"
     )
-    
+
     args = parser.parse_args()
-    
+
     # Validate backend first
     print(f"\n{'='*60}")
     print(f"Backend Benchmark: {args.backend}")
     print(f"{'='*60}\n")
-    
+
     # Build config
     config = {}
     if args.endpoint:
         config['endpoint'] = args.endpoint
-    
+    if args.s3vector_bucket:
+        config['bucket'] = args.s3vector_bucket
+    if args.s3vector_index:
+        config['index'] = args.s3vector_index
+
     # Create benchmark runner
     try:
         benchmark = BackendBenchmark(args.backend, args.endpoint, config, args.collection)
     except Exception as e:
         print(f"\n✗ Failed to initialize backend: {e}")
         return 1
-    
+
     # Validate connectivity
     validation = benchmark.validate_backend()
     if not validation.get("accessible", False):
@@ -319,9 +332,9 @@ def main():
         print(f"  Error: {validation.get('error', 'Unknown error')}")
         print(f"  Check that the backend is running and accessible")
         return 1
-    
+
     print(f"✓ Backend {args.backend} is accessible\n")
-    
+
     # Run requested operation
     if args.operation == "index":
         results = benchmark.benchmark_index(args.vectors, args.dimension)
@@ -332,22 +345,22 @@ def main():
     else:
         print(f"Unknown operation: {args.operation}")
         return 1
-    
+
     # Add metadata
     results["backend"] = args.backend
     results["operation"] = args.operation
     results["endpoint_info"] = benchmark.adapter.get_endpoint_info()
-    
+
     # Print results
     print("\nBenchmark Results:")
     print(json.dumps(results, indent=2))
-    
+
     # Save to file if requested
     if args.output:
         with open(args.output, 'w') as f:
             json.dump(results, f, indent=2)
         print(f"\nResults saved to {args.output}")
-    
+
     # Return exit code based on success
     return 0 if results.get("success", False) else 1
 

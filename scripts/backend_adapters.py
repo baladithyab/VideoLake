@@ -49,88 +49,178 @@ class BackendAdapter(ABC):
 
 
 class S3VectorAdapter(BackendAdapter):
-    """Adapter for S3Vector using AWS SDK (boto3)"""
-    
+    """Adapter for S3Vector using real AWS SDK operations.
+
+    This adapter uses the existing S3VectorStorageManager + S3VectorOperations
+    to perform real indexing and search against an S3 Vector index so that
+    benchmarks reflect actual service behavior instead of simulated calls.
+    """
+
     def __init__(self, bucket_name: str = "videolake-vectors", index_name: str = "embeddings"):
         self.provider = S3VectorProvider()
         self.bucket_name = bucket_name
         self.index_name = index_name
-        logger.info(f"Initialized S3VectorAdapter with bucket={bucket_name}, index={index_name}")
-    
+
+        # Reuse the provider's storage manager so we benefit from all retry
+        # logic, validation and structured logging that already exists in
+        # the core Videolake services.
+        self.storage_manager = self.provider.storage_manager
+
+        # Use resource-id format (bucket/<bucket>/index/<index>) so the
+        # lower-level vector_operations helper can parse it without needing
+        # the AWS account ID.
+        from src.utils.arn_parser import ARNParser
+
+        self.index_identifier = ARNParser.to_resource_id(bucket_name, index_name)
+        logger.info(
+            f"Initialized S3VectorAdapter with bucket={bucket_name}, "
+            f"index={index_name}, identifier={self.index_identifier}"
+        )
+
     def health_check(self) -> bool:
-        """Validate connectivity using AWS SDK"""
+        """Validate connectivity using AWS SDK.
+
+        This calls the existing validate_connectivity helper which issues a
+        lightweight ListVectorBuckets request and reports accessibility.
+        """
         try:
             result = self.provider.validate_connectivity()
-            is_healthy = result.get('accessible', False)
+            is_healthy = result.get("accessible", False)
             logger.info(f"S3Vector health check: {is_healthy}")
             return is_healthy
         except Exception as e:
             logger.error(f"S3Vector health check failed: {e}")
             return False
-    
-    def index_vectors(self, vectors: List[List[float]], metadata: List[Dict], collection: Optional[str] = None) -> Dict[str, Any]:
-        """Index vectors using S3Vector SDK operations"""
+
+    def index_vectors(
+        self,
+        vectors: List[List[float]],
+        metadata: List[Dict],
+        collection: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Index vectors using real S3Vector SDK operations.
+
+        The benchmark harness passes plain float vectors + metadata; we map
+        that into the S3VectorOperations "vectors_data" shape and then batch
+        requests to respect the service limit of 500 vectors per request.
+        """
         try:
-            # Use S3Vector provider's storage manager
-            # Note: This is a simplified implementation
-            # In production, you'd need proper index ARN construction
-            logger.info(f"Indexing {len(vectors)} vectors to S3Vector")
-            
-            # S3Vector requires specific index operations
-            # For benchmarking, we'll simulate the operation
+            if len(vectors) != len(metadata):
+                raise ValueError(
+                    f"vectors length ({len(vectors)}) does not match metadata length ({len(metadata)})"
+                )
+
+            total = len(vectors)
+            logger.info(
+                f"Indexing {total} vectors to S3Vector index "
+                f"{self.index_identifier} (collection={collection})"
+            )
+
             start_time = time.time()
-            
-            # Simulate S3Vector indexing (replace with actual SDK calls)
-            time.sleep(0.1)  # Simulate processing time
-            
+
+            # Build vectors_data payload expected by S3VectorOperations
+            vectors_data: List[Dict[str, Any]] = []
+            for i, (vec, meta) in enumerate(zip(vectors, metadata)):
+                key = str(meta.get("id", i))
+                record = {
+                    "key": key,
+                    "data": {"float32": vec},
+                    "metadata": meta or {},
+                }
+                vectors_data.append(record)
+
+            # S3Vector currently enforces a hard limit of 500 vectors per
+            # put_vectors call. Batch requests to avoid ValidationError.
+            max_batch_size = 500
+            responses = []
+            indexed = 0
+            for start in range(0, len(vectors_data), max_batch_size):
+                batch = vectors_data[start : start + max_batch_size]
+                logger.info(
+                    f"Sending batch {start}-{start + len(batch) - 1} "
+                    f"of {len(vectors_data)} to S3Vector index {self.index_identifier}"
+                )
+                response = self.storage_manager.put_vectors(
+                    self.index_identifier,
+                    batch,
+                )
+                responses.append(response)
+                indexed += len(batch)
+
             duration = time.time() - start_time
-            
+
             return {
                 "success": True,
-                "vectors_indexed": len(vectors),
+                "vectors_indexed": indexed,
                 "duration_seconds": duration,
-                "backend": "s3vector"
+                "backend": "s3vector",
+                "raw_response": responses,
             }
-            
+
         except Exception as e:
-            logger.error(f"Failed to index vectors: {e}")
+            logger.error(f"Failed to index vectors to S3Vector: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
-                "backend": "s3vector"
+                "backend": "s3vector",
             }
-    
-    def search_vectors(self, query_vector: List[float], top_k: int, collection: Optional[str] = None) -> List[Dict]:
-        """Search vectors using S3Vector SDK"""
+
+    def search_vectors(
+        self,
+        query_vector: List[float],
+        top_k: int,
+        collection: Optional[str] = None,
+    ) -> List[Dict]:
+        """Search vectors using real S3Vector SDK operations.
+
+        Returns a list of {id, score, metadata} objects to match the common
+        adapter interface used by the benchmark harness.
+        """
         try:
-            logger.info(f"Searching S3Vector with top_k={top_k}")
-            
-            # S3Vector requires specific query operations
-            # For benchmarking, we'll simulate the operation
-            # In production, use provider.query() with proper index ARN
-            
-            # Simulate search results
-            results = []
-            for i in range(min(top_k, 10)):
-                results.append({
-                    "id": f"vec_{i}",
-                    "score": 0.9 - (i * 0.05),
-                    "metadata": {"index": i}
-                })
-            
-            return results
-            
+            logger.info(
+                f"Searching S3Vector index {self.index_identifier} "
+                f"with top_k={top_k}, collection={collection}"
+            )
+
+            result = self.storage_manager.query_vectors(
+                self.index_identifier,
+                query_vector,
+                top_k,
+            )
+
+            raw_results = result.get("results", [])
+            formatted: List[Dict[str, Any]] = []
+            for r in raw_results:
+                # S3 Vectors may return different id fields depending on API
+                # version; handle the common possibilities.
+                vec_id = (
+                    r.get("id")
+                    or r.get("key")
+                    or r.get("vectorId")
+                )
+                formatted.append(
+                    {
+                        "id": vec_id,
+                        "score": r.get("score"),
+                        "metadata": r.get("metadata", {}),
+                    }
+                )
+
+            return formatted
+
         except Exception as e:
-            logger.error(f"Failed to search vectors: {e}")
+            logger.error(f"Failed to search vectors in S3Vector: {e}", exc_info=True)
+            # For benchmarking failures we return an empty list so the harness
+            # can treat it as a failed query without breaking.
             return []
-    
+
     def get_endpoint_info(self) -> Dict[str, str]:
         """Get S3Vector endpoint information"""
         return {
             "type": "sdk",
             "service": "s3vectors",
             "endpoint": f"s3vectors.{self.provider.region}.amazonaws.com",
-            "region": self.provider.region
+            "region": self.provider.region,
         }
 
 
@@ -433,15 +523,15 @@ BACKEND_TYPES = {
     'lancedb-ebs': 'rest'
 }
 
-# Default endpoints for REST backends
+# Default endpoints for REST backends (discovered via ECS public IPs)
 DEFAULT_ENDPOINTS = {
-    'qdrant': 'http://52.90.39.152:6333',
-    'qdrant-efs': 'http://52.90.39.152:6333',
-    'qdrant-ebs': 'http://52.90.39.152:6333',
-    'lancedb': 'http://3.91.12.124:8000',
-    'lancedb-efs': 'http://3.91.12.124:8000',
-    'lancedb-s3': 'http://3.91.12.124:8000',
-    'lancedb-ebs': 'http://3.91.12.124:8000'
+    'qdrant': 'http://54.81.12.152:6333',
+    'qdrant-efs': 'http://54.81.12.152:6333',
+    'qdrant-ebs': 'http://54.81.12.152:6333',
+    'lancedb': 'http://3.89.145.101:8000',
+    'lancedb-efs': 'http://3.89.145.101:8000',
+    'lancedb-s3': 'http://3.89.145.101:8000',
+    'lancedb-ebs': 'http://3.89.145.101:8000'
 }
 
 

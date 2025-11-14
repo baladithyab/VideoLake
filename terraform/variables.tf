@@ -51,37 +51,43 @@ variable "project_name" {
 variable "deploy_s3vector" {
   description = "Deploy S3Vector storage (ALWAYS ENABLED - this is the core platform)"
   type        = bool
-  default     = true  # Never change this - S3Vector is the baseline
+  default     = true # Never change this - S3Vector is the baseline
 }
 
 variable "deploy_opensearch" {
   description = "Deploy OpenSearch Serverless (OPTIONAL - expensive, 10-15 min deployment)"
   type        = bool
-  default     = false  # Enable for AWS-managed search with advanced features
+  default     = false # Enable for AWS-managed search with advanced features
 }
 
 variable "deploy_qdrant" {
   description = "Deploy Qdrant on ECS Fargate (OPTIONAL - high-performance vector ops)"
   type        = bool
-  default     = false  # Enable for performance-critical workloads
+  default     = false # Enable for performance-critical workloads
 }
 
 variable "deploy_lancedb_s3" {
   description = "Deploy LanceDB with S3 storage (OPTIONAL - cheapest LanceDB option)"
   type        = bool
-  default     = false  # Enable for Arrow-based pipelines, cost optimization
+  default     = false # Enable for Arrow-based pipelines, cost optimization
 }
 
 variable "deploy_lancedb_efs" {
   description = "Deploy LanceDB with EFS storage (OPTIONAL - balanced performance/cost)"
   type        = bool
-  default     = false  # Enable for better performance than S3, lower cost than EBS
+  default     = false # Enable for better performance than S3, lower cost than EBS
 }
 
 variable "deploy_lancedb_ebs" {
   description = "Deploy LanceDB with EBS storage (OPTIONAL - fastest, most expensive)"
   type        = bool
-  default     = false  # Enable for maximum performance requirements
+  default     = false # Enable for maximum performance requirements
+}
+
+variable "deploy_benchmark_runner" {
+  description = "Deploy benchmark runner ECS task/service in the same region as backends (OPTIONAL)"
+  type        = bool
+  default     = false
 }
 
 #------------------------------------------------------------------------------
