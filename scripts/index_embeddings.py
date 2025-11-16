@@ -31,6 +31,8 @@ BACKEND_CONFIGS = {
     'lancedb-efs': {'type': 'rest'},
     'lancedb-s3': {'type': 'rest'},    # ECS Fargate + S3 backend
     'lancedb-ebs': {'type': 'rest'},   # ECS Fargate + provisioned EFS (EBS-like)
+    # OpenSearch with S3 Vectors engine (or regular knn on fallback)
+    'opensearch': {'type': 'opensearch'},
 }
 
 # Default S3Vector index names per embedding modality

@@ -65,12 +65,13 @@ Metrics reported per run:
 
 All numbers are averages over the three modalities (text, image, audio) for each backend.
 
-| Backend            | Storage      | QPS (↑) | P50 (ms, ↓) | P95 (ms, ↓) | P99 (ms, ↓) |
-|--------------------|-------------|--------:|------------:|------------:|------------:|
-| **S3Vector**       | S3Vector    | **4.87** | **205**     | 289         | 338         |
-| **Qdrant (EC2+EBS)** | EBS-local | 3.96   | 255         | **263**     | **265**     |
-| **LanceDB (ECS+S3)** | S3        | 2.32   | 437         | 454         | 473         |
-| **LanceDB (ECS+EBS-like)** | EFS (provisioned) | 2.32 | 440 | 453 | 466 |
+| Backend                     | Storage             | QPS (↑) | P50 (ms, ↓) | P95 (ms, ↓) | P99 (ms, ↓) |
+|-----------------------------|---------------------|--------:|------------:|------------:|------------:|
+| **S3Vector**                | S3Vector            | **4.87** | **205**     | 289         | 338         |
+| **Qdrant (EC2+EBS)**        | EBS-local           | 3.96   | 255         | **263**     | **265**     |
+| **LanceDB (ECS+S3)**        | S3                  | 2.32   | 437         | 454         | 473         |
+| **LanceDB (ECS+EBS-like)**  | EFS (provisioned)   | 2.32   | 440         | 453         | 466         |
+| **OpenSearch + S3Vector**   | OpenSearch+S3Vector | 1.23   | 796         | 1054        | 1222        |
 
 High-level observations based on this run:
 
@@ -81,7 +82,7 @@ High-level observations based on this run:
 
 ## Caveats & TODOs
 
-- **OpenSearch + S3Vector backend:** The OpenSearch domain is deployed, but S3Vector engine configuration via advanced options needs to be finalized before including it in this benchmark matrix.
+- **OpenSearch + S3Vector backend:** OpenSearch with S3Vector engine is now included in the benchmark matrix (see table above). It is significantly slower than native S3Vector and Qdrant EC2+EBS for this workload and dataset size.
 - **ECS+EFS variants:** Qdrant ECS+EFS and LanceDB ECS+EFS were not healthy during this run and are excluded from the table.
 - **Dataset size:** This is a small dataset (716 vectors per modality); conclusions should be revalidated at larger scales and with mixed read/write workloads.
 
