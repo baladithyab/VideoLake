@@ -72,6 +72,7 @@ class S3VectorAdapter(BackendAdapter):
         from src.utils.arn_parser import ARNParser
 
         self.index_identifier = ARNParser.to_resource_id(bucket_name, index_name)
+        self._index_checked = False  # Lazy index existence / creation flag
         logger.info(
             f"Initialized S3VectorAdapter with bucket={bucket_name}, "
             f"index={index_name}, identifier={self.index_identifier}"
@@ -111,10 +112,45 @@ class S3VectorAdapter(BackendAdapter):
                 )
 
             total = len(vectors)
+            if total == 0:
+                return {
+                    "success": True,
+                    "vectors_indexed": 0,
+                    "duration_seconds": 0.0,
+                    "backend": "s3vector",
+                    "raw_response": [],
+                }
+
             logger.info(
                 f"Indexing {total} vectors to S3Vector index "
                 f"{self.index_identifier} (collection={collection})"
             )
+
+            # Lazily ensure the index exists before first write
+            if not self._index_checked:
+                dim = len(vectors[0])
+                logger.info(
+                    f"Ensuring S3Vector index exists: bucket={self.bucket_name}, "
+                    f"index={self.index_name}, dimension={dim}"
+                )
+                try:
+                    if not self.storage_manager.index_exists(self.bucket_name, self.index_name):
+                        create_result = self.storage_manager.create_vector_index(
+                            bucket_name=self.bucket_name,
+                            index_name=self.index_name,
+                            dimensions=dim,
+                            distance_metric="cosine",
+                            data_type="float32",
+                        )
+                        logger.info(
+                            "S3Vector index creation result: %s",
+                            create_result.get("status", "unknown"),
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to ensure S3Vector index exists: {e}", exc_info=True)
+                    raise
+                finally:
+                    self._index_checked = True
 
             start_time = time.time()
 

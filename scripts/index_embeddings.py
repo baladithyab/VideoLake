@@ -90,8 +90,7 @@ def index_to_backend(backend_name: str, embeddings: list, collection_name: str) 
 
         print(f"Indexing {len(vectors)} vectors to collection '{collection_name}'...")
 
-        # Index vectors (S3Vector expects index to exist; caller should ensure
-        # via scripts/create_s3vector_indexes.py for Marengo-based datasets)
+        # Index vectors (S3Vector adapter will lazily create the index if needed)
         result = adapter.index_vectors(vectors, metadata, collection=collection_name)
 
         if result.get('success'):

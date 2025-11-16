@@ -124,58 +124,6 @@ resource "null_resource" "s3vector_bucket" {
   }
 }
 
-# Create a default vector index for embeddings
-resource "null_resource" "s3vector_index" {
-  depends_on = [null_resource.s3vector_bucket]
-
-  # Create vector index
-  provisioner "local-exec" {
-    command = <<-EOT
-      set -e  # Exit on error
-
-      echo "[S3Vector] Checking if index exists: ${var.default_index_name}"
-
-      # Check if index already exists
-      if aws s3vectors get-index \
-        --vector-bucket-name "${var.bucket_name}" \
-        --index-name "${var.default_index_name}" \
-        --region ${var.region} 2>/dev/null; then
-        echo "[S3Vector] Index ${var.default_index_name} already exists"
-        exit 0
-      fi
-
-      echo "[S3Vector] Creating vector index: ${var.default_index_name}"
-      echo "[S3Vector]   Dimension: ${var.vector_dimension}"
-      echo "[S3Vector]   Data type: ${var.vector_data_type}"
-      echo "[S3Vector]   Distance metric: ${var.distance_metric}"
-
-      # Create vector index
-      aws s3vectors create-index \
-        --vector-bucket-name "${var.bucket_name}" \
-        --index-name "${var.default_index_name}" \
-        --data-type "${var.vector_data_type}" \
-        --dimension ${var.vector_dimension} \
-        --distance-metric "${var.distance_metric}" \
-        --region ${var.region} \
-        --output json
-
-      echo "[S3Vector] Vector index created successfully"
-    EOT
-
-    # Add interpreter to ensure bash is used
-    interpreter = ["bash", "-c"]
-  }
-
-  triggers = {
-    bucket_name   = var.bucket_name
-    index_name    = var.default_index_name
-    dimension     = var.vector_dimension
-    data_type     = var.vector_data_type
-    distance_metric = var.distance_metric
-    region        = var.region
-  }
-}
-
 # IAM policy for S3Vector operations
 resource "aws_iam_policy" "s3vector_access" {
   depends_on = [null_resource.s3vector_bucket]

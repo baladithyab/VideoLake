@@ -77,6 +77,30 @@ def main() -> int:
         default="video-processing-results/",
         help="Prefix within output-bucket for Bedrock outputs",
     )
+    parser.add_argument(
+        "--start-sec",
+        type=float,
+        default=0.0,
+        help="Start offset in seconds for processing (Marengo startSec)",
+    )
+    parser.add_argument(
+        "--length-sec",
+        type=float,
+        default=None,
+        help="Total duration in seconds to process from startSec (Marengo lengthSec; default: full duration)",
+    )
+    parser.add_argument(
+        "--segment-sec",
+        type=float,
+        default=None,
+        help="Fixed clip duration in seconds for each embedding segment (Marengo useFixedLengthSec; default: service config)",
+    )
+    parser.add_argument(
+        "--min-clip-sec",
+        type=int,
+        default=None,
+        help="Minimum clip duration in seconds (Marengo minClipSec; default: service config)",
+    )
     args = parser.parse_args()
 
     s3_client = boto3.client("s3", region_name=args.region)
@@ -88,6 +112,12 @@ def main() -> int:
     print(f"Discovered {len(media_keys)} media files to process from s3://{args.input_bucket}/{args.input_prefix}")
 
     service = TwelveLabsVideoProcessingService(region=args.region)
+
+    # Override duration-related config if CLI overrides are provided
+    if args.min_clip_sec is not None:
+        service.config.min_clip_sec = args.min_clip_sec
+    if args.segment_sec is not None:
+        service.config.use_fixed_length_sec = args.segment_sec
 
     # Accumulate flat embeddings per modality (text/image/audio)
     flat_by_modality: Dict[str, List[Dict[str, Any]]] = {}
@@ -124,6 +154,9 @@ def main() -> int:
                 video_s3_uri=s3_uri,
                 output_s3_uri=output_s3_uri,
                 embedding_options=args.embedding_types,
+                start_sec=args.start_sec,
+                length_sec=args.length_sec,
+                use_fixed_length_sec=args.segment_sec,
                 timeout_sec=args.timeout_sec,
             )
         except Exception as e:
