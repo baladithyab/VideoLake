@@ -149,6 +149,7 @@ module "data_bucket" {
 #   - var.deploy_s3vector (default: true, recommended)
 #   - var.deploy_opensearch (default: false, expensive)
 #   - var.deploy_qdrant (default: false)
+#   - var.deploy_qdrant_ebs (default: false)
 #   - var.deploy_lancedb_s3 (default: false)
 #   - var.deploy_lancedb_efs (default: false)
 #   - var.deploy_lancedb_ebs (default: false)
@@ -230,6 +231,34 @@ module "qdrant" {
     Deployment  = "ECS-Fargate"
   }
 }
+
+# -----------------------------------------------------------------------------
+# Qdrant on EC2 with EBS (OPTIONAL)
+# -----------------------------------------------------------------------------
+# Deploy Qdrant on a dedicated EC2 instance with attached EBS volume for:
+# - Baseline EBS performance comparison vs. ECS+EFS
+# - More direct control over instance type and storage characteristics
+#
+# DEFAULT: false (not deployed)
+# Enable: terraform apply -var="deploy_qdrant_ebs=true"
+# -----------------------------------------------------------------------------
+module "qdrant_ebs" {
+  count  = var.deploy_qdrant_ebs ? 1 : 0
+  source = "./modules/qdrant"
+
+  aws_region        = var.aws_region
+  deployment_name   = "${var.qdrant_deployment_name}-ebs"
+  availability_zone = data.aws_availability_zones.available.names[0]
+  instance_type     = var.qdrant_instance_type
+  ebs_volume_size_gb = var.qdrant_storage_gb
+  qdrant_version     = var.qdrant_version
+
+  tags = {
+    VectorStore = "Qdrant"
+    Deployment  = "EC2-EBS"
+  }
+}
+
 
 # -----------------------------------------------------------------------------
 # LanceDB (OPTIONAL - Choose Storage Backend)

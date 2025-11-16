@@ -69,6 +69,20 @@ output "qdrant" {
   }
 }
 
+output "qdrant_ebs" {
+  description = "Qdrant EC2+EBS deployment information"
+  value = var.deploy_qdrant_ebs ? {
+    deployed        = true
+    deployment_name = "${var.qdrant_deployment_name}-ebs"
+    backend_type    = "ebs"
+    message         = "Qdrant deployed on EC2 with attached EBS volume."
+  } : {
+    deployed = false
+    message  = "Qdrant EC2+EBS not deployed. Set var.deploy_qdrant_ebs=true to enable."
+  }
+}
+
+
 #------------------------------------------------------------------------------
 # LANCEDB DEPLOYMENTS (Conditional)
 #------------------------------------------------------------------------------
@@ -122,24 +136,26 @@ output "deployment_summary" {
     region = var.aws_region
     environment = var.environment
     project_name = var.project_name
-    
+
     always_deployed = {
       shared_bucket = local.shared_bucket_name
     }
-    
+
     vector_stores_deployed = {
       s3vector       = var.deploy_s3vector
       opensearch     = var.deploy_opensearch
       qdrant         = var.deploy_qdrant
+      qdrant_ebs     = var.deploy_qdrant_ebs
       lancedb_s3     = var.deploy_lancedb_s3
       lancedb_efs    = var.deploy_lancedb_efs
       lancedb_ebs    = var.deploy_lancedb_ebs
     }
-    
+
     total_vector_stores = (
       (var.deploy_s3vector ? 1 : 0) +
       (var.deploy_opensearch ? 1 : 0) +
       (var.deploy_qdrant ? 1 : 0) +
+      (var.deploy_qdrant_ebs ? 1 : 0) +
       (var.deploy_lancedb_s3 ? 1 : 0) +
       (var.deploy_lancedb_efs ? 1 : 0) +
       (var.deploy_lancedb_ebs ? 1 : 0)
@@ -158,9 +174,10 @@ output "infrastructure_deployed" {
     data_bucket = var.data_bucket_name != null ? var.data_bucket_name : "not_deployed"
     s3vector = var.deploy_s3vector ? var.s3vector_bucket_name : "not_deployed"
     opensearch_domain = var.deploy_opensearch ? var.opensearch_domain_name : "not_deployed"
-    qdrant_deployment = var.deploy_qdrant ? var.qdrant_deployment_name : "not_deployed"
+    qdrant_deployment     = var.deploy_qdrant ? var.qdrant_deployment_name : "not_deployed"
+    qdrant_ebs_deployment = var.deploy_qdrant_ebs ? "${var.qdrant_deployment_name}-ebs" : "not_deployed"
     lancedb_deployments = {
-      s3 = var.deploy_lancedb_s3 ? "${var.lancedb_deployment_name}-s3" : "not_deployed"
+      s3  = var.deploy_lancedb_s3 ? "${var.lancedb_deployment_name}-s3" : "not_deployed"
       efs = var.deploy_lancedb_efs ? "${var.lancedb_deployment_name}-efs" : "not_deployed"
       ebs = var.deploy_lancedb_ebs ? "${var.lancedb_deployment_name}-ebs" : "not_deployed"
     }

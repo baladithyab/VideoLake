@@ -14,20 +14,23 @@ from src.utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 # Backend configurations
+# For REST backends we rely on DEFAULT_ENDPOINTS in scripts.backend_adapters
+# and only specify minimal type hints here.
 BACKEND_CONFIGS = {
     's3vector': {
         'type': 'sdk',
         'bucket': 'videolake-vectors',
-        'index': 'embeddings'
+        'index': 'embeddings',
     },
-    'qdrant': {
-        'type': 'rest',
-        'endpoint': 'http://54.81.12.152:6333'
-    },
-    'lancedb': {
-        'type': 'rest',
-        'endpoint': 'http://3.89.145.101:8000'
-    }
+    # Qdrant variants
+    'qdrant': {'type': 'rest'},        # ECS Fargate + EFS (canonical)
+    'qdrant-efs': {'type': 'rest'},    # alias for qdrant
+    'qdrant-ebs': {'type': 'rest'},    # EC2 + EBS
+    # LanceDB variants
+    'lancedb': {'type': 'rest'},       # ECS Fargate + EFS (canonical)
+    'lancedb-efs': {'type': 'rest'},
+    'lancedb-s3': {'type': 'rest'},    # ECS Fargate + S3 backend
+    'lancedb-ebs': {'type': 'rest'},   # ECS Fargate + provisioned EFS (EBS-like)
 }
 
 # Default S3Vector index names per embedding modality
@@ -124,8 +127,11 @@ def main():
         '--backends',
         nargs='+',
         default=['s3vector', 'qdrant', 'lancedb'],
-        choices=['s3vector', 'qdrant', 'lancedb'],
-        help='Backends to index to (space-separated)'
+        choices=list(BACKEND_CONFIGS.keys()),
+        help=(
+            'Backends to index to (space-separated). '
+            'Variants include qdrant-efs, qdrant-ebs, lancedb-efs, lancedb-s3, lancedb-ebs.'
+        ),
     )
     parser.add_argument(
         '--collection',

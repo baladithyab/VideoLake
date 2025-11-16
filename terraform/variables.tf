@@ -220,6 +220,13 @@ variable "qdrant_version" {
   default     = "latest"
 }
 
+variable "deploy_qdrant_ebs" {
+  description = "Deploy Qdrant on EC2 with EBS storage (OPTIONAL - baseline EBS performance)"
+  type        = bool
+  default     = false
+}
+
+
 #------------------------------------------------------------------------------
 # LANCEDB
 #------------------------------------------------------------------------------

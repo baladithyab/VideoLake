@@ -559,15 +559,27 @@ BACKEND_TYPES = {
     'lancedb-ebs': 'rest'
 }
 
-# Default endpoints for REST backends (discovered via ECS public IPs)
+# Default endpoints for REST backends (discovered via ECS/EC2 public IPs)
+# NOTE: These are convenience defaults for local benchmarks. For production or
+# other environments, pass --endpoint/override configs instead of relying on
+# hard-coded IPs.
 DEFAULT_ENDPOINTS = {
-    'qdrant': 'http://54.81.12.152:6333',
-    'qdrant-efs': 'http://54.81.12.152:6333',
-    'qdrant-ebs': 'http://54.81.12.152:6333',
-    'lancedb': 'http://3.89.145.101:8000',
-    'lancedb-efs': 'http://3.89.145.101:8000',
-    'lancedb-s3': 'http://3.89.145.101:8000',
-    'lancedb-ebs': 'http://3.89.145.101:8000'
+    # Qdrant on ECS Fargate with EFS backend
+    'qdrant': 'http://35.173.203.75:6333',
+    'qdrant-efs': 'http://35.173.203.75:6333',
+
+    # Qdrant on EC2 with dedicated EBS volume
+    'qdrant-ebs': 'http://3.235.99.89:6333',
+
+    # LanceDB on ECS Fargate with EFS backend (canonical "lancedb" deployment)
+    'lancedb': 'http://54.92.155.37:8000',
+    'lancedb-efs': 'http://54.92.155.37:8000',
+
+    # LanceDB on ECS Fargate with S3-backed storage (cheapest)
+    'lancedb-s3': 'http://3.81.132.243:8000',
+
+    # LanceDB on ECS Fargate with provisioned-throughput EFS (EBS-like)
+    'lancedb-ebs': 'http://54.164.111.243:8000',
 }
 
 
