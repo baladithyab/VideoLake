@@ -870,21 +870,21 @@ BACKEND_TYPES = {
 # hard-coded IPs.
 DEFAULT_ENDPOINTS = {
     # Qdrant on ECS Fargate with EFS backend
-    'qdrant': 'http://35.173.203.75:6333',
-    'qdrant-efs': 'http://35.173.203.75:6333',
+    'qdrant': 'http://54.80.93.203:6333',
+    'qdrant-efs': 'http://54.80.93.203:6333',
 
     # Qdrant on EC2 with dedicated EBS volume
-    'qdrant-ebs': 'http://3.235.99.89:6333',
+    'qdrant-ebs': 'http://44.201.42.120:6333',
 
     # LanceDB on ECS Fargate with EFS backend (canonical "lancedb" deployment)
-    'lancedb': 'http://54.92.155.37:8000',
-    'lancedb-efs': 'http://54.92.155.37:8000',
+    'lancedb': 'http://98.91.216.3:8000',
+    'lancedb-efs': 'http://98.91.216.3:8000',
 
     # LanceDB on ECS Fargate with S3-backed storage (cheapest)
-    'lancedb-s3': 'http://3.81.132.243:8000',
+    'lancedb-s3': 'http://100.28.218.70:8000',
 
     # LanceDB on ECS Fargate with provisioned-throughput EFS (EBS-like)
-    'lancedb-ebs': 'http://54.164.111.243:8000',
+    'lancedb-ebs': 'http://54.81.108.213:8000',
 
     # OpenSearch domain with S3 Vectors engine
     'opensearch': 'https://search-videolake-jp74yuza4pylhzhut4vimyh43a.us-east-1.es.amazonaws.com',

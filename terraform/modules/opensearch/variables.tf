@@ -84,6 +84,12 @@ variable "log_retention_days" {
   default     = 7
 }
 
+variable "benchmark_runner_iam_role_arn" {
+  description = "IAM role ARN to map to OpenSearch all_access role (e.g., Cloud9 or benchmark runner role)"
+  type        = string
+  default     = "arn:aws:iam::386931836011:role/service-role/AWSCloud9SSMAccessRole"
+}
+
 variable "tags" {
   description = "Additional tags"
   type        = map(string)

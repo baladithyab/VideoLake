@@ -90,7 +90,9 @@ resource "null_resource" "enable_s3vector_engine" {
 
   depends_on = [aws_opensearch_domain.s3vector_backend]
 
-  # Enable S3 Vector engine
+  # Enable S3 Vector engine using AIML options (S3VectorsEngine)
+  # This is the supported way to turn on the preview S3 Vectors engine
+  # on OpenSearch 2.19+ domains.
   provisioner "local-exec" {
     command = <<-EOT
       echo "Waiting for OpenSearch domain to be active..."
@@ -102,10 +104,10 @@ resource "null_resource" "enable_s3vector_engine" {
       aws opensearch update-domain-config \
         --domain-name "${var.domain_name}" \
         --region ${var.region} \
-        --advanced-options '{"s3vectors.enabled":"true"}' \
+        --aiml-options '{"S3VectorsEngine":{"Enabled":true}}' \
         --output json
 
-      echo "S3 Vectors engine enabled. Waiting for domain update to complete..."
+      echo "S3 Vectors engine enabled (via AIML options). Waiting for domain update to complete..."
       aws opensearch wait domain-available \
         --domain-name "${var.domain_name}" \
         --region ${var.region}
@@ -118,6 +120,38 @@ resource "null_resource" "enable_s3vector_engine" {
     domain_name = var.domain_name
     region      = var.region
     enabled     = var.enable_s3vector_engine
+  }
+}
+
+# Map benchmark runner or Cloud9 IAM role to OpenSearch all_access role
+# This uses the OpenSearch security plugin REST API.
+resource "null_resource" "opensearch_security_role_mapping" {
+  count = var.enable_fine_grained_access ? 1 : 0
+
+  depends_on = [
+    aws_opensearch_domain.s3vector_backend,
+    null_resource.enable_s3vector_engine,
+  ]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      ENDPOINT="${aws_opensearch_domain.s3vector_backend.endpoint}"
+      ROLE_ARN="${var.benchmark_runner_iam_role_arn}"
+
+      echo "Configuring OpenSearch security role mapping for backend role: ${var.benchmark_runner_iam_role_arn}"
+
+      curl -u "${var.master_user_name}:${var.master_user_password}" \
+        -X PUT "https://${aws_opensearch_domain.s3vector_backend.endpoint}/_plugins/_security/api/rolesmapping/all_access" \
+        -H 'Content-Type: application/json' \
+        -d "{\"users\": [\"${var.master_user_name}\"], \"backend_roles\": [\"${var.benchmark_runner_iam_role_arn}\"]}"
+    EOT
+  }
+
+  triggers = {
+    endpoint   = aws_opensearch_domain.s3vector_backend.endpoint
+    role_arn   = var.benchmark_runner_iam_role_arn
+    enabled    = var.enable_fine_grained_access
+    domainname = var.domain_name
   }
 }
 

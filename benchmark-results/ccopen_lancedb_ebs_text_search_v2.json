@@ -1,0 +1,22 @@
+{
+  "success": true,
+  "duration_seconds": 44.90926122665405,
+  "query_count": 100,
+  "successful_queries": 100,
+  "throughput_qps": 2.2267122029753876,
+  "latency_p50_ms": 457.20016956329346,
+  "latency_p95_ms": 479.5493960380554,
+  "latency_p99_ms": 481.0715627670288,
+  "latency_min_ms": 386.4247798919678,
+  "latency_max_ms": 481.22215270996094,
+  "latency_mean_ms": 449.08488750457764,
+  "latency_std_ms": 26.774876816673927,
+  "backend": "lancedb-ebs",
+  "operation": "search",
+  "endpoint_info": {
+    "type": "rest",
+    "backend": "lancedb",
+    "endpoint": "http://54.81.108.213:8000",
+    "health_path": "/health"
+  }
+}

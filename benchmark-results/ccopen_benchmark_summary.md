@@ -67,11 +67,11 @@ All numbers are averages over the three modalities (text, image, audio) for each
 
 | Backend                     | Storage             | QPS (↑) | P50 (ms, ↓) | P95 (ms, ↓) | P99 (ms, ↓) |
 |-----------------------------|---------------------|--------:|------------:|------------:|------------:|
-| **S3Vector**                | S3Vector            | **4.87** | **205**     | 289         | 338         |
-| **Qdrant (EC2+EBS)**        | EBS-local           | 3.96   | 255         | **263**     | **265**     |
-| **LanceDB (ECS+S3)**        | S3                  | 2.32   | 437         | 454         | 473         |
-| **LanceDB (ECS+EBS-like)**  | EFS (provisioned)   | 2.32   | 440         | 453         | 466         |
-| **OpenSearch + S3Vector**   | OpenSearch+S3Vector | 1.23   | 796         | 1054        | 1222        |
+| **S3Vector**                | S3Vector            | **5.35** | **188**     | **238**     | 313         |
+| **Qdrant (EC2+EBS)**        | EBS-local           | 3.94   | 255         | 263         | **264**     |
+| **LanceDB (ECS+S3)**        | S3                  | 2.32   | 438         | 452         | 455         |
+| **LanceDB (ECS+EBS-like)**  | EFS (provisioned)   | 2.31   | 439         | 472         | 477         |
+| **OpenSearch + S3Vector**   | OpenSearch+S3Vector | 1.04   | 914         | 1256        | 2159        |
 
 High-level observations based on this run:
 
