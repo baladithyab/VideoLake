@@ -26,11 +26,16 @@ BACKEND_CONFIGS = {
     'qdrant': {'type': 'rest'},        # ECS Fargate + EFS (canonical)
     'qdrant-efs': {'type': 'rest'},    # alias for qdrant
     'qdrant-ebs': {'type': 'rest'},    # EC2 + EBS
-    # LanceDB variants
+    # LanceDB variants (REST API wrappers)
     'lancedb': {'type': 'rest'},       # ECS Fargate + EFS (canonical)
     'lancedb-efs': {'type': 'rest'},
     'lancedb-s3': {'type': 'rest'},    # ECS Fargate + S3 backend
     'lancedb-ebs': {'type': 'rest'},   # ECS Fargate + provisioned EFS (EBS-like)
+    # LanceDB embedded variants (direct Python SDK on EC2)
+    'lancedb-embedded': {'type': 'embedded'},
+    'lancedb-s3-embedded': {'type': 'embedded'},
+    'lancedb-efs-embedded': {'type': 'embedded'},
+    'lancedb-ebs-embedded': {'type': 'embedded'},
     # OpenSearch with S3 Vectors engine (or regular knn on fallback)
     'opensearch': {'type': 'opensearch'},
 }
@@ -159,7 +164,10 @@ def main():
     if args.qdrant_endpoint:
         BACKEND_CONFIGS['qdrant']['endpoint'] = args.qdrant_endpoint
     if args.lancedb_endpoint:
-        BACKEND_CONFIGS['lancedb']['endpoint'] = args.lancedb_endpoint
+        # Apply LanceDB endpoint override to all REST LanceDB variants
+        for name in ('lancedb', 'lancedb-efs', 'lancedb-s3', 'lancedb-ebs'):
+            if name in BACKEND_CONFIGS:
+                BACKEND_CONFIGS[name]['endpoint'] = args.lancedb_endpoint
 
 
 

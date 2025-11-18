@@ -867,6 +867,126 @@ class RestAPIAdapter(BackendAdapter):
         }
 
 
+class LanceDBEmbeddedAdapter(BackendAdapter):
+    """Adapter for LanceDB using direct Python library (embedded mode).
+
+    This bypasses the FastAPI wrapper and talks directly to LanceDB using the
+    Python SDK. It is designed for running benchmarks on an EC2 instance that
+    has direct access to the underlying storage (EBS/EFS/S3).
+
+    The LanceDB URI can be provided via the config dict ("uri") or via the
+    `LANCEDB_URI` environment variable.
+    """
+
+    def __init__(self, uri: str, backend_name: str = "lancedb-embedded"):
+        # Import lancedb lazily so that other backends can be used without the
+        # dependency installed.
+        try:
+            import lancedb  # type: ignore
+        except ImportError as e:  # pragma: no cover - environment dependent
+            raise RuntimeError(
+                "lancedb package is required for embedded LanceDB benchmarks. "
+                "Install it via 'pip install lancedb'."
+            ) from e
+
+        self.uri = uri
+        self.backend_name = backend_name
+        self._lancedb = lancedb
+        self.db = lancedb.connect(uri)
+        logger.info(f"Initialized LanceDBEmbeddedAdapter for {backend_name} at {uri}")
+
+    def health_check(self) -> bool:
+        """Simple connectivity check using table listing."""
+        try:
+            _ = self.db.table_names()
+            return True
+        except Exception as e:  # pragma: no cover - defensive logging
+            logger.error(f"LanceDB embedded health check failed: {e}")
+            return False
+
+    def index_vectors(
+        self,
+        vectors: List[List[float]],
+        metadata: List[Dict],
+        collection: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Index vectors directly into LanceDB.
+
+        We mirror the /index API semantics used by the REST wrapper by
+        constructing a DataFrame with a `vector` column plus metadata columns
+        and overwriting the table each time. This ensures deterministic
+        benchmark behavior.
+        """
+        import pandas as pd
+
+        table_name = collection or "default"
+        start_time = time.time()
+
+        try:
+            if len(vectors) != len(metadata):
+                raise ValueError(
+                    f"vectors length ({len(vectors)}) does not match metadata length ({len(metadata)})"
+                )
+
+            records: List[Dict[str, Any]] = []
+            for vec, meta in zip(vectors, metadata):
+                record = dict(meta) if meta is not None else {}
+                record["vector"] = vec
+                records.append(record)
+
+            df = pd.DataFrame(records)
+
+            # Always overwrite for benchmark runs to avoid unbounded table
+            # growth between runs.
+            self.db.create_table(table_name, data=df, mode="overwrite")
+            duration = time.time() - start_time
+
+            return {
+                "success": True,
+                "vectors_indexed": len(vectors),
+                "duration_seconds": duration,
+                "backend": self.backend_name,
+            }
+
+        except Exception as e:  # pragma: no cover - defensive logging
+            logger.error(f"Failed to index vectors in embedded LanceDB: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "backend": self.backend_name,
+            }
+
+    def search_vectors(
+        self,
+        query_vector: List[float],
+        top_k: int,
+        collection: Optional[str] = None,
+    ) -> List[Dict]:
+        """Search vectors directly using LanceDB's Python API.
+
+        For the benchmark harness we only care about truthiness of the results
+        and basic latency, so we return raw records as dictionaries.
+        """
+        table_name = collection or "default"
+
+        try:
+            table = self.db.open_table(table_name)
+            search = table.search(query_vector).limit(top_k)
+            results_df = search.to_pandas()
+            return results_df.to_dict("records")
+        except Exception as e:  # pragma: no cover - defensive logging
+            logger.error(f"Failed to search vectors in embedded LanceDB: {e}")
+            return []
+
+    def get_endpoint_info(self) -> Dict[str, str]:
+        """Return URI information for display in benchmark outputs."""
+        return {
+            "type": "embedded",
+            "backend": self.backend_name,
+            "endpoint": self.uri,
+        }
+
+
 # Backend type mapping
 BACKEND_TYPES = {
     's3vector': 'sdk',
@@ -878,6 +998,11 @@ BACKEND_TYPES = {
     'lancedb-s3': 'rest',
     'lancedb-efs': 'rest',
     'lancedb-ebs': 'rest',
+    # Embedded LanceDB backends (direct Python SDK, no REST API)
+    'lancedb-embedded': 'embedded',
+    'lancedb-s3-embedded': 'embedded',
+    'lancedb-efs-embedded': 'embedded',
+    'lancedb-ebs-embedded': 'embedded',
     'opensearch': 'opensearch',
 }
 
@@ -955,6 +1080,16 @@ def get_backend_adapter(backend: str, config: Optional[Dict[str, Any]] = None) -
             endpoint=endpoint,
             backend_type=api_backend_type,
         )
+    elif backend_type == 'embedded':
+        # Embedded LanceDB backend using direct Python SDK (no REST API)
+        uri = config.get('uri') or os.environ.get('LANCEDB_URI')
+        if not uri:
+            raise ValueError(
+                f"Embedded LanceDB backend '{backend}' requires LANCEDB_URI "
+                "to be set in the environment or passed via config['uri']."
+            )
+
+        return LanceDBEmbeddedAdapter(uri=uri, backend_name=backend)
     elif backend_type == 'opensearch':
         endpoint = config.get('endpoint') or DEFAULT_ENDPOINTS.get(backend)
         if not endpoint:

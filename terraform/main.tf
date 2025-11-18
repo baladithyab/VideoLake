@@ -335,6 +335,27 @@ module "lancedb_ebs" {
   }
 }
 
+# LanceDB Benchmark EC2 (OPTIONAL - embedded vs API benchmarking host)
+module "lancedb_benchmark_ec2" {
+  count  = var.deploy_lancedb_benchmark_ec2 ? 1 : 0
+  source = "./modules/lancedb_benchmark_ec2"
+
+  aws_region        = var.aws_region
+  deployment_name   = "${var.lancedb_deployment_name}-benchmark"
+  availability_zone = data.aws_availability_zones.available.names[0]
+
+  # Wire in storage locations when available (LanceDB S3 / EFS / EBS)
+  s3_bucket = var.deploy_lancedb_s3 ? module.lancedb_s3[0].s3_bucket_name : ""
+  s3_prefix = ""
+  efs_path  = "/mnt/lancedb_efs"  # mount handled manually if needed
+  ebs_path  = "/mnt/lancedb"      # used when running on lancedb-ebs EC2
+
+  tags = {
+    Component   = "LanceDB-Benchmark"
+    VectorStore = "LanceDB"
+  }
+}
+
 # Benchmark Runner ECS (OPTIONAL)
 module "benchmark_runner" {
   count  = var.deploy_benchmark_runner ? 1 : 0

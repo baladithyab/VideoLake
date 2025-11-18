@@ -84,6 +84,12 @@ variable "deploy_lancedb_ebs" {
   default     = false # Enable for maximum performance requirements
 }
 
+variable "deploy_lancedb_benchmark_ec2" {
+  description = "Deploy a dedicated EC2 instance in us-east-1 for LanceDB embedded vs API benchmarks"
+  type        = bool
+  default     = false
+}
+
 variable "deploy_benchmark_runner" {
   description = "Deploy benchmark runner ECS task/service in the same region as backends (OPTIONAL)"
   type        = bool

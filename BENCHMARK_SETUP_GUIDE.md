@@ -958,6 +958,54 @@ chmod +x run_ccopen_benchmarks.sh
 Create a simple analysis script:
 
 ```bash
+
+### Step 5: LanceDB Embedded vs API Benchmarks on EC2
+
+To measure the benefit of using **embedded LanceDB (Python SDK)** versus the **LanceDB REST API wrapper**, you can run side‑by‑side benchmarks on an EC2 instance that has access to the same storage.
+
+1. **Prepare environment variables on the EC2 instance**
+
+   ```bash
+   # S3-backed LanceDB API endpoint and bucket (from terraform outputs + ECS task IP)
+   export LANCEDB_S3_ENDPOINT="http://<lancedb-s3-ip>:8000"
+   export LANCEDB_S3_BUCKET="$(cd terraform && terraform output -json lancedb_s3 | jq -r '.s3_bucket_name')"
+
+   # EFS-backed LanceDB API endpoint (ECS)
+   export LANCEDB_EFS_ENDPOINT="http://<lancedb-efs-ip>:8000"
+   # Mount the LanceDB EFS file system on this EC2 instance, then set:
+   export LANCEDB_EFS_URI="/mnt/lancedb_efs"  # or your mount path
+
+   # EBS-backed LanceDB API endpoint (EC2 + EBS)
+   # If you run this script directly on the lancedb-ebs EC2 instance, you can use localhost
+   export LANCEDB_EBS_ENDPOINT="http://localhost:8000"
+   export LANCEDB_EBS_URI="/mnt/lancedb"  # default mount path from the lancedb_ebs module
+   ```
+
+2. **Run the embedded-vs-API benchmark script** from the repo root on the EC2 instance:
+
+   ```bash
+   cd /home/ubuntu/S3Vector
+   chmod +x scripts/run_lancedb_embedded_vs_api_benchmarks.sh
+   ./scripts/run_lancedb_embedded_vs_api_benchmarks.sh
+   ```
+
+   The script will:
+   - For each backend type (**S3**, **EFS**, **EBS**) where the required env vars are set:
+     - Index cc-open-samples (text/image/audio) into **two collections** per modality:
+       - `videolake-api-<backend>-<modality>` via the **REST API wrapper**
+       - `videolake-embedded-<backend>-<modality>` via **embedded LanceDB** (`LANCEDB_URI`)
+     - Run 100 search queries per collection (`top_k=10`, `dimension=1024`).
+     - Write results under `benchmark-results/lancedb_embedded_vs_api_<timestamp>/` as JSON files, one per backend/modality/implementation.
+
+3. **Interpreting results**
+
+   - Each JSON file (e.g. `lancedb-s3_text_api.json` vs `lancedb-s3-embedded_text_embedded.json`) contains:
+     - `throughput_qps`
+     - `latency_p50_ms`, `latency_p95_ms`, `latency_p99_ms`, `latency_mean_ms`
+   - Comparing **`*_api.json` vs `*_embedded.json`** for the same backend and modality will show the overhead of the REST API wrapper (FastAPI + JSON) vs direct embedded LanceDB on the same storage.
+
+This flow is intentionally isolated to LanceDB only and does not modify any S3Vector/Qdrant/OpenSearch resources.
+
 #!/usr/bin/env python3
 # analyze_results.py - Summarize benchmark results
 

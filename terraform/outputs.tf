@@ -216,6 +216,27 @@ output "lancedb_ebs" {
   }
 }
 
+output "lancedb_benchmark_ec2" {
+  description = "LanceDB benchmark EC2 host for embedded vs API testing"
+  value = var.deploy_lancedb_benchmark_ec2 ? {
+    deployed        = true
+    deployment_name = "${var.lancedb_deployment_name}-benchmark"
+    instance_id     = module.lancedb_benchmark_ec2[0].instance_id
+    public_ip       = module.lancedb_benchmark_ec2[0].public_ip
+    private_ip      = module.lancedb_benchmark_ec2[0].private_ip
+    security_group  = module.lancedb_benchmark_ec2[0].security_group_id
+    note            = "SSH to this instance to run scripts/run_lancedb_embedded_vs_api_benchmarks.sh"
+  } : {
+    deployed        = false
+    deployment_name = ""
+    instance_id     = ""
+    public_ip       = ""
+    private_ip      = ""
+    security_group  = ""
+    note            = "Set var.deploy_lancedb_benchmark_ec2=true to create the EC2 benchmark host."
+  }
+}
+
 #------------------------------------------------------------------------------
 # DEPLOYMENT SUMMARY
 #------------------------------------------------------------------------------
