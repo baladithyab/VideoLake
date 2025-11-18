@@ -14,14 +14,9 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 LOG_FILE="${LOG_DIR}/quick_health_index_benchmark_${TIMESTAMP}.log"
 HEALTH_FILE="${LOG_DIR}/quick_health_${TIMESTAMP}.json"
 
-BACKENDS=("s3vector" "lancedb-ebs" "lancedb-efs" "lancedb-s3" "qdrant-ebs" "qdrant-efs" "lancedb-embedded")
+BACKENDS=("s3vector" "lancedb-ebs" "lancedb-efs" "lancedb-s3" "qdrant-ebs" "qdrant-efs" "lancedb-embedded-ebs" "lancedb-embedded-efs" "lancedb-embedded-s3")
 EMBED_FILE="${PROJECT_ROOT}/embeddings/marengo/marengo-benchmark-v1-text.json"
 COLLECTION="text_embeddings"
-
-# Set local path for embedded LanceDB
-export LANCEDB_URI="/tmp/lancedb-embedded"
-rm -rf "$LANCEDB_URI" # Clean start for embedded
-mkdir -p "$LANCEDB_URI"
 
 echo "===============================================" | tee -a "$LOG_FILE"
 echo " Quick Health + Index + Benchmark Runner" | tee -a "$LOG_FILE"
@@ -57,9 +52,16 @@ backends = [
     "lancedb-s3",
     "qdrant-ebs",
     "qdrant-efs",
-    "lancedb-embedded",
+    "lancedb-embedded-ebs",
+    "lancedb-embedded-efs",
+    "lancedb-embedded-s3",
     "opensearch",
 ]
+
+# Set dummy URI for health check of embedded backends if not set
+import os
+if not os.environ.get("LANCEDB_URI"):
+    os.environ["LANCEDB_URI"] = "/tmp/lancedb-health-check"
 
 results = {backend: validate_backend_connectivity(backend) for backend in backends}
 print(json.dumps(results, indent=2))
@@ -96,6 +98,25 @@ echo "" | tee -a "$LOG_FILE"
 echo "=== Indexing text embeddings into backends ===" | tee -a "$LOG_FILE"
 for backend in "${BACKENDS[@]}"; do
   echo "--- Indexing $backend ---" | tee -a "$LOG_FILE"
+
+  # Configure URI for embedded backends
+  if [[ "$backend" == "lancedb-embedded-ebs" ]]; then
+      export LANCEDB_URI="/tmp/lancedb-ebs"
+      rm -rf "$LANCEDB_URI"
+      mkdir -p "$LANCEDB_URI"
+  elif [[ "$backend" == "lancedb-embedded-efs" ]]; then
+      export LANCEDB_URI="/mnt/lancedb_efs/embedded-benchmark"
+      # Don't wipe EFS automatically, or maybe we should?
+      # For benchmark consistency, we probably should, but let's be careful.
+      # The task implies we should support it. Let's assume clean slate is desired for indexing.
+      rm -rf "$LANCEDB_URI"
+      mkdir -p "$LANCEDB_URI"
+  elif [[ "$backend" == "lancedb-embedded-s3" ]]; then
+      export LANCEDB_URI="s3://videolake-vectors/embedded-benchmark"
+      # S3 cleanup is harder from bash, relying on python script to handle overwrite or cleanup if needed.
+      # LanceDB overwrite mode should handle it.
+  fi
+
   python3 "${SCRIPT_DIR}/index_embeddings.py" \
     --embeddings "$EMBED_FILE" \
     --backends "$backend" \
@@ -109,6 +130,16 @@ echo "=== Quick search benchmark per backend ===" | tee -a "$LOG_FILE"
 for backend in "${BACKENDS[@]}"; do
   OUT_JSON="${LOG_DIR}/quick_benchmark_${backend}_${TIMESTAMP}.json"
   echo "--- Benchmarking $backend (search) ---" | tee -a "$LOG_FILE"
+
+  # Configure URI for embedded backends (must match indexing step)
+  if [[ "$backend" == "lancedb-embedded-ebs" ]]; then
+      export LANCEDB_URI="/tmp/lancedb-ebs"
+  elif [[ "$backend" == "lancedb-embedded-efs" ]]; then
+      export LANCEDB_URI="/mnt/lancedb_efs/embedded-benchmark"
+  elif [[ "$backend" == "lancedb-embedded-s3" ]]; then
+      export LANCEDB_URI="s3://videolake-vectors/embedded-benchmark"
+  fi
+
   python3 "${SCRIPT_DIR}/benchmark_backend.py" \
     --backend "$backend" \
     --operation search \

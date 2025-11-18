@@ -1003,6 +1003,10 @@ BACKEND_TYPES = {
     'lancedb-s3-embedded': 'embedded',
     'lancedb-efs-embedded': 'embedded',
     'lancedb-ebs-embedded': 'embedded',
+    # New naming convention
+    'lancedb-embedded-s3': 'embedded',
+    'lancedb-embedded-efs': 'embedded',
+    'lancedb-embedded-ebs': 'embedded',
     'opensearch': 'opensearch',
 }
 
@@ -1016,7 +1020,7 @@ DEFAULT_ENDPOINTS = {
     'qdrant-efs': 'http://54.90.142.5:6333',
 
     # Qdrant on EC2 with dedicated EBS volume
-    'qdrant-ebs': 'http://44.192.62.209:6333',
+    'qdrant-ebs': 'http://18.232.145.144:6333',
 
     # LanceDB on ECS Fargate with EFS backend (canonical "lancedb" deployment)
     'lancedb': 'http://3.94.117.145:8000',
@@ -1026,7 +1030,7 @@ DEFAULT_ENDPOINTS = {
     'lancedb-s3': 'http://98.81.178.222:8000',
 
     # LanceDB on EC2 with EBS volume (true EBS performance)
-    'lancedb-ebs': 'http://18.207.106.185:8000',
+    'lancedb-ebs': 'http://100.27.36.178:8000',
 
     # OpenSearch domain with S3 Vectors engine
     'opensearch': 'https://search-videolake-jp74yuza4pylhzhut4vimyh43a.us-east-1.es.amazonaws.com',
