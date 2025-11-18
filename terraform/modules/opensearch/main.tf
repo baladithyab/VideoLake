@@ -16,6 +16,10 @@ terraform {
   }
 }
 
+# Data sources for access policy
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+
 # OpenSearch Domain with S3Vector engine
 resource "aws_opensearch_domain" "s3vector_backend" {
   domain_name    = var.domain_name
@@ -71,6 +75,23 @@ resource "aws_opensearch_domain" "s3vector_backend" {
     }
   }
 
+  # Access policy - when fine-grained access control is enabled, this allows
+  # the resource-based policy check to pass, while actual authentication is
+  # handled by the master user credentials
+  access_policies = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          AWS = "*"
+        }
+        Action   = "es:*"
+        Resource = "arn:aws:es:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:domain/${var.domain_name}/*"
+      }
+    ]
+  })
+
   tags = merge(var.tags, {
     Name         = var.domain_name
     Service      = "OpenSearch"
@@ -104,7 +125,7 @@ resource "null_resource" "enable_s3vector_engine" {
       aws opensearch update-domain-config \
         --domain-name "${var.domain_name}" \
         --region ${var.region} \
-        --aiml-options '{"S3VectorsEngine":{"Enabled":true}}' \
+        --aiml-options '{"S3VectorsEngine":{"Enabled":true},"NaturalLanguageQueryGenerationOptions":{"DesiredState":"DISABLED"}}' \
         --output json
 
       echo "S3 Vectors engine enabled (via AIML options). Waiting for domain update to complete..."

@@ -42,13 +42,29 @@ output "s3vector" {
 output "opensearch" {
   description = "OpenSearch with S3Vector backend information"
   value = var.deploy_opensearch ? {
-    deployed     = true
-    domain_name  = var.opensearch_domain_name
-    # Note: Add endpoint/ARN outputs once opensearch module has outputs defined
-    message = "OpenSearch deployed. Add module outputs for endpoint details."
+    deployed           = true
+    domain_id          = module.opensearch[0].domain_id
+    domain_name        = module.opensearch[0].domain_name
+    domain_arn         = module.opensearch[0].domain_arn
+    endpoint           = module.opensearch[0].endpoint
+    dashboard_endpoint = module.opensearch[0].dashboard_endpoint
+    health_check_url   = module.opensearch[0].health_check_url
+    engine_version     = module.opensearch[0].engine_version
+    s3vector_enabled   = module.opensearch[0].s3vector_engine_enabled
+    deployment_info    = module.opensearch[0].deployment_info
+    message            = ""
   } : {
-    deployed = false
-    message  = "OpenSearch not deployed. Set var.deploy_opensearch=true to enable."
+    deployed           = false
+    domain_id          = ""
+    domain_name        = ""
+    domain_arn         = ""
+    endpoint           = ""
+    dashboard_endpoint = ""
+    health_check_url   = ""
+    engine_version     = ""
+    s3vector_enabled   = false
+    deployment_info    = {}
+    message            = "OpenSearch not deployed. Set var.deploy_opensearch=true to enable."
   }
 }
 
@@ -59,13 +75,31 @@ output "opensearch" {
 output "qdrant" {
   description = "Qdrant ECS deployment information"
   value = var.deploy_qdrant ? {
-    deployed        = true
-    deployment_name = var.qdrant_deployment_name
-    # Note: Add endpoint outputs once qdrant module has outputs defined
-    message = "Qdrant deployed on ECS Fargate. Add module outputs for endpoint details."
+    deployed                 = true
+    deployment_name          = var.qdrant_deployment_name
+    cluster_arn              = module.qdrant[0].cluster_arn
+    service_name             = module.qdrant[0].service_name
+    security_group_id        = module.qdrant[0].security_group_id
+    endpoint_discovery       = module.qdrant[0].endpoint_discovery_command
+    rest_api_port            = module.qdrant[0].rest_api_port
+    grpc_port                = module.qdrant[0].grpc_port
+    efs_id                   = module.qdrant[0].efs_id
+    deployment_info          = module.qdrant[0].deployment_info
+    note                     = "Use endpoint_discovery_command to get the current task IP (dynamic IP on ECS)"
+    message                  = ""
   } : {
-    deployed = false
-    message  = "Qdrant not deployed. Set var.deploy_qdrant=true to enable."
+    deployed                 = false
+    deployment_name          = ""
+    cluster_arn              = ""
+    service_name             = ""
+    security_group_id        = ""
+    endpoint_discovery       = ""
+    rest_api_port            = 0
+    grpc_port                = 0
+    efs_id                   = ""
+    deployment_info          = {}
+    note                     = ""
+    message                  = "Qdrant not deployed. Set var.deploy_qdrant=true to enable."
   }
 }
 
@@ -77,8 +111,10 @@ output "qdrant_ebs" {
     backend_type    = "ebs"
     message         = "Qdrant deployed on EC2 with attached EBS volume."
   } : {
-    deployed = false
-    message  = "Qdrant EC2+EBS not deployed. Set var.deploy_qdrant_ebs=true to enable."
+    deployed        = false
+    deployment_name = ""
+    backend_type    = ""
+    message         = "Qdrant EC2+EBS not deployed. Set var.deploy_qdrant_ebs=true to enable."
   }
 }
 
@@ -90,39 +126,93 @@ output "qdrant_ebs" {
 output "lancedb_s3" {
   description = "LanceDB S3 backend deployment"
   value = var.deploy_lancedb_s3 ? {
-    deployed        = true
-    deployment_name = "${var.lancedb_deployment_name}-s3"
-    backend_type    = "s3"
-    message = "LanceDB S3 backend deployed on ECS Fargate."
+    deployed              = true
+    deployment_name       = "${var.lancedb_deployment_name}-s3"
+    backend_type          = "s3"
+    cluster_arn           = module.lancedb_s3[0].cluster_arn
+    service_name          = module.lancedb_s3[0].service_name
+    security_group_id     = module.lancedb_s3[0].security_group_id
+    s3_bucket_name        = module.lancedb_s3[0].s3_bucket_name
+    endpoint_discovery    = module.lancedb_s3[0].endpoint_discovery_command
+    deployment_info       = module.lancedb_s3[0].deployment_info
+    note                  = "Use endpoint_discovery_command to get the current task IP (dynamic IP on ECS)"
+    message               = ""
   } : {
-    deployed = false
-    message  = "LanceDB S3 not deployed. Set var.deploy_lancedb_s3=true to enable."
+    deployed              = false
+    deployment_name       = ""
+    backend_type          = ""
+    cluster_arn           = ""
+    service_name          = ""
+    security_group_id     = ""
+    s3_bucket_name        = ""
+    endpoint_discovery    = ""
+    deployment_info       = {}
+    note                  = ""
+    message               = "LanceDB S3 not deployed. Set var.deploy_lancedb_s3=true to enable."
   }
 }
 
 output "lancedb_efs" {
   description = "LanceDB EFS backend deployment"
   value = var.deploy_lancedb_efs ? {
-    deployed        = true
-    deployment_name = "${var.lancedb_deployment_name}-efs"
-    backend_type    = "efs"
-    message = "LanceDB EFS backend deployed on ECS Fargate."
+    deployed              = true
+    deployment_name       = "${var.lancedb_deployment_name}-efs"
+    backend_type          = "efs"
+    cluster_arn           = module.lancedb_efs[0].cluster_arn
+    service_name          = module.lancedb_efs[0].service_name
+    security_group_id     = module.lancedb_efs[0].security_group_id
+    efs_id                = module.lancedb_efs[0].efs_id
+    endpoint_discovery    = module.lancedb_efs[0].endpoint_discovery_command
+    deployment_info       = module.lancedb_efs[0].deployment_info
+    note                  = "Use endpoint_discovery_command to get the current task IP (dynamic IP on ECS)"
+    message               = ""
   } : {
-    deployed = false
-    message  = "LanceDB EFS not deployed. Set var.deploy_lancedb_efs=true to enable."
+    deployed              = false
+    deployment_name       = ""
+    backend_type          = ""
+    cluster_arn           = ""
+    service_name          = ""
+    security_group_id     = ""
+    efs_id                = ""
+    endpoint_discovery    = ""
+    deployment_info       = {}
+    note                  = ""
+    message               = "LanceDB EFS not deployed. Set var.deploy_lancedb_efs=true to enable."
   }
 }
 
 output "lancedb_ebs" {
-  description = "LanceDB EBS backend deployment"
+  description = "LanceDB EBS backend deployment (EC2 with dedicated EBS volume)"
   value = var.deploy_lancedb_ebs ? {
-    deployed        = true
-    deployment_name = "${var.lancedb_deployment_name}-ebs"
-    backend_type    = "ebs"
-    message = "LanceDB EBS backend deployed on ECS Fargate."
+    deployed              = true
+    deployment_name       = "${var.lancedb_deployment_name}-ebs"
+    backend_type          = "ebs"
+    deployment_type       = "ec2"
+    instance_id           = module.lancedb_ebs[0].instance_id
+    public_ip             = module.lancedb_ebs[0].public_ip
+    private_ip            = module.lancedb_ebs[0].private_ip
+    endpoint              = module.lancedb_ebs[0].endpoint
+    lancedb_api_url       = module.lancedb_ebs[0].lancedb_api_url
+    ebs_volume_id         = module.lancedb_ebs[0].ebs_volume_id
+    security_group_id     = module.lancedb_ebs[0].security_group_id
+    deployment_info       = module.lancedb_ebs[0].deployment_info
+    note                  = "True EC2+EBS deployment with direct endpoint access"
+    message               = ""
   } : {
-    deployed = false
-    message  = "LanceDB EBS not deployed. Set var.deploy_lancedb_ebs=true to enable."
+    deployed              = false
+    deployment_name       = ""
+    backend_type          = ""
+    deployment_type       = ""
+    instance_id           = ""
+    public_ip             = ""
+    private_ip            = ""
+    endpoint              = ""
+    lancedb_api_url       = ""
+    ebs_volume_id         = ""
+    security_group_id     = ""
+    deployment_info       = {}
+    note                  = ""
+    message               = "LanceDB EBS not deployed. Set var.deploy_lancedb_ebs=true to enable."
   }
 }
 

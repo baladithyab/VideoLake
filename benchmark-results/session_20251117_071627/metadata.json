@@ -1,0 +1,23 @@
+{
+  "session_id": "20251117_071627",
+  "start_time": "2025-11-17T07:16:27Z",
+  "configuration": {
+    "query_count": 10,
+    "top_k": 10,
+    "dimension": 1024,
+    "max_retries": 3,
+    "modalities": [
+  "text"
+],
+    "backends": [
+  "s3vector",
+  "qdrant-ebs"
+]
+  },
+  "environment": {
+    "s3vector_bucket": "videolake-vectors",
+    "qdrant_ebs_endpoint": "http://44.201.32.17:6333",
+    "lancedb_ebs_endpoint": "http://98.82.24.196:8000",
+    "opensearch_endpoint": "null"
+  }
+}

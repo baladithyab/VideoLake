@@ -131,6 +131,48 @@ resource "aws_iam_role" "task_role" {
   })
 }
 
+# IAM Policy for benchmark task - S3 Vectors, S3, and backend access
+resource "aws_iam_role_policy" "task_role" {
+  name = "${var.deployment_name}-task-policy"
+  role = aws_iam_role.task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3vectors:*"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::videolake-vectors",
+          "arn:aws:s3:::videolake-vectors/*",
+          "arn:aws:s3:::videolake-shared-media",
+          "arn:aws:s3:::videolake-shared-media/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # CloudWatch log group
 resource "aws_cloudwatch_log_group" "benchmark_runner" {
   name              = "/ecs/benchmark/${var.deployment_name}"

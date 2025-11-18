@@ -1,0 +1,72 @@
+============================================================
+PERFORMANCE COMPARISON CHART
+============================================================
+
+Throughput (Queries Per Second) - Higher is Better
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+S3Vector       ████████████████████ 5.01 QPS
+Qdrant EFS     ████████████████     4.00 QPS
+Qdrant EBS     ████████████████     3.99 QPS
+LanceDB EFS    █████████            2.33 QPS
+LanceDB S3     █████████            2.32 QPS
+LanceDB EBS    ████████             2.21 QPS
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Latency P50 (milliseconds) - Lower is Better
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+S3Vector       ████████             202 ms
+Qdrant EFS     ██████████           251 ms
+Qdrant EBS     ██████████           252 ms
+LanceDB EFS    ████████████████████ 434 ms
+LanceDB S3     ████████████████████ 437 ms
+LanceDB EBS    █████████████████████ 452 ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Latency Consistency (Std Dev) - Lower is Better
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Qdrant EFS     ██                    8 ms  ⭐ Most Consistent
+Qdrant EBS     ███                  10 ms
+LanceDB EFS    ██████               21 ms
+LanceDB S3     ██████               21 ms
+LanceDB EBS    ███████              23 ms
+S3Vector       █████████████        44 ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Performance vs Cost Trade-off
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+                Performance    Cost        Ops Overhead
+S3Vector        ⭐⭐⭐⭐⭐      💰💰💰      ✅ None (Serverless)
+Qdrant EFS      ⭐⭐⭐⭐        💰💰💰      ⚠️ Medium (ECS)
+Qdrant EBS      ⭐⭐⭐⭐        💰💰💰💰    ⚠️ High (EC2)
+LanceDB EFS     ⭐⭐           💰💰        ⚠️ Medium (ECS)
+LanceDB S3      ⭐⭐           💰          ⚠️ Medium (ECS)
+LanceDB EBS     ⭐⭐           💰💰💰💰    ⚠️ High (EC2)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Use Case Recommendations
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+�� Real-time Search (Low Latency)
+   → S3Vector (202ms p50, 5.01 QPS)
+
+🎯 Predictable Performance
+   → Qdrant EFS (8ms std dev, 4.00 QPS)
+
+🎯 Cost-Optimized Batch Processing
+   → LanceDB S3 (cheapest storage, 2.32 QPS)
+
+🎯 High Throughput
+   → S3Vector (5.01 QPS, 25% faster than Qdrant)
+
+🎯 Hybrid Search (Metadata + Vectors)
+   → OpenSearch (pending benchmarks)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

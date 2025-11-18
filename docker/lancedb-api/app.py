@@ -107,19 +107,20 @@ class SearchResult(BaseModel):
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """
-    Health check endpoint for ECS/container orchestration
-    Returns operational status and storage information
+    Fast health check endpoint for ECS/container orchestration
+    Returns operational status without expensive operations
     """
     try:
         if db_connection is None:
             raise HTTPException(status_code=503, detail="Database connection not initialized")
-        
-        tables = list(db_connection.table_names())
+
+        # Fast health check - just verify connection is alive
+        # Avoid listing tables on every health check (expensive for S3/EFS)
         return HealthResponse(
             status="healthy",
             storage_type=STORAGE_TYPE,
             storage_uri=get_db_uri(),
-            tables_count=len(tables)
+            tables_count=0  # Set to 0 to avoid expensive table listing
         )
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -231,68 +232,33 @@ async def create_or_update_index(request: CreateIndexRequest):
 async def vector_search(request: SearchRequest):
     """Perform vector similarity search on a LanceDB table.
 
-    This endpoint is used directly by the Videolake benchmark harness. It is
-    intentionally defensive and will surface common configuration issues (like
-    missing tables or dimension mismatches) as clear 4xx errors instead of
-    opaque 500s.
+    Optimized for maximum performance - minimal validation, direct search execution.
     """
     try:
         if db_connection is None:
             raise HTTPException(status_code=503, detail="Database connection not initialized")
 
-        table_names = list(db_connection.table_names())
-        if request.table_name not in table_names:
-            raise HTTPException(status_code=404, detail=f"Table '{request.table_name}' not found")
-
-        # Open table and perform search
+        # Fast path: open table and search immediately
+        # Table existence check happens implicitly in open_table
         table = db_connection.open_table(request.table_name)
 
-        # Optional: basic dimension sanity check to turn common issues into
-        # explicit 400s instead of generic 500s.
-        try:
-            sample_df = table.to_pandas(limit=1)  # type: ignore[arg-type]
-            if not sample_df.empty and "vector" in sample_df.columns:
-                stored_dim = len(sample_df["vector"].iloc[0])
-                query_dim = len(request.query_vector)
-                if stored_dim != query_dim:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            f"Query vector dimension {query_dim} does not match "
-                            f"table dimension {stored_dim} for '{request.table_name}'"
-                        ),
-                    )
-        except HTTPException:
-            # Re-raise dimension errors directly
-            raise
-        except Exception as dim_exc:
-            # Log and continue if we cannot compute dimensions; we don't want
-            # this validation to break otherwise healthy searches.
-            logger.warning(
-                "Dimension validation for LanceDB table '%s' failed: %s",
-                request.table_name,
-                dim_exc,
-            )
-
-        # Build search query (metric selection handled by LanceDB internally)
+        # Build and execute search query in one go
         search = table.search(request.query_vector).limit(request.limit)
 
         # Apply filter if provided
         if request.filter:
             search = search.where(request.filter)
 
-        # Execute search
+        # Execute search and convert to pandas
         results = search.to_pandas()
 
-        # Convert results to list of dictionaries
+        # Fast conversion to dict records
         results_list = results.to_dict("records")
 
-        # Ensure proper typing for Pydantic and JSON serialization
+        # Minimal serialization - only handle numpy arrays
         def _to_serializable(value: Any):
-            """Convert values (including numpy types) to JSON-serializable forms."""
             if isinstance(value, np.ndarray):
                 return value.tolist()
-            # Handle pandas / numpy scalar types
             if hasattr(value, "item"):
                 try:
                     return value.item()
@@ -304,22 +270,15 @@ async def vector_search(request: SearchRequest):
             {str(k): _to_serializable(v) for k, v in record.items()} for record in results_list
         ]
 
-        logger.info(
-            "Search on '%s' returned %d results (limit=%d)",
-            request.table_name,
-            len(results_typed),
-            request.limit,
-        )
-
         return SearchResult(results=results_typed, count=len(results_typed))
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(
-            "Failed to perform search on table '%s': %s", request.table_name, e, exc_info=True
+            "Search failed on table '%s': %s", request.table_name, str(e)
         )
-        raise HTTPException(status_code=500, detail=f"Failed to perform search: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 
 @app.delete("/tables/{table_name}")

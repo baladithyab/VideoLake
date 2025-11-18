@@ -1,0 +1,30 @@
+==========================================
+Benchmark Session Summary
+==========================================
+
+Session ID: 20251117_071627
+Date: Mon Nov 17 07:16:33 UTC 2025
+
+Configuration:
+  Query Count: 10
+  Top-K: 10
+  Dimension: 1024
+  Modalities: text
+  Backends: s3vector qdrant-ebs
+
+Results:
+  Total Benchmarks: 2
+  Successful: 2
+  Failed: 0
+  Success Rate: 100%
+
+Output Directory: /home/ubuntu/S3Vector/benchmark-results/session_20251117_071627
+Log File: /home/ubuntu/S3Vector/logs/benchmark_20251117_071627.log
+
+Results by Backend/Modality:
+
+  s3vector:
+    text: ✓ SUCCESS
+
+  qdrant-ebs:
+    text: ✓ SUCCESS

@@ -237,6 +237,12 @@ variable "lancedb_deployment_name" {
   default     = "videolake-lancedb"
 }
 
+variable "lancedb_instance_type" {
+  description = "EC2 instance type for LanceDB EBS backend"
+  type        = string
+  default     = "t3.xlarge"
+}
+
 variable "lancedb_storage_gb" {
   description = "Storage size for LanceDB EBS backend in GB"
   type        = number

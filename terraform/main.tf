@@ -187,6 +187,7 @@ module "opensearch" {
   count  = var.deploy_opensearch ? 1 : 0
   source = "./modules/opensearch"
 
+  region                     = var.aws_region
   domain_name                = var.opensearch_domain_name
   engine_version             = "OpenSearch_2.19" # Required for S3Vector
   instance_type              = var.opensearch_instance_type
@@ -316,21 +317,20 @@ module "lancedb_efs" {
   }
 }
 
-# LanceDB EBS Backend (single-AZ, fast local storage)
+# LanceDB EBS Backend (EC2 with dedicated EBS volume for true EBS performance)
 module "lancedb_ebs" {
   count  = var.deploy_lancedb_ebs ? 1 : 0
-  source = "./modules/lancedb_ecs"
+  source = "./modules/lancedb_ec2"
 
-  aws_region      = var.aws_region
-  deployment_name = "${var.lancedb_deployment_name}-ebs"
-  backend_type    = "ebs"
-  # Scale LanceDB EBS backend to 4 vCPU / 16 GB when enabled.
-  task_cpu        = 4096
-  task_memory_mb  = 16384
+  aws_region        = var.aws_region
+  deployment_name   = "${var.lancedb_deployment_name}-ebs"
+  availability_zone = data.aws_availability_zones.available.names[0]
+  instance_type     = var.lancedb_instance_type
+  ebs_volume_size_gb = var.lancedb_storage_gb
 
   tags = {
     VectorStore = "LanceDB"
-    Deployment  = "ECS-Fargate"
+    Deployment  = "EC2-EBS"
     Backend     = "EBS"
   }
 }

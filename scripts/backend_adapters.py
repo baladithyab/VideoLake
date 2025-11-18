@@ -14,6 +14,7 @@ import numpy as np
 import requests
 import json
 import sys
+import os
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -280,6 +281,8 @@ class OpenSearchAdapter(BackendAdapter):
         endpoint: str,
         region: Optional[str] = None,
         vector_field: str = "embedding",
+        username: Optional[str] = None,
+        password: Optional[str] = None,
     ) -> None:
         # Normalise endpoint to https://host form
         raw = endpoint.strip()
@@ -301,30 +304,44 @@ class OpenSearchAdapter(BackendAdapter):
         session = boto3.Session()
         self.region = region or inferred_region or session.region_name or "us-east-1"
 
-        credentials = session.get_credentials()
-        if credentials is None:
-            raise RuntimeError("AWS credentials not found for OpenSearchAdapter")
+        # Support both HTTP Basic Auth (fine-grained access control) and SigV4 (IAM)
+        self.username = username
+        self.password = password
+        self.use_basic_auth = username is not None and password is not None
 
-        self.awsauth = AWS4Auth(
-            credentials.access_key,
-            credentials.secret_key,
-            self.region,
-            "es",
-            session_token=credentials.token,
-        )
+        if not self.use_basic_auth:
+            # Use SigV4 authentication with IAM credentials
+            credentials = session.get_credentials()
+            if credentials is None:
+                raise RuntimeError("AWS credentials not found for OpenSearchAdapter")
+
+            self.awsauth = AWS4Auth(
+                credentials.access_key,
+                credentials.secret_key,
+                self.region,
+                "es",
+                session_token=credentials.token,
+            )
+        else:
+            self.awsauth = None
+
         self.session = requests.Session()
         self._index_initialized: Dict[str, bool] = {}
 
+        auth_method = "HTTP Basic Auth" if self.use_basic_auth else "SigV4"
         logger.info(
-            "Initialized OpenSearchAdapter at %s (region=%s, vector_field=%s)",
+            "Initialized OpenSearchAdapter at %s (region=%s, vector_field=%s, auth=%s)",
             self.endpoint,
             self.region,
             self.vector_field,
+            auth_method,
         )
 
 
     def _auth(self):
-        """Return auth object for OpenSearch requests (SigV4)."""
+        """Return auth object for OpenSearch requests (HTTP Basic Auth or SigV4)."""
+        if self.use_basic_auth:
+            return (self.username, self.password)
         return self.awsauth
 
     def get_endpoint_info(self) -> Dict[str, str]:
@@ -870,21 +887,21 @@ BACKEND_TYPES = {
 # hard-coded IPs.
 DEFAULT_ENDPOINTS = {
     # Qdrant on ECS Fargate with EFS backend
-    'qdrant': 'http://54.80.93.203:6333',
-    'qdrant-efs': 'http://54.80.93.203:6333',
+    'qdrant': 'http://54.90.142.5:6333',
+    'qdrant-efs': 'http://54.90.142.5:6333',
 
     # Qdrant on EC2 with dedicated EBS volume
-    'qdrant-ebs': 'http://44.201.42.120:6333',
+    'qdrant-ebs': 'http://44.192.62.209:6333',
 
     # LanceDB on ECS Fargate with EFS backend (canonical "lancedb" deployment)
-    'lancedb': 'http://98.91.216.3:8000',
-    'lancedb-efs': 'http://98.91.216.3:8000',
+    'lancedb': 'http://3.94.117.145:8000',
+    'lancedb-efs': 'http://3.94.117.145:8000',
 
     # LanceDB on ECS Fargate with S3-backed storage (cheapest)
-    'lancedb-s3': 'http://100.28.218.70:8000',
+    'lancedb-s3': 'http://98.81.178.222:8000',
 
-    # LanceDB on ECS Fargate with provisioned-throughput EFS (EBS-like)
-    'lancedb-ebs': 'http://54.81.108.213:8000',
+    # LanceDB on EC2 with EBS volume (true EBS performance)
+    'lancedb-ebs': 'http://18.207.106.185:8000',
 
     # OpenSearch domain with S3 Vectors engine
     'opensearch': 'https://search-videolake-jp74yuza4pylhzhut4vimyh43a.us-east-1.es.amazonaws.com',
@@ -942,7 +959,16 @@ def get_backend_adapter(backend: str, config: Optional[Dict[str, Any]] = None) -
         endpoint = config.get('endpoint') or DEFAULT_ENDPOINTS.get(backend)
         if not endpoint:
             raise ValueError(f"No endpoint configured for backend: {backend}")
-        return OpenSearchAdapter(endpoint=endpoint)
+
+        # Get OpenSearch credentials from config or environment
+        username = config.get('username') or os.environ.get('OPENSEARCH_USERNAME', 'admin')
+        password = config.get('password') or os.environ.get('OPENSEARCH_PASSWORD', 'MediaLake-Demo-2024!')
+
+        return OpenSearchAdapter(
+            endpoint=endpoint,
+            username=username,
+            password=password
+        )
     else:
         raise ValueError(f"Unsupported backend type: {backend_type}")
 

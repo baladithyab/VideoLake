@@ -1,0 +1,29 @@
+{
+  "session_id": "20251117_071717",
+  "start_time": "2025-11-17T07:17:17Z",
+  "configuration": {
+    "query_count": 100,
+    "top_k": 10,
+    "dimension": 1024,
+    "max_retries": 3,
+    "modalities": [
+  "text",
+  "image",
+  "audio"
+],
+    "backends": [
+  "s3vector",
+  "qdrant-ebs",
+  "lancedb-ebs",
+  "lancedb-efs",
+  "lancedb-s3",
+  "qdrant-efs"
+]
+  },
+  "environment": {
+    "s3vector_bucket": "videolake-vectors",
+    "qdrant_ebs_endpoint": "http://44.201.32.17:6333",
+    "lancedb_ebs_endpoint": "http://98.82.24.196:8000",
+    "opensearch_endpoint": "null"
+  }
+}
