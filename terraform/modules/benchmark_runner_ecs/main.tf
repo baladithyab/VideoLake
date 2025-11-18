@@ -44,6 +44,16 @@ variable "benchmark_command" {
   default     = ["python", "scripts/benchmark_backend.py", "--help"]
 }
 
+variable "results_bucket_name" {
+  description = "S3 bucket for benchmark results and logs (shared media bucket)"
+  type        = string
+}
+
+variable "vector_bucket_name" {
+  description = "S3Vector vector bucket name used by the benchmarks"
+  type        = string
+}
+
 variable "tags" {
   description = "Common tags"
   type        = map(string)
@@ -154,10 +164,10 @@ resource "aws_iam_role_policy" "task_role" {
           "s3:ListBucket"
         ]
         Resource = [
-          "arn:aws:s3:::videolake-vectors",
-          "arn:aws:s3:::videolake-vectors/*",
-          "arn:aws:s3:::videolake-shared-media",
-          "arn:aws:s3:::videolake-shared-media/*"
+          "arn:aws:s3:::${var.vector_bucket_name}",
+          "arn:aws:s3:::${var.vector_bucket_name}/*",
+          "arn:aws:s3:::${var.results_bucket_name}",
+          "arn:aws:s3:::${var.results_bucket_name}/*"
         ]
       },
       {
@@ -200,6 +210,13 @@ resource "aws_ecs_task_definition" "benchmark_runner" {
       image = "${aws_ecr_repository.benchmark_runner.repository_url}:latest"
 
       command = var.benchmark_command
+
+      environment = [
+        { name = "AWS_DEFAULT_REGION", value = var.aws_region },
+        { name = "S3VECTOR_BUCKET",   value = var.vector_bucket_name },
+        { name = "S3_BUCKET",         value = var.results_bucket_name },
+        { name = "S3_RESULTS_PREFIX", value = "benchmark-results" }
+      ]
 
       logConfiguration = {
         logDriver = "awslogs"

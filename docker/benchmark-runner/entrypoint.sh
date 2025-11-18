@@ -15,6 +15,7 @@ MODALITIES="${MODALITIES:-text,image,audio}"
 QUERIES="${QUERIES:-100}"
 TOP_K="${TOP_K:-10}"
 DIMENSION="${DIMENSION:-1024}"
+S3VECTOR_BUCKET="${S3VECTOR_BUCKET:-videolake-vectors}"
 S3_BUCKET="${S3_BUCKET:-videolake-shared-media}"
 S3_RESULTS_PREFIX="${S3_RESULTS_PREFIX:-benchmark-results}"
 SESSION_NAME="${SESSION_NAME:-containerized_$(date +%Y%m%d_%H%M%S)}"
@@ -58,11 +59,15 @@ for backend in "${BACKEND_ARRAY[@]}"; do
         echo "[$CURRENT_BENCHMARK/$TOTAL_BENCHMARKS] $backend / $modality"
         echo "============================================"
         echo ""
-        
+
         # Set backend-specific parameters
         case "$backend" in
             s3vector)
-                BACKEND_ARGS="--backend s3vector --s3vector-bucket $S3_BUCKET --s3vector-index videolake-benchmark-visual-${modality}"
+                index_name="videolake-benchmark-visual-${modality}"
+                if [ "$modality" = "audio" ]; then
+                    index_name="videolake-benchmark-audio"
+                fi
+                BACKEND_ARGS="--backend s3vector --s3vector-bucket $S3VECTOR_BUCKET --s3vector-index ${index_name}"
                 ;;
             qdrant-ebs)
                 BACKEND_ARGS="--backend qdrant --endpoint $QDRANT_EBS_ENDPOINT --collection videolake-benchmark-${modality}"

@@ -37,7 +37,7 @@ This guide provides step-by-step instructions for setting up and executing bench
 **Required Permissions:**
 - **IAM**: Create roles and policies for ECS tasks
 - **S3**: Create and manage buckets
-- **S3 Vectors**: `s3vectors:*` for bucket/index operations  
+- **S3 Vectors**: `s3vectors:*` for bucket/index operations
 - **EC2**: Launch instances (if deploying Qdrant on EC2)
 - **ECS**: Create clusters, task definitions, services
 - **EFS**: Create file systems (for LanceDB/Qdrant EFS variants)
@@ -422,7 +422,7 @@ for modality in text image audio; do
       --embeddings "embeddings/cc-open-samples-marengo/cc-open-samples-${modality}.json" \
       --backends ${BACKENDS} \
       --collection "videolake-benchmark-${modality}"
-    
+
     if [ $? -eq 0 ]; then
         echo "✅ Successfully indexed ${modality}"
     else
@@ -750,14 +750,14 @@ for modality in "${MODALITIES[@]}"; do
     echo "========================================"
     echo "Indexing ${modality} embeddings"
     echo "========================================"
-    
+
     # 1. Index to S3Vector
     echo "→ S3Vector..."
     python scripts/index_embeddings.py \
       --embeddings "embeddings/cc-open-samples-marengo/cc-open-samples-${modality}.json" \
       --backends s3vector \
       --s3vector-index "${S3VECTOR_INDEXES[$modality]}"
-    
+
     # 2. Index to Qdrant EBS
     if [ -n "${QDRANT_EBS_ENDPOINT}" ]; then
         echo "→ Qdrant EBS..."
@@ -767,7 +767,7 @@ for modality in "${MODALITIES[@]}"; do
           --collection "videolake-benchmark-${modality}" \
           --qdrant-endpoint "${QDRANT_EBS_ENDPOINT}"
     fi
-    
+
     # 3. Index to LanceDB S3
     if [ -n "${LANCEDB_S3_ENDPOINT}" ]; then
         echo "→ LanceDB S3..."
@@ -777,7 +777,7 @@ for modality in "${MODALITIES[@]}"; do
           --collection "videolake-benchmark-${modality}" \
           --lancedb-endpoint "${LANCEDB_S3_ENDPOINT}"
     fi
-    
+
     # 4. Index to LanceDB EBS
     if [ -n "${LANCEDB_EBS_ENDPOINT}" ]; then
         echo "→ LanceDB EBS..."
@@ -787,7 +787,7 @@ for modality in "${MODALITIES[@]}"; do
           --collection "videolake-benchmark-${modality}" \
           --lancedb-endpoint "${LANCEDB_EBS_ENDPOINT}"
     fi
-    
+
     echo "✅ Completed indexing ${modality}"
     echo ""
 done
@@ -838,7 +838,7 @@ for modality in "${MODALITIES[@]}"; do
     echo "========================================"
     echo "Benchmarking ${modality} modality"
     echo "========================================"
-    
+
     # 1. S3Vector
     echo "→ S3Vector..."
     python scripts/benchmark_backend.py \
@@ -849,7 +849,7 @@ for modality in "${MODALITIES[@]}"; do
       --dimension ${DIMENSION} \
       --s3vector-index "${S3VECTOR_INDEXES[$modality]}" \
       --output "${RESULTS_DIR}/s3vector_${modality}_search.json"
-    
+
     # 2. Qdrant EBS
     if [ -n "${QDRANT_EBS_ENDPOINT}" ]; then
         echo "→ Qdrant EBS..."
@@ -863,7 +863,7 @@ for modality in "${MODALITIES[@]}"; do
           --endpoint "${QDRANT_EBS_ENDPOINT}" \
           --output "${RESULTS_DIR}/qdrant_ebs_${modality}_search.json"
     fi
-    
+
     # 3. LanceDB S3
     if [ -n "${LANCEDB_S3_ENDPOINT}" ]; then
         echo "→ LanceDB S3..."
@@ -877,7 +877,7 @@ for modality in "${MODALITIES[@]}"; do
           --endpoint "${LANCEDB_S3_ENDPOINT}" \
           --output "${RESULTS_DIR}/lancedb_s3_${modality}_search.json"
     fi
-    
+
     # 4. LanceDB EBS
     if [ -n "${LANCEDB_EBS_ENDPOINT}" ]; then
         echo "→ LanceDB EBS..."
@@ -891,13 +891,56 @@ for modality in "${MODALITIES[@]}"; do
           --endpoint "${LANCEDB_EBS_ENDPOINT}" \
           --output "${RESULTS_DIR}/lancedb_ebs_${modality}_search.json"
     fi
-    
+
     echo "✅ Completed ${modality} benchmarks"
     echo ""
 done
 
 echo "========================================"
 echo "All benchmarks complete!"
+
+### Step 4: Optional In-Region Containerized Benchmark (us-east-1)
+
+Once the backends are indexed and healthy, you can run the **containerized benchmark runner** from us-east-1 to remove dev-box ↔ region latency from the measurements.
+
+1. **Deploy the benchmark runner ECS module** (if not already enabled):
+   - In `terraform/terraform.tfvars` set:
+     - `deploy_benchmark_runner = true`
+   - Then apply:
+     ```bash
+     cd terraform
+     terraform apply
+     ```
+
+2. **Build and push the benchmark runner image** (if needed):
+   ```bash
+   cd /home/ubuntu/S3Vector
+   ./scripts/build_and_push_benchmark_image.sh
+   ```
+
+3. **Run a one-off in-region benchmark session** from this repo root:
+   ```bash
+   ./scripts/run_containerized_benchmark.sh
+   ```
+
+   This will:
+   - Start an ECS Fargate task in **us-east-1** using the same backends and modalities (text/image/audio).
+   - Run 100 queries per backend/modality with `top_k=10`, `dimension=1024`.
+   - Upload results under:
+     - `s3://<shared-media-bucket>/benchmark-results/<SESSION_NAME>/`
+
+4. **Inspect results and compare vs cross-region runs**:
+   - Tail CloudWatch logs:
+     ```bash
+     aws logs tail /ecs/benchmark/videolake-benchmark-runner --follow --region us-east-1
+     ```
+   - View the summarized benchmark output in S3 (example):
+     ```bash
+     aws s3 cp \
+       s3://videolake-shared-media/benchmark-results/<SESSION_NAME>/SUMMARY.txt -
+     ```
+   - See `benchmark-results/2025-11-17-lancedb-vs-qdrant-quick-benchmark.md` §5 for a fully documented example run (`multi_vector_20251117_235646`) and in-region LanceDB vs Qdrant vs S3Vector comparisons.
+
 echo "Results saved to: ${RESULTS_DIR}/"
 echo "========================================"
 ```
@@ -927,7 +970,7 @@ def load_results(results_dir: str) -> Dict[str, Dict[str, any]]:
     """Load all benchmark result files."""
     results = {}
     results_path = Path(results_dir)
-    
+
     for json_file in results_path.glob("*_search.json"):
         with open(json_file) as f:
             data = json.load(f)
@@ -936,10 +979,10 @@ def load_results(results_dir: str) -> Dict[str, Dict[str, any]]:
             parts = json_file.stem.split('_')
             backend = parts[0] if len(parts) > 0 else 'unknown'
             modality = parts[1] if len(parts) > 1 else 'unknown'
-            
+
             key = f"{backend}_{modality}"
             results[key] = data
-    
+
     return results
 
 def print_summary_table(results: Dict[str, Dict]):
@@ -949,34 +992,34 @@ def print_summary_table(results: Dict[str, Dict]):
     print("="*80)
     print(f"{'Backend':<20} {'Modality':<10} {'QPS':<8} {'P50 (ms)':<10} {'P95 (ms)':<10} {'P99 (ms)':<10}")
     print("-"*80)
-    
+
     for key, data in sorted(results.items()):
         if not data.get('success'):
             continue
-            
+
         parts = key.split('_')
         backend = parts[0]
         modality = parts[1] if len(parts) > 1 else 'N/A'
-        
+
         qps = data.get('throughput_qps', 0)
         p50 = data.get('latency_p50_ms', 0)
         p95 = data.get('latency_p95_ms', 0)
         p99 = data.get('latency_p99_ms', 0)
-        
+
         print(f"{backend:<20} {modality:<10} {qps:<8.2f} {p50:<10.0f} {p95:<10.0f} {p99:<10.0f}")
-    
+
     print("="*80)
 
 def calculate_averages(results: Dict[str, Dict]) -> Dict[str, Dict]:
     """Calculate average metrics per backend."""
     backend_metrics = {}
-    
+
     for key, data in results.items():
         if not data.get('success'):
             continue
-            
+
         backend = key.split('_')[0]
-        
+
         if backend not in backend_metrics:
             backend_metrics[backend] = {
                 'qps': [],
@@ -984,12 +1027,12 @@ def calculate_averages(results: Dict[str, Dict]) -> Dict[str, Dict]:
                 'p95': [],
                 'p99': []
             }
-        
+
         backend_metrics[backend]['qps'].append(data.get('throughput_qps', 0))
         backend_metrics[backend]['p50'].append(data.get('latency_p50_ms', 0))
         backend_metrics[backend]['p95'].append(data.get('latency_p95_ms', 0))
         backend_metrics[backend]['p99'].append(data.get('latency_p99_ms', 0))
-    
+
     # Calculate averages
     averages = {}
     for backend, metrics in backend_metrics.items():
@@ -999,7 +1042,7 @@ def calculate_averages(results: Dict[str, Dict]) -> Dict[str, Dict]:
             'p95': sum(metrics['p95']) / len(metrics['p95']) if metrics['p95'] else 0,
             'p99': sum(metrics['p99']) / len(metrics['p99']) if metrics['p99'] else 0,
         }
-    
+
     return averages
 
 def print_averages_table(averages: Dict[str, Dict]):
@@ -1009,28 +1052,28 @@ def print_averages_table(averages: Dict[str, Dict]):
     print("="*80)
     print(f"{'Backend':<20} {'Avg QPS':<12} {'Avg P50':<12} {'Avg P95':<12} {'Avg P99':<12}")
     print("-"*80)
-    
+
     for backend, metrics in sorted(averages.items(), key=lambda x: x[1]['qps'], reverse=True):
         print(f"{backend:<20} {metrics['qps']:<12.2f} {metrics['p50']:<12.0f} "
               f"{metrics['p95']:<12.0f} {metrics['p99']:<12.0f}")
-    
+
     print("="*80)
 
 if __name__ == '__main__':
     results_dir = sys.argv[1] if len(sys.argv) > 1 else 'benchmark-results/reproduction'
-    
+
     print(f"Loading results from: {results_dir}")
     results = load_results(results_dir)
-    
+
     if not results:
         print("No results found!")
         sys.exit(1)
-    
+
     print(f"Found {len(results)} result files")
-    
+
     # Print detailed table
     print_summary_table(results)
-    
+
     # Calculate and print averages
     averages = calculate_averages(results)
     print_averages_table(averages)
@@ -1460,7 +1503,7 @@ import json
 # Validate embedding file
 with open('embeddings/your-file.json') as f:
     data = json.load(f)
-    
+
 embeddings = data.get('embeddings', [])
 dimensions = {len(e['values']) for e in embeddings}
 
@@ -1607,7 +1650,7 @@ aws logs tail /ecs/videolake-qdrant --since 1h
 
 ### Benchmark Limitations
 
-1. **Single-Region Testing** 
+1. **Single-Region Testing**
    - **Issue**: All benchmarks run from single region (us-east-1)
    - **Impact**: Latency includes network distance to backends
    - **Recommendation**: Test from multiple regions for global applications

@@ -340,8 +340,10 @@ module "benchmark_runner" {
   count  = var.deploy_benchmark_runner ? 1 : 0
   source = "./modules/benchmark_runner_ecs"
 
-  aws_region      = var.aws_region
-  deployment_name = "videolake-benchmark-runner"
+  aws_region         = var.aws_region
+  deployment_name    = "videolake-benchmark-runner"
+  results_bucket_name = local.shared_bucket_name
+  vector_bucket_name  = module.s3vector[0].vector_bucket_name
 
   tags = {
     Component = "BenchmarkRunner"
