@@ -95,6 +95,26 @@ resource "aws_iam_role_policy_attachment" "benchmark_ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+# S3 and S3Vectors Access Policy
+resource "aws_iam_role_policy" "benchmark_s3_access" {
+  name = "${var.deployment_name}-benchmark-s3-access"
+  role = aws_iam_role.benchmark.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:*",
+          "s3vectors:*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # Instance profile
 resource "aws_iam_instance_profile" "benchmark" {
   name_prefix = "${var.deployment_name}-benchmark-"
@@ -122,6 +142,10 @@ locals {
   user_data = <<-EOF
     #!/bin/bash
     set -e
+
+    # Explicitly set region to ensure in-region latency for benchmarks
+    export AWS_DEFAULT_REGION=us-east-1
+    export AWS_REGION=us-east-1
 
     yum update -y
     yum install -y python3 git jq amazon-cloudwatch-agent
@@ -165,7 +189,22 @@ CWCFG
 
         python3 -m venv venv >> /var/log/lancedb-embedded-client-benchmark.log 2>&1
         source venv/bin/activate
-        pip install -r requirements.txt >> /var/log/lancedb-embedded-client-benchmark.log 2>&1
+        # Use lightweight requirements for benchmark to avoid timeouts
+        # Overwrite with local version to ensure latest fixes are applied
+        cat > requirements-benchmark.txt <<'REQEOF'
+# Core dependencies for LanceDB embedded benchmark
+boto3>=1.34.0
+botocore>=1.34.0
+numpy>=1.24.0
+pandas>=2.0.0
+lancedb>=0.3.0
+pyarrow>=14.0.0
+requests>=2.31.0
+requests-aws4auth>=1.3.1
+python-dotenv>=1.0.0
+REQEOF
+
+        pip install -r requirements-benchmark.txt >> /var/log/lancedb-embedded-client-benchmark.log 2>&1
 
         export LANCEDB_S3_BUCKET="${var.s3_bucket}"
         export LANCEDB_S3_PREFIX="${var.s3_prefix}"

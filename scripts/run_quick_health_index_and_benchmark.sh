@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
+# Ensure we are running in us-east-1 to avoid cross-region latency
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_REGION=us-east-1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_DIR="${PROJECT_ROOT}/logs"
@@ -10,9 +14,14 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 LOG_FILE="${LOG_DIR}/quick_health_index_benchmark_${TIMESTAMP}.log"
 HEALTH_FILE="${LOG_DIR}/quick_health_${TIMESTAMP}.json"
 
-BACKENDS=("lancedb-ebs" "lancedb-efs" "lancedb-s3" "qdrant-ebs" "qdrant-efs")
+BACKENDS=("s3vector" "lancedb-ebs" "lancedb-efs" "lancedb-s3" "qdrant-ebs" "qdrant-efs" "lancedb-embedded")
 EMBED_FILE="${PROJECT_ROOT}/embeddings/marengo/marengo-benchmark-v1-text.json"
 COLLECTION="text_embeddings"
+
+# Set local path for embedded LanceDB
+export LANCEDB_URI="/tmp/lancedb-embedded"
+rm -rf "$LANCEDB_URI" # Clean start for embedded
+mkdir -p "$LANCEDB_URI"
 
 echo "===============================================" | tee -a "$LOG_FILE"
 echo " Quick Health + Index + Benchmark Runner" | tee -a "$LOG_FILE"
@@ -25,14 +34,30 @@ echo "" | tee -a "$LOG_FILE"
 echo "=== Service health discovery ===" | tee -a "$LOG_FILE"
 python3 - << 'PY' | tee "$HEALTH_FILE" | tee -a "$LOG_FILE"
 import json
-from scripts.backend_adapters import validate_backend_connectivity
+import sys
+import os
+print(f"DEBUG: CWD: {os.getcwd()}", file=sys.stderr)
+print(f"DEBUG: sys.path: {sys.path}", file=sys.stderr)
+try:
+    from scripts.backend_adapters import validate_backend_connectivity
+except ImportError as e:
+    print(f"DEBUG: ImportError: {e}", file=sys.stderr)
+    # Try adding scripts directory to sys.path
+    sys.path.append(os.path.join(os.getcwd(), 'scripts'))
+    try:
+        from backend_adapters import validate_backend_connectivity
+    except ImportError as e2:
+        print(f"DEBUG: ImportError 2: {e2}", file=sys.stderr)
+        raise e2
 
 backends = [
+    "s3vector",
     "lancedb-ebs",
     "lancedb-efs",
     "lancedb-s3",
     "qdrant-ebs",
     "qdrant-efs",
+    "lancedb-embedded",
     "opensearch",
 ]
 

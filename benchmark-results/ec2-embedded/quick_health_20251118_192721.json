@@ -1,0 +1,84 @@
+{
+  "s3vector": {
+    "backend": "s3vector",
+    "accessible": false,
+    "endpoint_info": {
+      "type": "sdk",
+      "service": "s3vectors",
+      "endpoint": "s3vectors.us-east-1.amazonaws.com",
+      "region": "us-east-1"
+    },
+    "response_time_ms": 82.53,
+    "timestamp": 1763494042.2453053
+  },
+  "lancedb-ebs": {
+    "backend": "lancedb-ebs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "lancedb",
+      "endpoint": "http://18.207.106.185:8000",
+      "health_path": "/health"
+    },
+    "response_time_ms": 8.75,
+    "timestamp": 1763494042.2540956
+  },
+  "lancedb-efs": {
+    "backend": "lancedb-efs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "lancedb",
+      "endpoint": "http://3.94.117.145:8000",
+      "health_path": "/health"
+    },
+    "response_time_ms": 4.66,
+    "timestamp": 1763494042.258787
+  },
+  "lancedb-s3": {
+    "backend": "lancedb-s3",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "lancedb",
+      "endpoint": "http://98.81.178.222:8000",
+      "health_path": "/health"
+    },
+    "response_time_ms": 4.14,
+    "timestamp": 1763494042.262948
+  },
+  "qdrant-ebs": {
+    "backend": "qdrant-ebs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "qdrant",
+      "endpoint": "http://44.192.62.209:6333"
+    },
+    "response_time_ms": 3.38,
+    "timestamp": 1763494042.2663481
+  },
+  "qdrant-efs": {
+    "backend": "qdrant-efs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "qdrant",
+      "endpoint": "http://54.90.142.5:6333"
+    },
+    "response_time_ms": 3.63,
+    "timestamp": 1763494042.2700353
+  },
+  "opensearch": {
+    "backend": "opensearch",
+    "accessible": false,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "opensearch",
+      "endpoint": "https://search-videolake-jp74yuza4pylhzhut4vimyh43a.us-east-1.es.amazonaws.com",
+      "region": "us-east-1"
+    },
+    "response_time_ms": 39.24,
+    "timestamp": 1763494042.3181634
+  }
+}

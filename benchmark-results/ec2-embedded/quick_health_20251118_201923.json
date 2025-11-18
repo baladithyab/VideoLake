@@ -1,0 +1,84 @@
+{
+  "s3vector": {
+    "backend": "s3vector",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "sdk",
+      "service": "s3vectors",
+      "endpoint": "s3vectors.us-east-1.amazonaws.com",
+      "region": "us-east-1"
+    },
+    "response_time_ms": 54.34,
+    "timestamp": 1763497164.5175905
+  },
+  "lancedb-ebs": {
+    "backend": "lancedb-ebs",
+    "accessible": false,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "lancedb",
+      "endpoint": "http://18.207.106.185:8000",
+      "health_path": "/health"
+    },
+    "response_time_ms": 5008.14,
+    "timestamp": 1763497169.5257654
+  },
+  "lancedb-efs": {
+    "backend": "lancedb-efs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "lancedb",
+      "endpoint": "http://3.94.117.145:8000",
+      "health_path": "/health"
+    },
+    "response_time_ms": 4.86,
+    "timestamp": 1763497169.530665
+  },
+  "lancedb-s3": {
+    "backend": "lancedb-s3",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "lancedb",
+      "endpoint": "http://98.81.178.222:8000",
+      "health_path": "/health"
+    },
+    "response_time_ms": 4.38,
+    "timestamp": 1763497169.5350745
+  },
+  "qdrant-ebs": {
+    "backend": "qdrant-ebs",
+    "accessible": false,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "qdrant",
+      "endpoint": "http://44.192.62.209:6333"
+    },
+    "response_time_ms": 5007.08,
+    "timestamp": 1763497174.5421746
+  },
+  "qdrant-efs": {
+    "backend": "qdrant-efs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "qdrant",
+      "endpoint": "http://54.90.142.5:6333"
+    },
+    "response_time_ms": 4.69,
+    "timestamp": 1763497174.5469527
+  },
+  "opensearch": {
+    "backend": "opensearch",
+    "accessible": false,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "opensearch",
+      "endpoint": "https://search-videolake-jp74yuza4pylhzhut4vimyh43a.us-east-1.es.amazonaws.com",
+      "region": "us-east-1"
+    },
+    "response_time_ms": 4.66,
+    "timestamp": 1763497174.5635018
+  }
+}

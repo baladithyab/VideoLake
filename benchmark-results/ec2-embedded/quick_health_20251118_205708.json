@@ -1,0 +1,95 @@
+{
+  "s3vector": {
+    "backend": "s3vector",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "sdk",
+      "service": "s3vectors",
+      "endpoint": "s3vectors.us-east-1.amazonaws.com",
+      "region": "us-east-1"
+    },
+    "response_time_ms": 47.64,
+    "timestamp": 1763499428.8448796
+  },
+  "lancedb-ebs": {
+    "backend": "lancedb-ebs",
+    "accessible": false,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "lancedb",
+      "endpoint": "http://18.207.106.185:8000",
+      "health_path": "/health"
+    },
+    "response_time_ms": 5007.24,
+    "timestamp": 1763499433.852147
+  },
+  "lancedb-efs": {
+    "backend": "lancedb-efs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "lancedb",
+      "endpoint": "http://3.94.117.145:8000",
+      "health_path": "/health"
+    },
+    "response_time_ms": 4.44,
+    "timestamp": 1763499433.856615
+  },
+  "lancedb-s3": {
+    "backend": "lancedb-s3",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "lancedb",
+      "endpoint": "http://98.81.178.222:8000",
+      "health_path": "/health"
+    },
+    "response_time_ms": 4.78,
+    "timestamp": 1763499433.8614156
+  },
+  "qdrant-ebs": {
+    "backend": "qdrant-ebs",
+    "accessible": false,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "qdrant",
+      "endpoint": "http://44.192.62.209:6333"
+    },
+    "response_time_ms": 5006.72,
+    "timestamp": 1763499438.8681643
+  },
+  "qdrant-efs": {
+    "backend": "qdrant-efs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "qdrant",
+      "endpoint": "http://54.90.142.5:6333"
+    },
+    "response_time_ms": 4.49,
+    "timestamp": 1763499438.8726966
+  },
+  "lancedb-embedded": {
+    "backend": "lancedb-embedded",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "embedded",
+      "backend": "lancedb-embedded",
+      "endpoint": "/tmp/lancedb-embedded"
+    },
+    "response_time_ms": 1.25,
+    "timestamp": 1763499440.57412
+  },
+  "opensearch": {
+    "backend": "opensearch",
+    "accessible": false,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "opensearch",
+      "endpoint": "https://search-videolake-jp74yuza4pylhzhut4vimyh43a.us-east-1.es.amazonaws.com",
+      "region": "us-east-1"
+    },
+    "response_time_ms": 5.54,
+    "timestamp": 1763499440.5925138
+  }
+}

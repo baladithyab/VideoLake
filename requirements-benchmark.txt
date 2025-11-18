@@ -1,0 +1,10 @@
+# Core dependencies for LanceDB embedded benchmark
+boto3>=1.34.0
+botocore>=1.34.0
+numpy>=1.24.0
+pandas>=2.0.0
+lancedb>=0.3.0
+pyarrow>=14.0.0
+requests>=2.31.0
+requests-aws4auth>=1.3.1
+python-dotenv>=1.0.0
