@@ -1,0 +1,21 @@
+{
+  "success": true,
+  "duration_seconds": 0.2777414321899414,
+  "query_count": 50,
+  "successful_queries": 50,
+  "throughput_qps": 180.02355502295413,
+  "latency_p50_ms": 4.985451698303223,
+  "latency_p95_ms": 8.160519599914544,
+  "latency_p99_ms": 14.045302867889392,
+  "latency_min_ms": 4.380464553833008,
+  "latency_max_ms": 17.126798629760742,
+  "latency_mean_ms": 5.549287796020508,
+  "latency_std_ms": 2.0013715891628268,
+  "backend": "qdrant-ebs",
+  "operation": "search",
+  "endpoint_info": {
+    "type": "rest",
+    "backend": "qdrant",
+    "endpoint": "http://18.232.145.144:6333"
+  }
+}

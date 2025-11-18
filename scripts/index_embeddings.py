@@ -36,6 +36,10 @@ BACKEND_CONFIGS = {
     'lancedb-s3-embedded': {'type': 'embedded'},
     'lancedb-efs-embedded': {'type': 'embedded'},
     'lancedb-ebs-embedded': {'type': 'embedded'},
+    # New naming convention aliases
+    'lancedb-embedded-s3': {'type': 'embedded'},
+    'lancedb-embedded-efs': {'type': 'embedded'},
+    'lancedb-embedded-ebs': {'type': 'embedded'},
     # OpenSearch with S3 Vectors engine (or regular knn on fallback)
     'opensearch': {'type': 'opensearch'},
 }

@@ -107,7 +107,9 @@ resource "aws_iam_role_policy" "benchmark_s3_access" {
         Effect = "Allow"
         Action = [
           "s3:*",
-          "s3vectors:*"
+          "s3vectors:*",
+          "elasticfilesystem:DescribeMountTargets",
+          "ec2:DescribeAvailabilityZones"
         ]
         Resource = "*"
       }
@@ -148,7 +150,15 @@ locals {
     export AWS_REGION=us-east-1
 
     yum update -y
-    yum install -y python3 git jq amazon-cloudwatch-agent
+    yum install -y python3 git jq amazon-cloudwatch-agent amazon-efs-utils
+
+    # Mount EFS if provided
+    if [ -n "${var.efs_id}" ]; then
+      mkdir -p ${var.efs_path}
+      mount -t efs -o tls ${var.efs_id}:/ ${var.efs_path}
+      echo "${var.efs_id}:/ ${var.efs_path} efs _netdev,tls 0 0" >> /etc/fstab
+      echo "Mounted EFS ${var.efs_id} at ${var.efs_path}" >> /var/log/lancedb-benchmark-setup.log
+    fi
 
     # Configure basic CloudWatch Agent (logs only, minimal config)
     cat >/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CWCFG'

@@ -347,7 +347,8 @@ module "lancedb_benchmark_ec2" {
   # Wire in storage locations when available (LanceDB S3 / EFS / EBS)
   s3_bucket = var.deploy_lancedb_s3 ? module.lancedb_s3[0].s3_bucket_name : ""
   s3_prefix = ""
-  efs_path  = "/mnt/lancedb_efs"  # mount handled manually if needed
+  efs_path  = "/mnt/lancedb_efs"
+  efs_id    = var.deploy_lancedb_efs ? module.lancedb_efs[0].efs_id : ""
   ebs_path  = "/mnt/lancedb"      # used when running on lancedb-ebs EC2
 
   tags = {

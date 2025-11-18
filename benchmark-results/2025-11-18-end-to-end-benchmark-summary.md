@@ -133,33 +133,36 @@ _Source: same file, §5 (`multi_vector_20251117_235646`)_
 
 ## 6. EC2 Embedded Client Benchmark (Final Results)
 
-_Source: `benchmark-results/ec2-embedded/summary_report_20251118_201923.md`_
+_Source: `benchmark-results/ec2-embedded/summary_report_20251118_223647.md`_
 
 **Infrastructure**
 - EC2 benchmark host in **us-east-1** (t3.xlarge).
 - **In-Region Execution**: All benchmarks were run from `us-east-1` to `us-east-1` endpoints, eliminating cross-region latency.
-- Benchmarked backends: S3Vector, LanceDB (EFS/S3), Qdrant (EFS).
-- *Note: OpenSearch was removed from this matrix due to earlier issues. EBS variants had connectivity timeouts in this specific run.*
+- **Full Matrix**: Includes Qdrant (EFS/EBS), LanceDB Embedded (EBS/EFS/S3), LanceDB Remote (EFS/S3/EBS), and S3Vector.
 
 **Results (Text Modality)**
 
-| Backend | Storage | QPS | p50 (ms) | p95 (ms) | Status |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Qdrant** | EFS | **161.5** | **5.9** | **7.5** | ✅ Fast |
-| **LanceDB** | S3 | 33.2 | 29.4 | 35.7 | ✅ Balanced |
-| **LanceDB** | EFS | 33.0 | 29.7 | 36.0 | ✅ Balanced |
-| **LanceDB** | Embedded (Local) | 72.2 | 13.2 | 19.5 | ✅ Local |
-| **S3Vector** | S3 (Native) | 13.9 | 70.7 | 81.2 | ✅ Serverless |
+| Backend | Type | Storage | QPS | p50 (ms) | p95 (ms) | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Qdrant** | Remote | EFS | **181.3** | **5.5** | **6.1** | ✅ Fastest |
+| **LanceDB** | Embedded | EBS | 105.6 | 9.1 | 12.2 | ✅ High Throughput |
+| **Qdrant** | Remote | EBS | 101.8 | 5.3 | 6.7 | ✅ Fast |
+| **LanceDB** | Embedded | EFS | 67.9 | 13.7 | 16.0 | ✅ Good |
+| **LanceDB** | Remote | EFS | 36.9 | 26.8 | 28.8 | ✅ Consistent |
+| **LanceDB** | Remote | S3 | 36.7 | 27.2 | 28.4 | ✅ Consistent |
+| **LanceDB** | Remote | EBS | 22.7 | 38.9 | 65.3 | ✅ Slower |
+| **S3Vector** | Remote | S3 | 7.0 | 143.4 | 198.8 | ✅ Serverless |
+| **LanceDB** | Embedded | S3 | 5.1 | 171.4 | 393.3 | ✅ High Latency |
 
 **Key Findings**
-- **S3Vector is fully operational**: The IAM permission issues are resolved. It delivers consistent ~70ms latency.
-- **Performance Hierarchy (In-Region)**:
-    - **Qdrant** is the speed king (~6ms latency).
-    - **LanceDB Embedded** (~13ms) is ~2x faster than remote LanceDB, demonstrating the overhead of the remote service layer.
-    - **LanceDB Remote** (S3/EFS) offers a solid middle ground (~30ms latency).
-    - **S3Vector** is slower (~70ms) but requires **zero infrastructure management**.
-- **Comparison**: Qdrant (EFS) is still ~2x faster than even the local embedded LanceDB (~161 QPS vs 72 QPS).
-- **Latency Baseline**: These results represent the true performance baseline for the system, free from the ~200ms RTT overhead seen in earlier cross-region tests.
+- **Qdrant (EFS)** remains the performance leader (~181 QPS, ~5.5ms latency).
+- **LanceDB Embedded (EBS)** is a strong contender (~106 QPS), beating Qdrant EBS in throughput but with slightly higher latency (~9ms).
+- **LanceDB Remote** adds significant overhead (~3x slower than embedded EBS).
+- **S3Vector** is the slowest (~7 QPS, ~143ms latency) but offers the simplest **serverless** model.
+- **Storage Impact**:
+    - **EBS** is best for Embedded LanceDB.
+    - **EFS** is best for Qdrant.
+    - **S3** performs decently for Remote LanceDB but struggles with Embedded LanceDB (high latency).
 
 ---
 
@@ -169,11 +172,12 @@ As of 2025-11-18, the end-to-end benchmarking campaign is **complete**.
 
 **Summary of Achievements**
 1.  **In-Region Benchmarks**: Validated performance for all backends running in `us-east-1`.
-2.  **S3Vector Validation**: Confirmed S3Vector is functional and performant enough for many use cases (p50 < 100ms).
+2.  **S3Vector Validation**: Confirmed S3Vector is functional and performant enough for many use cases.
 3.  **Comparative Landscape**:
-    *   **Qdrant (Speed)**: The clear choice for high-throughput, low-latency requirements.
-    *   **LanceDB (Balance)**: "LanceDB Embedded" offers a middle ground: faster than remote LanceDB/S3Vector, but still slower than Qdrant's optimized Rust engine.
-    *   **S3Vector (Simplicity)**: The "Serverless / Zero-Ops" winner. No database to manage, just S3 buckets. Ideal for lower QPS needs or where operational simplicity is paramount.
+    *   **Qdrant**: Still the fastest overall (especially with EFS).
+    *   **LanceDB Embedded (EBS)**: A strong contender, beating Qdrant EBS in throughput but with slightly higher latency.
+    *   **LanceDB Remote**: Adds significant overhead (~3x slower than embedded).
+    *   **S3Vector**: The slowest but simplest (Serverless / Zero-Ops).
 
 **Next Steps**
 - Integrate these findings into the VideoLake UI.

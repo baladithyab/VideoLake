@@ -1,0 +1,21 @@
+{
+  "success": true,
+  "duration_seconds": 2.014803171157837,
+  "query_count": 50,
+  "successful_queries": 0,
+  "throughput_qps": 24.816319884620167,
+  "latency_p50_ms": 40.66121578216553,
+  "latency_p95_ms": 49.678218364715576,
+  "latency_p99_ms": 53.55552196502684,
+  "latency_min_ms": 20.525693893432617,
+  "latency_max_ms": 56.29086494445801,
+  "latency_mean_ms": 40.27730464935303,
+  "latency_std_ms": 7.0538425005191625,
+  "backend": "lancedb-embedded-s3",
+  "operation": "search",
+  "endpoint_info": {
+    "type": "embedded",
+    "backend": "lancedb-embedded-s3",
+    "endpoint": "s3://videolake-vectors/embedded-benchmark"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "success": true,
+  "duration_seconds": 0.7363600730895996,
+  "query_count": 50,
+  "successful_queries": 50,
+  "throughput_qps": 67.90156314452433,
+  "latency_p50_ms": 13.718724250793457,
+  "latency_p95_ms": 16.023969650268555,
+  "latency_p99_ms": 35.86719274520867,
+  "latency_min_ms": 12.622833251953125,
+  "latency_max_ms": 54.02660369873047,
+  "latency_mean_ms": 14.723320007324219,
+  "latency_std_ms": 5.685048212924903,
+  "backend": "lancedb-embedded-efs",
+  "operation": "search",
+  "endpoint_info": {
+    "type": "embedded",
+    "backend": "lancedb-embedded-efs",
+    "endpoint": "/mnt/lancedb_efs/embedded-benchmark"
+  }
+}

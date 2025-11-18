@@ -17,6 +17,8 @@ HEALTH_FILE="${LOG_DIR}/quick_health_${TIMESTAMP}.json"
 BACKENDS=("s3vector" "lancedb-ebs" "lancedb-efs" "lancedb-s3" "qdrant-ebs" "qdrant-efs" "lancedb-embedded-ebs" "lancedb-embedded-efs" "lancedb-embedded-s3")
 EMBED_FILE="${PROJECT_ROOT}/embeddings/marengo/marengo-benchmark-v1-text.json"
 COLLECTION="text_embeddings"
+# Explicitly set S3Vector index name to match what index_embeddings.py infers for text modality
+S3VECTOR_INDEX="videolake-benchmark-visual-text"
 
 echo "===============================================" | tee -a "$LOG_FILE"
 echo " Quick Health + Index + Benchmark Runner" | tee -a "$LOG_FILE"
@@ -121,6 +123,7 @@ for backend in "${BACKENDS[@]}"; do
     --embeddings "$EMBED_FILE" \
     --backends "$backend" \
     --collection "$COLLECTION" \
+    --s3vector-index "$S3VECTOR_INDEX" \
     2>&1 | tee -a "$LOG_FILE" || echo "Indexing failed for $backend" | tee -a "$LOG_FILE"
   echo "" | tee -a "$LOG_FILE"
 done
@@ -146,6 +149,7 @@ for backend in "${BACKENDS[@]}"; do
     --queries 50 \
     --dimension "$EMBED_DIM" \
     --collection "$COLLECTION" \
+    --s3vector-index "$S3VECTOR_INDEX" \
     --output "$OUT_JSON" \
     2>&1 | tee -a "$LOG_FILE" || echo "Benchmark failed for $backend" | tee -a "$LOG_FILE"
   echo "Results JSON: $OUT_JSON" | tee -a "$LOG_FILE"

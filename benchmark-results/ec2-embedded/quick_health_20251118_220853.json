@@ -1,0 +1,99 @@
+{
+  "s3vector": {
+    "backend": "s3vector",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "sdk",
+      "service": "s3vectors",
+      "endpoint": "s3vectors.us-east-1.amazonaws.com",
+      "region": "us-east-1"
+    },
+    "response_time_ms": 68.2,
+    "timestamp": 1763503734.4125957
+  },
+  "lancedb-ebs": {
+    "backend": "lancedb-ebs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "lancedb",
+      "endpoint": "http://100.27.36.178:8000",
+      "health_path": "/health"
+    },
+    "response_time_ms": 4.81,
+    "timestamp": 1763503734.4174376
+  },
+  "lancedb-efs": {
+    "backend": "lancedb-efs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "lancedb",
+      "endpoint": "http://3.94.117.145:8000",
+      "health_path": "/health"
+    },
+    "response_time_ms": 3.86,
+    "timestamp": 1763503734.4213178
+  },
+  "lancedb-s3": {
+    "backend": "lancedb-s3",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "lancedb",
+      "endpoint": "http://98.81.178.222:8000",
+      "health_path": "/health"
+    },
+    "response_time_ms": 3.99,
+    "timestamp": 1763503734.4253342
+  },
+  "qdrant-ebs": {
+    "backend": "qdrant-ebs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "qdrant",
+      "endpoint": "http://18.232.145.144:6333"
+    },
+    "response_time_ms": 5.34,
+    "timestamp": 1763503734.430695
+  },
+  "qdrant-efs": {
+    "backend": "qdrant-efs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "rest",
+      "backend": "qdrant",
+      "endpoint": "http://54.90.142.5:6333"
+    },
+    "response_time_ms": 3.15,
+    "timestamp": 1763503734.4338694
+  },
+  "lancedb-embedded-ebs": {
+    "backend": "lancedb-embedded-ebs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "embedded",
+      "backend": "lancedb-embedded-ebs",
+      "endpoint": "/tmp/lancedb-health-check"
+    },
+    "response_time_ms": 1.91,
+    "timestamp": 1763503735.9941766
+  },
+  "lancedb-embedded-efs": {
+    "backend": "lancedb-embedded-efs",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "embedded",
+      "backend": "lancedb-embedded-efs",
+      "endpoint": "/tmp/lancedb-health-check"
+    },
+    "response_time_ms": 0.65,
+    "timestamp": 1763503735.9958253
+  },
+  "lancedb-embedded-s3": {
+    "backend": "lancedb-embedded-s3",
+    "accessible": true,
+    "endpoint_info": {
+      "type": "e
+---Output truncated---

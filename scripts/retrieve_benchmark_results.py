@@ -9,13 +9,17 @@ REMOTE_DIR = "/home/ec2-user/S3Vector/logs"
 LOCAL_DIR = "benchmark-results/ec2-embedded"
 
 files_to_retrieve = [
-    "quick_benchmark_lancedb-efs_20251118_205708.json",
-    "quick_benchmark_lancedb-embedded_20251118_205708.json",
-    "quick_benchmark_lancedb-s3_20251118_205708.json",
-    "quick_benchmark_qdrant-efs_20251118_205708.json",
-    "quick_benchmark_s3vector_20251118_205708.json",
-    "quick_health_20251118_205708.json",
-    "quick_health_index_benchmark_20251118_205708.log"
+    "quick_benchmark_lancedb-ebs_20251118_223647.json",
+    "quick_benchmark_lancedb-efs_20251118_223647.json",
+    "quick_benchmark_lancedb-embedded-ebs_20251118_223647.json",
+    "quick_benchmark_lancedb-embedded-efs_20251118_223647.json",
+    "quick_benchmark_lancedb-embedded-s3_20251118_223647.json",
+    "quick_benchmark_lancedb-s3_20251118_223647.json",
+    "quick_benchmark_qdrant-ebs_20251118_223647.json",
+    "quick_benchmark_qdrant-efs_20251118_223647.json",
+    "quick_benchmark_s3vector_20251118_223647.json",
+    "quick_health_20251118_223647.json",
+    "quick_health_index_benchmark_20251118_223647.log"
 ]
 
 def get_file_content(filename):

@@ -3,7 +3,7 @@ import json
 import sys
 import time
 
-COMMAND_ID = "08a0cb65-201a-417d-973b-e25f2c79eab5"
+COMMAND_ID = "9d93a874-3eac-4067-85d1-e5dad3546d6a"
 
 def check_status():
     cmd = [

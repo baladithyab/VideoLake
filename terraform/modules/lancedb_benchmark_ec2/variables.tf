@@ -69,6 +69,12 @@ variable "efs_path" {
   default     = "/mnt/lancedb_efs"
 }
 
+variable "efs_id" {
+  description = "ID of the EFS file system to mount (optional)"
+  type        = string
+  default     = ""
+}
+
 variable "ebs_path" {
   description = "EBS mount path to use for embedded benchmarks (if applicable)"
   type        = string

@@ -4,7 +4,7 @@ import os
 import pandas as pd
 
 RESULTS_DIR = "benchmark-results/ec2-embedded"
-TIMESTAMP = "20251118_205708"
+TIMESTAMP = "20251118_223647"
 
 def load_results():
     results = []

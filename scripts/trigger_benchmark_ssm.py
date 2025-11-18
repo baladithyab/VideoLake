@@ -5,17 +5,20 @@ import sys
 
 INSTANCE_ID = "i-023372b93ac8bdf0e"
 
-def read_and_encode(filepath):
-    try:
-        with open(filepath, "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
-    except FileNotFoundError:
-        print(f"Error: File {filepath} not found.")
-        sys.exit(1)
+BUCKET = "videolake-vectors"
+S3_PREFIX = "benchmark-scripts"
 
-print("Reading and encoding files...")
-requirements_b64 = read_and_encode("requirements-benchmark.txt")
-script_b64 = read_and_encode("scripts/run_quick_health_index_and_benchmark.sh")
+def upload_to_s3(local_path, s3_key):
+    cmd = ["aws", "s3", "cp", local_path, f"s3://{BUCKET}/{s3_key}"]
+    print(f"Uploading {local_path} to s3://{BUCKET}/{s3_key}...")
+    subprocess.run(cmd, check=True)
+
+print("Uploading scripts to S3...")
+upload_to_s3("requirements-benchmark.txt", f"{S3_PREFIX}/requirements-benchmark.txt")
+upload_to_s3("scripts/run_quick_health_index_and_benchmark.sh", f"{S3_PREFIX}/run_quick_health_index_and_benchmark.sh")
+upload_to_s3("scripts/backend_adapters.py", f"{S3_PREFIX}/backend_adapters.py")
+upload_to_s3("scripts/index_embeddings.py", f"{S3_PREFIX}/index_embeddings.py")
+upload_to_s3("scripts/benchmark_backend.py", f"{S3_PREFIX}/benchmark_backend.py")
 
 commands = [
     "sudo yum install -y git python3-pip",
@@ -27,8 +30,13 @@ commands = [
     "unzip -o repo.zip",
     "mv VideoLake-react-frontend-refactor S3Vector",
     "cd S3Vector",
-    f"echo '{requirements_b64}' | base64 -d > requirements-benchmark.txt",
-    f"echo '{script_b64}' | base64 -d > scripts/run_quick_health_index_and_benchmark.sh",
+    # Download from S3
+    f"aws s3 cp s3://{BUCKET}/{S3_PREFIX}/requirements-benchmark.txt requirements-benchmark.txt",
+    f"aws s3 cp s3://{BUCKET}/{S3_PREFIX}/run_quick_health_index_and_benchmark.sh scripts/run_quick_health_index_and_benchmark.sh",
+    f"aws s3 cp s3://{BUCKET}/{S3_PREFIX}/backend_adapters.py scripts/backend_adapters.py",
+    f"aws s3 cp s3://{BUCKET}/{S3_PREFIX}/index_embeddings.py scripts/index_embeddings.py",
+    f"aws s3 cp s3://{BUCKET}/{S3_PREFIX}/benchmark_backend.py scripts/benchmark_backend.py",
+    
     "touch scripts/__init__.py",
     "chmod +x scripts/run_quick_health_index_and_benchmark.sh",
     "python3 -m venv venv",

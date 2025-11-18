@@ -72,7 +72,7 @@ resource "aws_security_group" "efs" {
     from_port   = 2049
     to_port     = 2049
     protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.default.cidr_block]
+    cidr_blocks = ["0.0.0.0/0"] # Allow access from benchmark instance (which might be in a different subnet/SG)
   }
 
   egress {
@@ -88,11 +88,11 @@ resource "aws_security_group" "efs" {
   })
 }
 
-# EFS Mount Target
+# EFS Mount Target (Create one in each subnet to ensure availability across AZs)
 resource "aws_efs_mount_target" "lancedb" {
-  count           = var.backend_type != "s3" ? 1 : 0
+  count           = var.backend_type != "s3" ? length(data.aws_subnets.default.ids) : 0
   file_system_id  = aws_efs_file_system.lancedb[0].id
-  subnet_id       = data.aws_subnets.default.ids[0]
+  subnet_id       = data.aws_subnets.default.ids[count.index]
   security_groups = [aws_security_group.efs[0].id]
 }
 
