@@ -216,16 +216,16 @@ output "lancedb_ebs" {
   }
 }
 
-output "lancedb_benchmark_ec2" {
-  description = "LanceDB benchmark EC2 host for embedded vs API testing"
-  value = var.deploy_lancedb_benchmark_ec2 ? {
+output "videolake_platform" {
+  description = "VideoLake Platform EC2 instance (Backend + Frontend + Vector Store)"
+  value = var.deploy_videolake_platform ? {
     deployed        = true
-    deployment_name = "${var.lancedb_deployment_name}-benchmark"
-    instance_id     = module.lancedb_benchmark_ec2[0].instance_id
-    public_ip       = module.lancedb_benchmark_ec2[0].public_ip
-    private_ip      = module.lancedb_benchmark_ec2[0].private_ip
-    security_group  = module.lancedb_benchmark_ec2[0].security_group_id
-    note            = "SSH to this instance to run scripts/run_lancedb_embedded_vs_api_benchmarks.sh"
+    deployment_name = "${var.project_name}-platform"
+    instance_id     = module.videolake_platform.instance_id
+    public_ip       = module.videolake_platform.public_ip
+    private_ip      = module.videolake_platform.private_ip
+    security_group  = module.videolake_platform.security_group_id
+    note            = "Unified Platform: SSH to deploy, HTTP/HTTPS for Frontend/API"
   } : {
     deployed        = false
     deployment_name = ""
@@ -233,7 +233,7 @@ output "lancedb_benchmark_ec2" {
     public_ip       = ""
     private_ip      = ""
     security_group  = ""
-    note            = "Set var.deploy_lancedb_benchmark_ec2=true to create the EC2 benchmark host."
+    note            = "Set var.deploy_videolake_platform=true to create the platform instance."
   }
 }
 

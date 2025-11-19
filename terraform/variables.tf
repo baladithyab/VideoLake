@@ -84,10 +84,10 @@ variable "deploy_lancedb_ebs" {
   default     = false # Enable for maximum performance requirements
 }
 
-variable "deploy_lancedb_benchmark_ec2" {
-  description = "Deploy a dedicated EC2 instance in us-east-1 for LanceDB embedded vs API benchmarks"
+variable "deploy_videolake_platform" {
+  description = "Deploy the unified VideoLake Platform EC2 instance (Backend + Frontend + Vector Store)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "deploy_benchmark_runner" {

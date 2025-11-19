@@ -3,6 +3,8 @@ import base64
 import json
 import sys
 
+# TODO: Fetch this dynamically from Terraform output
+# For now, this script needs to be updated to look up the instance by tag or use the new platform instance ID
 INSTANCE_ID = "i-023372b93ac8bdf0e"
 
 BUCKET = "videolake-vectors"

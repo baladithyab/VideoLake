@@ -1,4 +1,4 @@
-# LanceDB Benchmark EC2 Module Variables
+# VideoLake Platform Module Variables
 
 variable "aws_region" {
   description = "AWS region for deployment"
@@ -6,12 +6,12 @@ variable "aws_region" {
 }
 
 variable "deployment_name" {
-  description = "Name for this benchmark EC2 deployment"
+  description = "Name for this platform deployment"
   type        = string
 }
 
 variable "instance_type" {
-  description = "EC2 instance type for benchmark runner"
+  description = "EC2 instance type for the platform"
   type        = string
   default     = "t3.xlarge" # 4 vCPU, 16 GB RAM
 }
@@ -22,7 +22,7 @@ variable "availability_zone" {
 }
 
 variable "allowed_cidr_blocks" {
-  description = "CIDR blocks allowed to SSH into the benchmark EC2 instance"
+  description = "CIDR blocks allowed to SSH/HTTP into the platform instance"
   type        = list(string)
   default     = ["0.0.0.0/0"] # Restrict in production!
 }
@@ -45,28 +45,22 @@ variable "tags" {
   default     = {}
 }
 
-variable "run_benchmark_on_boot" {
-  description = "Whether to automatically run the embedded-client benchmark script via user_data on first boot"
-  type        = bool
-  default     = true
-}
-
 variable "s3_bucket" {
-  description = "LanceDB S3 bucket for embedded client benchmarks (optional)"
+  description = "S3 bucket for video assets and data"
   type        = string
   default     = ""
 }
 
 variable "s3_prefix" {
-  description = "Optional prefix inside the S3 bucket for LanceDB data"
+  description = "Optional prefix inside the S3 bucket"
   type        = string
   default     = ""
 }
 
 variable "efs_path" {
-  description = "EFS mount path to use for embedded benchmarks (if mounted separately)"
+  description = "EFS mount path for persistent storage"
   type        = string
-  default     = "/mnt/lancedb_efs"
+  default     = "/mnt/videolake_efs"
 }
 
 variable "efs_id" {
@@ -76,8 +70,8 @@ variable "efs_id" {
 }
 
 variable "ebs_path" {
-  description = "EBS mount path to use for embedded benchmarks (if applicable)"
+  description = "EBS mount path (if applicable)"
   type        = string
-  default     = "/mnt/lancedb"
+  default     = "/mnt/videolake_ebs"
 }
 
