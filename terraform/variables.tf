@@ -139,6 +139,11 @@ variable "web_allowed_origins" {
   type        = list(string)
   default     = ["http://localhost:5172"]
 }
+variable "frontend_bucket_name" {
+  description = "S3 bucket name for frontend hosting"
+  type        = string
+  default     = "videolake-frontend"
+}
 
 #------------------------------------------------------------------------------
 # S3VECTOR (DIRECT)

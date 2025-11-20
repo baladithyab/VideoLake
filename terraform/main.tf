@@ -335,33 +335,40 @@ module "lancedb_ebs" {
   }
 }
 
-# VideoLake Platform (Unified EC2 Instance)
-# Hosts Backend (FastAPI + Embedded LanceDB) and Frontend (React + Nginx)
-module "videolake_platform" {
-  # Always deploy unless explicitly disabled (or use a variable if preferred)
-  source = "./modules/videolake_platform"
+# -----------------------------------------------------------------------------
+# VideoLake Backend (ECS Fargate)
+# -----------------------------------------------------------------------------
+module "videolake_backend" {
+  source = "./modules/videolake_backend_ecs"
 
-  aws_region        = var.aws_region
-  deployment_name   = "${var.project_name}-platform"
-  availability_zone = data.aws_availability_zones.available.names[0]
-
-  # Storage wiring
-  s3_bucket = module.shared_bucket.bucket_name
-  s3_prefix = "videolake-data"
+  aws_region     = var.aws_region
+  project_name   = var.project_name
+  environment    = var.environment
+  s3_bucket_name = module.shared_bucket.bucket_name
   
-  # Use EFS if available (or create a dedicated one for the platform if needed)
-  # For now, we can reuse the LanceDB EFS if it exists, or we might need to create a shared EFS module.
-  # Assuming we want a dedicated EFS for the platform or reuse existing logic.
-  # Let's wire it to the lancedb_efs module if enabled, otherwise we might need to add EFS creation to the platform module itself or a shared module.
-  # For simplicity in this refactor, we'll assume EFS is handled or optional.
-  # If we want persistent storage for the platform, we should probably ensure an EFS exists.
-  # For this step, I will leave EFS optional/empty unless we have a shared EFS resource.
-  efs_id    = var.deploy_lancedb_efs ? module.lancedb_efs[0].efs_id : ""
-  efs_path  = "/mnt/videolake_efs"
+  # Use EFS if available (from LanceDB EFS module)
+  efs_id         = var.deploy_lancedb_efs ? module.lancedb_efs[0].efs_id : ""
+  efs_mount_path = "/mnt/videolake_efs"
 
   tags = {
-    Component = "VideoLake-Platform"
-    Role      = "All-in-One-Server"
+    Component = "VideoLake-Backend"
+    Role      = "API-Server"
+  }
+}
+
+# -----------------------------------------------------------------------------
+# VideoLake Frontend (S3 + CloudFront)
+# -----------------------------------------------------------------------------
+module "videolake_frontend" {
+  source = "./modules/videolake_frontend_hosting"
+
+  project_name = var.project_name
+  environment  = var.environment
+  bucket_name  = var.frontend_bucket_name
+
+  tags = {
+    Component = "VideoLake-Frontend"
+    Role      = "Static-Hosting"
   }
 }
 

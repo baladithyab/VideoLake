@@ -216,24 +216,21 @@ output "lancedb_ebs" {
   }
 }
 
-output "videolake_platform" {
-  description = "VideoLake Platform EC2 instance (Backend + Frontend + Vector Store)"
-  value = var.deploy_videolake_platform ? {
-    deployed        = true
-    deployment_name = "${var.project_name}-platform"
-    instance_id     = module.videolake_platform.instance_id
-    public_ip       = module.videolake_platform.public_ip
-    private_ip      = module.videolake_platform.private_ip
-    security_group  = module.videolake_platform.security_group_id
-    note            = "Unified Platform: SSH to deploy, HTTP/HTTPS for Frontend/API"
-  } : {
-    deployed        = false
-    deployment_name = ""
-    instance_id     = ""
-    public_ip       = ""
-    private_ip      = ""
-    security_group  = ""
-    note            = "Set var.deploy_videolake_platform=true to create the platform instance."
+output "videolake_backend" {
+  description = "VideoLake Backend ECS Service"
+  value = {
+    alb_dns_name       = module.videolake_backend.alb_dns_name
+    ecr_repository_url = module.videolake_backend.ecr_repository_url
+    ecs_cluster_name   = module.videolake_backend.ecs_cluster_name
+    ecs_service_name   = module.videolake_backend.ecs_service_name
+  }
+}
+
+output "videolake_frontend" {
+  description = "VideoLake Frontend Hosting"
+  value = {
+    cloudfront_domain_name = module.videolake_frontend.cloudfront_domain_name
+    s3_bucket_name         = module.videolake_frontend.s3_bucket_name
   }
 }
 

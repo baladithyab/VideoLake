@@ -66,6 +66,15 @@ resource "aws_security_group" "platform" {
     description = "HTTPS access"
   }
 
+  # Backend API access
+  ingress {
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Backend API access"
+  }
+
   # Outbound internet access
   egress {
     from_port   = 0

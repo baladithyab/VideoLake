@@ -177,7 +177,8 @@ from .routers import (
     search,
     embeddings,
     analytics,
-    infrastructure
+    infrastructure,
+    benchmark
 )
 
 # Include routers
@@ -187,4 +188,5 @@ app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(embeddings.router, prefix="/api/embeddings", tags=["embeddings"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 app.include_router(infrastructure.router, prefix="/api", tags=["infrastructure"])
+app.include_router(benchmark.router, prefix="/api/benchmark", tags=["benchmark"])
 

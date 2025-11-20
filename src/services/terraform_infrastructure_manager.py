@@ -93,7 +93,11 @@ class TerraformInfrastructureManager:
         self.logger = get_logger(__name__)
 
         if not self.terraform_dir.exists():
-            raise ValueError(f"Terraform directory not found: {terraform_dir}")
+            import os
+            cwd = os.getcwd()
+            files = os.listdir(cwd)
+            logger.error(f"CWD: {cwd}, Files: {files}")
+            raise ValueError(f"Terraform directory not found: {terraform_dir}. CWD: {cwd}, Files: {files}")
 
         logger.info(f"Initialized Terraform manager: {self.terraform_dir}")
 
