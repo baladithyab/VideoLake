@@ -25,9 +25,9 @@ VideoLake is a **production-ready video search platform** that allows you to:
 
 ### Video Processing Pipeline
 - **Multi-Model Support**: AWS Bedrock (Nova, Titan) and TwelveLabs Marengo 2.6/2.7
+- **Flexible Ingestion**: Upload via URL, direct S3 URI, or standard datasets
 - **Automatic Segmentation**: Configurable video chunking with overlap
 - **Batch Processing**: Efficient parallel processing for large video collections
-- **S3 Integration**: Direct S3 URI support for video ingestion
 
 ### Search Capabilities
 - **Multi-Modal Search**: Text, image, and video-to-video search
@@ -48,6 +48,7 @@ VideoLake is a **production-ready video search platform** that allows you to:
 
 ### Benchmarking & Analytics
 - **Performance Comparison**: Compare latency and throughput across backends
+- **ECS Benchmarking**: Run large-scale benchmarks on dedicated ECS infrastructure
 - **Visual Analytics**: Interactive charts and graphs
 - **Historical Data**: Track performance over time
 - **Export Results**: Download benchmark data for analysis

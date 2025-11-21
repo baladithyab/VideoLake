@@ -25,7 +25,19 @@ class BenchmarkRequest(BaseModel):
 
 @router.post("/start")
 async def start_benchmark(request: BenchmarkRequest):
-    """Start a benchmark job."""
+    """
+    Start a benchmark job.
+    
+    Config options:
+    - operation: "index", "search", or "mixed"
+    - vectors: int
+    - queries: int
+    - top_k: int
+    - dimension: int
+    - duration: int
+    - collection: str
+    - use_ecs: bool (default: False) - Run on ECS
+    """
     try:
         job_id = await benchmark_service.start_benchmark(request.backends, request.config)
         return {"job_id": job_id, "status": "pending"}

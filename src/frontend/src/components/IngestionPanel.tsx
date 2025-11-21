@@ -1,29 +1,87 @@
-import React, { useState } from 'react';
-import { api } from '../api/client';
+import React, { useState, useEffect } from 'react';
+import { api, type Dataset } from '../api/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'react-hot-toast';
-import { Loader2, Upload } from 'lucide-react';
+import { Loader2, Upload, Database, FileVideo } from 'lucide-react';
+import axios from 'axios';
 
 export function IngestionPanel() {
   const [videoPath, setVideoPath] = useState('');
   const [modelType, setModelType] = useState('Amazon Nova');
   const [selectedBackends, setSelectedBackends] = useState<string[]>(['S3Vector']);
   const [isIngesting, setIsIngesting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [selectedDataset, setSelectedDataset] = useState<string>('');
+  const [activeTab, setActiveTab] = useState('s3');
+
+  useEffect(() => {
+    loadDatasets();
+  }, []);
+
+  const loadDatasets = async () => {
+    try {
+      const response = await api.listDatasets();
+      setDatasets(response.data);
+    } catch (error) {
+      console.error('Failed to load datasets:', error);
+      toast.error('Failed to load available datasets');
+    }
+  };
 
   const handleBackendToggle = (backend: string) => {
-    setSelectedBackends(prev => 
-      prev.includes(backend) 
+    setSelectedBackends(prev =>
+      prev.includes(backend)
         ? prev.filter(b => b !== backend)
         : [...prev, backend]
     );
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      // Get presigned URL
+      const { data } = await api.getUploadUrl(file.name, file.type);
+      
+      // Upload to S3
+      await axios.put(data.upload_url, file, {
+        headers: {
+          'Content-Type': file.type
+        }
+      });
+
+      setVideoPath(data.s3_uri);
+      toast.success('File uploaded successfully');
+    } catch (error) {
+      console.error('Upload failed:', error);
+      toast.error('Failed to upload file');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDatasetSelect = (datasetName: string) => {
+    setSelectedDataset(datasetName);
+    // For datasets, we might want to trigger a different ingestion flow
+    // For now, we'll just set a placeholder path or handle it in the backend
+    // Assuming the backend knows how to handle dataset names if we pass them
+    // But the current API expects video_path.
+    // Let's assume for now we just select it and the user clicks start.
+    // Ideally, we should update the startIngestion API to accept dataset_name too.
+    // Or we can construct a special URI like dataset://msr-vtt
+    setVideoPath(`dataset://${datasetName}`);
+  };
+
   const handleIngestion = async () => {
     if (!videoPath) {
-      toast.error('Please enter an S3 URI');
+      toast.error('Please provide a video source');
       return;
     }
     if (selectedBackends.length === 0) {
@@ -39,7 +97,9 @@ export function IngestionPanel() {
         backend_types: selectedBackends
       });
       toast.success('Ingestion started successfully');
-      setVideoPath('');
+      if (!videoPath.startsWith('dataset://')) {
+          setVideoPath('');
+      }
     } catch (error) {
       console.error('Ingestion failed:', error);
       toast.error('Failed to start ingestion');
@@ -53,19 +113,79 @@ export function IngestionPanel() {
       <CardHeader>
         <CardTitle>Video Ingestion</CardTitle>
         <CardDescription>
-          Process videos from S3 and index them into vector stores
+          Process videos and index them into vector stores
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="s3-uri">S3 URI</Label>
-          <Input
-            id="s3-uri"
-            placeholder="s3://bucket/path/to/video.mp4"
-            value={videoPath}
-            onChange={(e) => setVideoPath(e.target.value)}
-          />
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="s3">S3 URI</TabsTrigger>
+            <TabsTrigger value="upload">Upload Video</TabsTrigger>
+            <TabsTrigger value="dataset">Select Dataset</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="s3" className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label htmlFor="s3-uri">S3 URI</Label>
+              <Input
+                id="s3-uri"
+                placeholder="s3://bucket/path/to/video.mp4"
+                value={videoPath}
+                onChange={(e) => setVideoPath(e.target.value)}
+                disabled={activeTab !== 's3'}
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="upload" className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label>Upload Video File</Label>
+              <div className="flex items-center gap-4">
+                <Input
+                  type="file"
+                  accept="video/*"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                />
+                {isUploading && <Loader2 className="h-4 w-4 animate-spin" />}
+              </div>
+              {videoPath && activeTab === 'upload' && (
+                <p className="text-sm text-muted-foreground">
+                  Uploaded to: {videoPath}
+                </p>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="dataset" className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label>Available Datasets</Label>
+              <div className="grid gap-2">
+                {datasets.map((dataset) => (
+                  <div
+                    key={dataset.name}
+                    className={`p-3 border rounded-md cursor-pointer transition-colors ${
+                      selectedDataset === dataset.name
+                        ? 'bg-primary/10 border-primary'
+                        : 'hover:bg-accent'
+                    }`}
+                    onClick={() => handleDatasetSelect(dataset.name)}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">{dataset.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {dataset.estimated_videos} videos
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Source: {dataset.source}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
 
         <div className="space-y-2">
           <Label>Model Selection</Label>
@@ -98,10 +218,10 @@ export function IngestionPanel() {
           </div>
         </div>
 
-        <Button 
-          className="w-full" 
+        <Button
+          className="w-full"
           onClick={handleIngestion}
-          disabled={isIngesting}
+          disabled={isIngesting || (activeTab === 'upload' && isUploading) || !videoPath}
         >
           {isIngesting ? (
             <>

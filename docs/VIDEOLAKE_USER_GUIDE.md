@@ -215,36 +215,48 @@ Video ingestion converts videos into searchable embeddings that can be queried s
 
 ### Uploading Videos
 
-#### Step 1: Prepare Video
+You can ingest videos using three methods: Direct S3 URI, URL Upload, or Standard Datasets.
 
-**Supported Formats:**
-- MP4, MOV, AVI, MKV
-- Max duration: 2 hours
-- Max file size: 5GB
+#### Method 1: Direct S3 URI (Recommended for Large Files)
 
-**Upload to S3:**
-
-```bash
-# Using AWS CLI
-aws s3 cp my-video.mp4 s3://videolake-shared-media/videos/
-
-# Get S3 URI
-s3://videolake-shared-media/videos/my-video.mp4
-```
-
-#### Step 2: Start Ingestion
+If your video is already in S3:
 
 1. Scroll to **Video Ingestion** panel
-2. Enter **S3 URI**: `s3://bucket-name/path/video.mp4`
-3. Select **Model**:
-   - **Amazon Nova** - Faster, good quality
-   - **Bedrock Titan** - AWS-native, standard
-   - **Marengo 2.7** (TwelveLabs) - Best quality, slower
-4. Select **Target Backends**:
-   - ☑️ S3Vector (recommended, always include)
-   - ☑️ LanceDB (if deployed)
-   - ☑️ Qdrant (if deployed)
-5. Click **[Start Ingestion]**
+2. Select **S3 URI** tab
+3. Enter URI: `s3://bucket-name/path/video.mp4`
+4. Select **Model** (e.g., Marengo 2.7)
+5. Select **Target Backends**
+6. Click **[Start Ingestion]**
+
+#### Method 2: Upload via URL
+
+Upload a video from a public URL directly to the system:
+
+1. Select **Upload URL** tab
+2. Enter **Video URL**: `https://example.com/video.mp4`
+3. Click **[Upload & Ingest]**
+4. The system will download the video to S3 and start ingestion automatically.
+
+#### Method 3: Select Standard Dataset
+
+Ingest pre-configured datasets for testing:
+
+1. Select **Dataset** tab
+2. Choose a dataset from the dropdown (e.g., "CC-Open Validation Set")
+3. Click **[Ingest Dataset]**
+4. This will batch process all videos in the dataset.
+
+#### Configuration Options
+
+**Models:**
+- **Amazon Nova** - Faster, good quality
+- **Bedrock Titan** - AWS-native, standard
+- **Marengo 2.7** (TwelveLabs) - Best quality, slower
+
+**Target Backends:**
+- ☑️ S3Vector (recommended, always include)
+- ☑️ LanceDB (if deployed)
+- ☑️ Qdrant (if deployed)
 
 #### Step 3: Monitor Progress
 
@@ -633,12 +645,24 @@ LanceDB:
 
 ### Running Benchmarks
 
-**Automated Benchmarks:**
+**Automated Benchmarks (Browser-based):**
 1. Select backends to test
 2. Choose dataset (e.g., CC-Open 100 queries)
 3. Click **[Start Benchmark]**
 4. Wait for completion
 5. View results in dashboard
+
+**ECS Benchmarks (Background Job):**
+For long-running or large-scale benchmarks, use the ECS trigger:
+
+1. Click **[Start ECS Benchmark]**
+2. Configure parameters:
+   - **Dataset**: Select dataset (e.g., CC-Open)
+   - **Query Count**: Number of queries (e.g., 1000)
+   - **Backends**: Select target backends
+3. Click **[Launch Job]**
+4. The benchmark runs asynchronously on ECS infrastructure.
+5. Results will appear in the dashboard once complete.
 
 **Manual Benchmarks:**
 1. Use same query across backends

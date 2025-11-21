@@ -301,6 +301,10 @@ def main():
         "--output",
         help="Output file for results (JSON format)"
     )
+    parser.add_argument(
+        "--job_id",
+        help="Job ID for tracking results"
+    )
 
     args = parser.parse_args()
 
@@ -360,6 +364,12 @@ def main():
         with open(args.output, 'w') as f:
             json.dump(results, f, indent=2)
         print(f"\nResults saved to {args.output}")
+    
+    # If job_id is provided, we might want to upload results to S3 or similar
+    # For now, we rely on logs or the output file being in a shared location
+    if args.job_id:
+        print(f"Job ID: {args.job_id}")
+        # TODO: Upload results to S3 if needed, using S3_BUCKET and S3_RESULTS_PREFIX env vars
 
     # Return exit code based on success
     return 0 if results.get("success", False) else 1

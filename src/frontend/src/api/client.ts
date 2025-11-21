@@ -41,6 +41,20 @@ export interface IngestionRequest {
   backend_types: string[];
 }
 
+export interface Dataset {
+  name: string;
+  source: string;
+  hf_dataset_id?: string;
+  streaming_supported: boolean;
+  estimated_videos: number | string;
+}
+
+export interface UploadUrlResponse {
+  upload_url: string;
+  s3_uri: string;
+  expires_in: number;
+}
+
 export interface DeployRequest {
   vector_stores: string[];
   wait_for_completion?: boolean;
@@ -84,6 +98,8 @@ export const api = {
   },
   processVideo: (request: ProcessVideoRequest) => apiClient.post('/api/ingest/process', request),
   startIngestion: (request: IngestionRequest) => apiClient.post('/ingestion/start', request),
+  listDatasets: () => apiClient.get<Dataset[]>('/ingestion/datasets'),
+  getUploadUrl: (filename: string, contentType: string) => apiClient.post<UploadUrlResponse>('/ingestion/upload-url', { filename, content_type: contentType }),
 
   // Benchmark
   startBenchmark: (request: BenchmarkRequest) => apiClient.post<BenchmarkResult>('/api/benchmark/start', request),

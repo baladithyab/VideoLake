@@ -29,10 +29,16 @@ export interface BenchmarkResult {
 
 export interface BenchmarkRequest {
   backends: string[];
-  num_queries: number;
-  query_type: 'text' | 'image' | 'video';
-  use_existing_embeddings?: boolean;
-  collection?: string;
+  config: {
+    operation?: 'index' | 'search' | 'mixed';
+    vectors?: number;
+    queries?: number;
+    top_k?: number;
+    dimension?: number;
+    duration?: number;
+    collection?: string;
+    use_ecs?: boolean;
+  };
 }
 
 export interface BenchmarkProgress {

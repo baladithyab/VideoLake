@@ -95,9 +95,13 @@ export const BenchmarkDashboard: React.FC<BenchmarkDashboardProps> = ({ availabl
     try {
       const response = await api.startBenchmark({
         backends: config.backends,
-        num_queries: config.num_queries,
-        query_type: config.query_type,
-        use_existing_embeddings: config.use_existing_embeddings,
+        config: {
+          queries: config.num_queries,
+          // query_type: config.query_type, // Not directly supported in backend config yet, maybe map to collection or operation?
+          // use_existing_embeddings: config.use_existing_embeddings, // Not directly supported
+          operation: 'search', // Default to search for now
+          use_ecs: true // Default to ECS for now as per requirement
+        }
       });
 
       setCurrentBenchmark(response.data);

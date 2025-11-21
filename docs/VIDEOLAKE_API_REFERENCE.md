@@ -335,9 +335,78 @@ GET /api/search/supported-vector-types
 
 ## Ingestion Endpoints
 
+### GET /api/ingestion/datasets
+
+List available standard datasets for ingestion.
+
+**Request:**
+```http
+GET /api/ingestion/datasets
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "datasets": [
+    {
+      "id": "cc-open-validation",
+      "name": "CC-Open Validation Set",
+      "description": "Standard validation set with 100 videos",
+      "video_count": 100,
+      "total_duration_minutes": 45
+    },
+    {
+      "id": "kinetics-400-sample",
+      "name": "Kinetics 400 Sample",
+      "description": "Sample of 50 videos from Kinetics dataset",
+      "video_count": 50,
+      "total_duration_minutes": 8
+    }
+  ]
+}
+```
+
+---
+
+### POST /api/ingestion/upload-url
+
+Upload and ingest a video from a public URL.
+
+**Request:**
+```http
+POST /api/ingestion/upload-url
+Content-Type: application/json
+
+{
+  "url": "https://example.com/video.mp4",
+  "model_type": "marengo-2.7",
+  "backend_types": ["s3_vector", "lancedb"]
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | Yes | Public URL of video file |
+| `model_type` | string | No | Model: `marengo-2.7`, `nova`, `titan`. Default: `marengo-2.7` |
+| `backend_types` | array[string] | No | Backends to index. Default: all deployed |
+
+**Response:**
+```json
+{
+  "job_id": "job-url-123",
+  "status": "accepted",
+  "message": "Download and ingestion started for video.mp4"
+}
+```
+
+---
+
 ### POST /api/ingestion/start
 
-Start a video ingestion job.
+Start a video ingestion job (S3 URI).
 
 **Request:**
 ```http
@@ -637,6 +706,36 @@ Content-Type: application/json
   "estimated_duration_minutes": 5,
   "backends": ["s3_vector", "lancedb", "qdrant"],
   "query_count": 100
+}
+```
+
+---
+
+### POST /api/benchmark/start-ecs
+
+Start a benchmark job on ECS infrastructure (for long-running tasks).
+
+**Request:**
+```http
+POST /api/benchmark/start-ecs
+Content-Type: application/json
+
+{
+  "backends": ["s3_vector", "lancedb", "qdrant"],
+  "query_count": 1000,
+  "dataset": "cc-open",
+  "vector_types": ["visual-text"]
+}
+```
+
+**Response:**
+```json
+{
+  "benchmark_id": "bench-ecs-789",
+  "task_arn": "arn:aws:ecs:us-east-1:123456789012:task/benchmark-cluster/abc-123",
+  "status": "provisioning",
+  "estimated_duration_minutes": 15,
+  "message": "ECS task started successfully"
 }
 ```
 
