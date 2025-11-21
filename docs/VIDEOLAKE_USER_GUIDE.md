@@ -260,15 +260,23 @@ Ingest pre-configured datasets for testing:
 
 #### Step 3: Monitor Progress
 
+The ingestion process is handled by an asynchronous Step Function pipeline. You can monitor the status of your job in real-time.
+
+**Status Indicators:**
+- **RUNNING**: The pipeline is currently processing the video (Extracting -> Embedding -> Upserting).
+- **SUCCEEDED**: The video has been successfully processed and indexed in all selected backends.
+- **FAILED**: An error occurred during processing. Check the error logs for details.
+
 ```
-Ingestion Status:
+Ingestion Status: RUNNING
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 45%
 
-1. ✅ Video validated (5s)
-2. ✅ Submitted to processing service (10s)
-3. 🔄 Generating embeddings... (2m 30s elapsed)
-4. ⏳ Indexing to backends...
-5. ⏳ Verification...
+Current Step: Embedding Generation (TwelveLabs Marengo)
+
+1. ✅ Extraction (Metadata & Validation)
+2. 🔄 Embedding (Generating vectors...)
+3. ⏳ Upsert (Indexing to S3Vector, LanceDB...)
+4. ⏳ Finalize
 ```
 
 **Typical Processing Times:**

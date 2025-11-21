@@ -41,6 +41,19 @@ export interface IngestionRequest {
   backend_types: string[];
 }
 
+export interface IngestionResponse {
+  message: string;
+  execution_arn: string;
+}
+
+export interface IngestionStatus {
+  status: string;
+  execution_arn: string;
+  start_date?: string;
+  stop_date?: string;
+  error?: string;
+}
+
 export interface Dataset {
   name: string;
   source: string;
@@ -97,7 +110,8 @@ export const api = {
     });
   },
   processVideo: (request: ProcessVideoRequest) => apiClient.post('/api/ingest/process', request),
-  startIngestion: (request: IngestionRequest) => apiClient.post('/ingestion/start', request),
+  startIngestion: (request: IngestionRequest) => apiClient.post<IngestionResponse>('/ingestion/start', request),
+  getIngestionStatus: (executionArn: string) => apiClient.get<IngestionStatus>(`/ingestion/status/${executionArn}`),
   listDatasets: () => apiClient.get<Dataset[]>('/ingestion/datasets'),
   getUploadUrl: (filename: string, contentType: string) => apiClient.post<UploadUrlResponse>('/ingestion/upload-url', { filename, content_type: contentType }),
 

@@ -4,7 +4,7 @@ Ingestion API Routes.
 This module provides API endpoints for triggering video ingestion jobs.
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 
@@ -29,6 +29,14 @@ class IngestionResponse(BaseModel):
     status: str
     message: str
 
+class IngestionStatusResponse(BaseModel):
+    """Response model for detailed ingestion job status."""
+    status: str
+    start_date: str
+    stop_date: Optional[str] = None
+    input: Optional[Dict[str, Any]] = None
+    output: Optional[Dict[str, Any]] = None
+
 class UploadUrlRequest(BaseModel):
     """Request model for getting a presigned upload URL."""
     filename: str
@@ -39,15 +47,6 @@ class UploadUrlResponse(BaseModel):
     upload_url: str
     s3_uri: str
     expires_in: int
-
-def run_ingestion_task(video_path: str, model_type: str, backend_types: Optional[List[str]]):
-    """Background task to run the ingestion pipeline."""
-    try:
-        pipeline = VideoIngestionPipeline()
-        result = pipeline.process_video(video_path, model_type, backend_types)
-        logger.info(f"Ingestion job {result.job_id} completed with status: {result.status}")
-    except Exception as e:
-        logger.error(f"Background ingestion task failed: {e}", exc_info=True)
 
 @router.get("/datasets", response_model=List[Dict[str, Any]])
 async def list_datasets():
@@ -114,34 +113,54 @@ async def get_upload_url(request: UploadUrlRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/start", response_model=IngestionResponse)
-async def start_ingestion(request: IngestionRequest, background_tasks: BackgroundTasks):
+async def start_ingestion(request: IngestionRequest):
     """
     Start a video ingestion job.
 
     This endpoint accepts a video path (S3 URI) and configuration,
-    and starts the ingestion process in the background.
+    and triggers the ingestion Step Function workflow.
     """
     try:
         # Basic validation
-        if not request.video_path.startswith("s3://"):
-             raise HTTPException(status_code=400, detail="video_path must be a valid S3 URI")
+        if not request.video_path.startswith("s3://") and not request.video_path.startswith("dataset://"):
+             raise HTTPException(status_code=400, detail="video_path must be a valid S3 URI or dataset:// URI")
 
-        # Start background task
-        background_tasks.add_task(
-            run_ingestion_task,
+        # Start ingestion via Step Function
+        pipeline = VideoIngestionPipeline()
+        result = pipeline.process_video(
             request.video_path,
             request.model_type,
             request.backend_types
         )
 
         return IngestionResponse(
-            job_id="pending", # In a real system, we'd generate and return a job ID here
-            status="accepted",
-            message=f"Ingestion started for {request.video_path}"
+            job_id=result.job_id,
+            status=result.status,
+            message=result.message
         )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to start ingestion: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/status/{execution_arn:path}", response_model=IngestionStatusResponse)
+async def get_ingestion_status(execution_arn: str):
+    """
+    Get the status of an ingestion job (Step Function execution).
+    """
+    try:
+        pipeline = VideoIngestionPipeline()
+        status_info = pipeline.get_status(execution_arn)
+        
+        return IngestionStatusResponse(
+            status=status_info['status'],
+            start_date=status_info['startDate'],
+            stop_date=status_info.get('stopDate'),
+            input=status_info.get('input'),
+            output=status_info.get('output')
+        )
+    except Exception as e:
+        logger.error(f"Failed to get ingestion status: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

@@ -18,10 +18,40 @@ export function IngestionPanel() {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<string>('');
   const [activeTab, setActiveTab] = useState('s3');
+  const [executionArn, setExecutionArn] = useState<string | null>(null);
+  const [ingestionStatus, setIngestionStatus] = useState<string | null>(null);
 
   useEffect(() => {
     loadDatasets();
   }, []);
+
+  useEffect(() => {
+    let intervalId: any;
+
+    if (executionArn && (ingestionStatus === 'RUNNING' || !ingestionStatus)) {
+      intervalId = setInterval(async () => {
+        try {
+          const response = await api.getIngestionStatus(executionArn);
+          const newStatus = response.data.status;
+          setIngestionStatus(newStatus);
+          
+          if (newStatus === 'SUCCEEDED') {
+             toast.success('Ingestion completed successfully!');
+             setExecutionArn(null); // Stop polling
+          } else if (newStatus === 'FAILED') {
+             toast.error(`Ingestion failed: ${response.data.error || 'Unknown error'}`);
+             setExecutionArn(null); // Stop polling
+          }
+        } catch (error) {
+          console.error('Failed to poll status:', error);
+        }
+      }, 3000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [executionArn, ingestionStatus]);
 
   const loadDatasets = async () => {
     try {
@@ -90,12 +120,19 @@ export function IngestionPanel() {
     }
 
     setIsIngesting(true);
+    setIngestionStatus(null);
+    setExecutionArn(null);
+
     try {
-      await api.startIngestion({
+      const response = await api.startIngestion({
         video_path: videoPath,
         model_type: modelType,
         backend_types: selectedBackends
       });
+      
+      setExecutionArn(response.data.execution_arn);
+      setIngestionStatus('RUNNING');
+
       toast.success('Ingestion started successfully');
       if (!videoPath.startsWith('dataset://')) {
           setVideoPath('');
@@ -103,6 +140,7 @@ export function IngestionPanel() {
     } catch (error) {
       console.error('Ingestion failed:', error);
       toast.error('Failed to start ingestion');
+      setIngestionStatus(null);
     } finally {
       setIsIngesting(false);
     }
@@ -235,6 +273,22 @@ export function IngestionPanel() {
             </>
           )}
         </Button>
+
+        {ingestionStatus && (
+          <div className={`mt-4 p-4 rounded-md border ${
+            ingestionStatus === 'SUCCEEDED' ? 'bg-green-50 border-green-200 text-green-700' :
+            ingestionStatus === 'FAILED' ? 'bg-red-50 border-red-200 text-red-700' :
+            'bg-blue-50 border-blue-200 text-blue-700'
+          }`}>
+            <div className="flex items-center">
+              {ingestionStatus === 'RUNNING' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <span className="font-medium">Status: {ingestionStatus}</span>
+            </div>
+            {executionArn && (
+                <p className="text-xs mt-1 opacity-75 break-all font-mono">Execution ARN: {executionArn}</p>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

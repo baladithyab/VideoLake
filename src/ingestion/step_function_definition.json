@@ -1,0 +1,62 @@
+{
+  "Comment": "VideoLake Ingestion Pipeline",
+  "StartAt": "ProcessVideo",
+  "States": {
+    "ProcessVideo": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "${ECS_CLUSTER_ARN}",
+        "TaskDefinition": "${INGESTION_TASK_ARN}",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "Subnets": [
+              "${SUBNET_1}",
+              "${SUBNET_2}"
+            ],
+            "SecurityGroups": [
+              "${SECURITY_GROUP}"
+            ],
+            "AssignPublicIp": "ENABLED"
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "ingestion-worker",
+              "Environment": [
+                {
+                  "Name": "VIDEO_PATH",
+                  "Value.$": "$.video_path"
+                },
+                {
+                  "Name": "MODEL_TYPE",
+                  "Value.$": "$.model_type"
+                },
+                {
+                  "Name": "BACKEND_TYPES",
+                  "Value.$": "$.backend_types_str"
+                }
+              ],
+              "Command": ["python", "scripts/ingest_video_task.py"]
+            }
+          ]
+        }
+      },
+      "ResultPath": "$.processing_output",
+      "End": true,
+      "Catch": [
+          {
+            "ErrorEquals": ["States.ALL"],
+            "Next": "FailState"
+          }
+      ]
+    },
+    "FailState": {
+      "Type": "Fail",
+      "Error": "IngestionFailed",
+      "Cause": "Video processing failed."
+    }
+  }
+}

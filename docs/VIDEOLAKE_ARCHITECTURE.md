@@ -681,7 +681,9 @@ def parse_terraform_state():
 
 ## Data Flow
 
-### Video Ingestion Flow
+### Video Ingestion Flow (Step Function Pipeline)
+
+The ingestion process is orchestrated by an AWS Step Function state machine to ensure reliability and scalability.
 
 ```
 1. User uploads video → S3 bucket
@@ -692,35 +694,43 @@ def parse_terraform_state():
      "backend_types": ["s3_vector", "lancedb"]
    }
 
-2. Backend validates S3 URI
-   - Check bucket exists
-   - Verify file is accessible
-   - Validate format (mp4, mov, etc.)
+2. API triggers Step Function Execution
+   - Validates input parameters
+   - Starts asynchronous execution
+   - Returns execution ARN immediately
 
-3. Submit to TwelveLabs
-   - Create processing job
-   - Configure Marengo model
-   - Set segmentation parameters
-
-4. Poll for completion
-   - Check job status every 30s
-   - Retrieve embeddings when ready
-   - Parse segment timestamps
-
-5. Store embeddings in vector stores
-   - Generate metadata for each segment
-   - Insert into S3Vector
-   - Insert into LanceDB (if selected)
-   - Insert into Qdrant (if selected)
-
-6. Return success
-   {
-     "job_id": "abc123",
-     "status": "completed",
-     "segments_processed": 45,
-     "backends_indexed": ["s3_vector", "lancedb"]
-   }
+3. Step Function Workflow
+   ┌─────────────────────────────────────────────────────────────┐
+   │  Start Execution                                             │
+   └──────┬──────────────────────────────────────────────────────┘
+          │
+   ┌──────▼──────┐
+   │  Extract    │ (ECS Fargate Task)
+   │  Metadata   │ - Validates video file
+   └──────┬──────┘ - Extracts technical metadata (duration, codec)
+          │
+   ┌──────▼──────┐
+   │  Embed      │ (ECS Fargate Task / TwelveLabs API)
+   │  Video      │ - Submits to TwelveLabs Marengo
+   └──────┬──────┘ - Polls for completion
+          │        - Downloads embeddings & timestamps
+          │
+   ┌──────▼──────┐
+   │  Upsert     │ (ECS Fargate Task)
+   │  Vectors    │ - Formats data for selected backends
+   └──────┬──────┘ - Inserts into S3Vector
+          │        - Inserts into LanceDB/Qdrant/OpenSearch
+          │
+   ┌──────▼──────┐
+   │  Complete   │
+   │  & Notify   │ - Updates job status to SUCCEEDED
+   └─────────────┘ - Sends notification (optional)
 ```
+
+**Key Components:**
+- **AWS Step Functions**: Orchestrates the workflow, handling retries and error states.
+- **ECS Fargate**: Executes the heavy lifting (extraction, embedding processing, vector upsertion) in serverless containers.
+- **Async Processing**: The API returns immediately, and the frontend polls the execution status.
 
 ### Search Flow
 
@@ -829,42 +839,36 @@ def parse_terraform_state():
 
 ### Architecture
 
+The pipeline is implemented as an AWS Step Function state machine that coordinates ECS Fargate tasks.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│               Video Processing Pipeline                      │
+│               Step Function Ingestion Pipeline               │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│  1. Upload                                                   │
-│     └─> S3 Bucket (videolake-shared-media/videos/)         │
+│  1. Trigger                                                  │
+│     └─> API Gateway / Lambda triggers Step Function          │
 │                                                              │
-│  2. Processing                                              │
-│     ├─> TwelveLabs API                                      │
-│     │   ├─ Submit video (S3 URI)                           │
-│     │   ├─ Marengo 2.7 model                               │
-│     │   ├─ Segment duration: 5s                            │
-│     │   └─ Embedding types: visual-text, visual-image,     │
-│     │                        audio                          │
+│  2. State Machine Execution                                  │
 │     │                                                        │
-│     └─> Polling (30s interval)                              │
-│         └─ Check job status until complete                  │
-│                                                              │
-│  3. Embedding Extraction                                     │
-│     └─> Parse TwelveLabs response                           │
-│         ├─ Extract embeddings (1024D vectors)              │
-│         ├─ Parse segment timestamps                        │
-│         └─ Build metadata                                   │
-│                                                              │
-│  4. Indexing                                                │
-│     └─> Multi-backend insertion                             │
-│         ├─ S3Vector.add_vectors()                          │
-│         ├─ LanceDB.add()                                   │
-│         ├─ Qdrant.upsert()                                 │
-│         └─ OpenSearch.bulk()                                │
-│                                                              │
-│  5. Verification                                            │
-│     └─> Validate insertion                                  │
-│         ├─ Check vector count                              │
-│         └─ Test search functionality                        │
+│     ├─> State: Extract (ECS Fargate)                         │
+│     │   └─> Validate S3 object & extract metadata            │
+│     │                                                        │
+│     ├─> State: Embed (ECS Fargate)                           │
+│     │   ├─> Call TwelveLabs API (Marengo 2.7)                │
+│     │   └─> Wait for processing (Async Pattern)              │
+│     │                                                        │
+│     ├─> State: Upsert (ECS Fargate)                          │
+│     │   ├─> Transform embeddings to common format            │
+│     │   ├─> Parallel write to selected backends:             │
+│     │   │   ├─ S3Vector                                      │
+│     │   │   ├─ LanceDB                                       │
+│     │   │   ├─ Qdrant                                        │
+│     │   │   └─ OpenSearch                                    │
+│     │   └─> Update job status                                │
+│     │                                                        │
+│     └─> State: Finalize                                      │
+│         └─> Mark job as SUCCEEDED / FAILED                   │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```

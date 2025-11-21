@@ -24,6 +24,7 @@ VideoLake is a **production-ready video search platform** that allows you to:
 ## 🌟 Key Features
 
 ### Video Processing Pipeline
+- **Step Function Pipeline**: Asynchronous, serverless ingestion workflow orchestrated by AWS Step Functions
 - **Multi-Model Support**: AWS Bedrock (Nova, Titan) and TwelveLabs Marengo 2.6/2.7
 - **Flexible Ingestion**: Upload via URL, direct S3 URI, or standard datasets
 - **Automatic Segmentation**: Configurable video chunking with overlap
