@@ -15,7 +15,7 @@ import hashlib
 from typing import Dict, List, Any, Optional, Iterator, Literal
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.utils.logging_config import get_logger
 from src.exceptions import ValidationError, ProcessingError
@@ -45,7 +45,7 @@ class VideoDatasetConfig:
 
     # Processing configuration
     max_videos: Optional[int] = None  # Limit for testing
-    video_extensions: List[str] = None
+    video_extensions: Optional[List[str]] = None
     min_duration_sec: float = 2.0
     max_duration_sec: float = 3600.0
 
@@ -216,7 +216,7 @@ class VideoDatasetManager:
             processed_videos=0,
             failed_videos=0,
             skipped_videos=0,
-            started_at=datetime.utcnow().isoformat()
+            started_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Checkpoint file
@@ -263,6 +263,9 @@ class VideoDatasetManager:
             )
 
             # Load dataset in streaming mode
+            if not self.config.hf_dataset_id:
+                raise ValidationError("HuggingFace dataset ID required")
+
             dataset = load_dataset(
                 self.config.hf_dataset_id,
                 split=self.config.hf_split,
@@ -279,6 +282,10 @@ class VideoDatasetManager:
                     break
 
                 # Extract video metadata from dataset item
+                if not isinstance(item, dict):
+                    logger.warning(f"Skipping invalid item format: {type(item)}")
+                    continue
+                    
                 video_metadata = self._extract_hf_video_metadata(item, count)
 
                 # Download and upload to S3
@@ -323,7 +330,7 @@ class VideoDatasetManager:
                 video_id=video_id,
                 source_url=url,
                 s3_uri=None,
-                added_at=datetime.utcnow().isoformat()
+                added_at=datetime.now(timezone.utc).isoformat()
             )
 
             # Download and upload to S3
@@ -400,7 +407,7 @@ class VideoDatasetManager:
                     width=best_file.get('width'),
                     height=best_file.get('height'),
                     tags=[],
-                    added_at=datetime.utcnow().isoformat()
+                    added_at=datetime.now(timezone.utc).isoformat()
                 )
 
                 # Download and upload
@@ -450,7 +457,7 @@ class VideoDatasetManager:
             caption=caption,
             category=category,
             tags=item.get('tags', []),
-            added_at=datetime.utcnow().isoformat()
+            added_at=datetime.now(timezone.utc).isoformat()
         )
 
         return metadata
@@ -536,11 +543,11 @@ class VideoDatasetManager:
         checkpoint_data = {
             'config': asdict(self.config),
             'progress': asdict(self.progress),
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.now(timezone.utc).isoformat()
         }
 
         self.checkpoint_file.write_text(json.dumps(checkpoint_data, indent=2))
-        self.progress.last_checkpoint_at = datetime.utcnow().isoformat()
+        self.progress.last_checkpoint_at = datetime.now(timezone.utc).isoformat()
 
         logger.debug(f"Checkpoint saved: {self.progress.processed_videos} videos")
 

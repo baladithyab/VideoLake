@@ -126,33 +126,33 @@ VideoLake uses a **modular, microservices-based architecture**:
 - Python >= 3.11
 - AWS CLI configured
 
-### 15-Minute Deployment
+### One-Click Deployment
+
+We provide a unified deployment script that handles environment setup, dependency installation, infrastructure deployment, and application startup.
 
 ```bash
 # 1. Clone repository
 git clone https://github.com/your-org/videolake.git
 cd videolake
 
-# 2. Deploy infrastructure (S3Vector only - fast default)
-cd terraform
-terraform init
-terraform apply -auto-approve
-
-# 3. Configure environment
-cd ..
-cp .env.example .env
-# Edit .env with your settings
-
-# 4. Start application
-./start.sh
-
-# 5. Access VideoLake
-# Frontend: http://localhost:5173
-# Backend API: http://localhost:8000
-# API Docs: http://localhost:8000/docs
+# 2. Run deployment script
+./deploy_videolake.sh
 ```
 
-**That's it!** You now have a working VideoLake instance with S3Vector backend.
+The script will:
+1. Check for required tools (Python, Node.js, Terraform, AWS CLI)
+2. Create a Python virtual environment and install dependencies
+3. Install frontend dependencies
+4. Initialize Terraform
+5. (Optional) Deploy AWS infrastructure
+6. Start the Backend API and Frontend Application
+
+**Access VideoLake:**
+- Frontend: http://localhost:5172
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+**That's it!** You now have a working VideoLake instance.
 
 ---
 
@@ -489,10 +489,10 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 ```bash
 git clone https://github.com/your-org/videolake.git
 cd videolake
-./start.sh
+./deploy_videolake.sh
 ```
 
-Visit [http://localhost:5173](http://localhost:5173) to start exploring VideoLake!
+Visit [http://localhost:5172](http://localhost:5172) to start exploring VideoLake!
 
 ---
 
