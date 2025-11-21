@@ -287,3 +287,28 @@ class BenchmarkService:
                 logger.error(f"Error checking ECS task status: {e}")
                 
         return job
+
+    def get_results(self, job_id: str) -> Dict[str, Any]:
+        """Get results for a benchmark job"""
+        job = self.jobs.get(job_id)
+        if not job:
+            return {"status": "not_found"}
+            
+        if job.get("status") != "completed":
+            return {"status": job.get("status"), "message": "Job not completed yet"}
+            
+        return job.get("results", {})
+
+    def list_benchmarks(self) -> List[Dict[str, Any]]:
+        """List all benchmark jobs"""
+        return [
+            {
+                "job_id": job_id,
+                "status": job["status"],
+                "type": job["type"],
+                "backends": job["backends"],
+                "config": job["config"],
+                "created_at": job.get("created_at") # We should add timestamp
+            }
+            for job_id, job in self.jobs.items()
+        ]

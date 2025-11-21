@@ -52,3 +52,16 @@ async def get_benchmark_status(job_id: str):
     if status["status"] == "not_found":
         raise HTTPException(status_code=404, detail="Job not found")
     return status
+
+@router.get("/results/{job_id}")
+async def get_benchmark_results(job_id: str):
+    """Get the results of a benchmark job."""
+    results = benchmark_service.get_results(job_id)
+    if results.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail="Job not found")
+    return results
+
+@router.get("/list")
+async def list_benchmarks():
+    """List all benchmark jobs."""
+    return benchmark_service.list_benchmarks()
