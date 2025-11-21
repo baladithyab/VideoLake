@@ -128,6 +128,29 @@ class AWSClientFactory:
                 )
         
         return self._clients['bedrock-runtime']
+
+    def get_bedrock_client(self) -> Any:
+        """Get Bedrock Control Plane client with optimized configuration."""
+        if 'bedrock' not in self._clients:
+            try:
+                session = self._get_session()
+                config = self._get_client_config()
+                
+                self._clients['bedrock'] = session.client(
+                    'bedrock',
+                    config=config
+                )
+                
+                logger.info("Bedrock Control Plane client created successfully")
+                
+            except Exception as e:
+                raise ConfigurationError(
+                    f"Failed to create Bedrock client: {str(e)}. Please ensure AWS credentials and region are properly configured.",
+                    error_code="BEDROCK_CLIENT_ERROR",
+                    error_details={"original_error": str(e)}
+                )
+        
+        return self._clients['bedrock']
     
     def get_opensearch_client(self) -> Any:
         """Get OpenSearch client with optimized configuration."""
@@ -192,6 +215,13 @@ class AWSClientFactory:
         except Exception as e:
             logger.error(f"Bedrock Runtime client validation failed: {e}")
             validation_results['bedrock-runtime'] = False
+
+        try:
+            self.get_bedrock_client()
+            validation_results['bedrock'] = True
+        except Exception as e:
+            logger.error(f"Bedrock Control Plane client validation failed: {e}")
+            validation_results['bedrock'] = False
         
         try:
             self.get_opensearch_client()

@@ -1,19 +1,52 @@
-import React from 'react';
-import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import React, { useMemo } from 'react';
+import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import type { SearchResult } from './ResultsGrid';
 
-const data = [
-  { x: 100, y: 200, z: 200 },
-  { x: 120, y: 100, z: 260 },
-  { x: 170, y: 300, z: 400 },
-  { x: 140, y: 250, z: 280 },
-  { x: 150, y: 400, z: 500 },
-  { x: 110, y: 280, z: 200 },
-];
+interface VisualizationPanelProps {
+  results: SearchResult[];
+  onPointClick: (result: SearchResult) => void;
+}
 
-export const VisualizationPanel: React.FC = () => {
+export const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ results, onPointClick }) => {
+  // Generate pseudo-coordinates based on score and ID hash for visualization
+  // In a real app, these would come from dimensionality reduction (t-SNE/PCA) on the backend
+  const data = useMemo(() => {
+    return results.map((result, index) => {
+      // Simple pseudo-random projection based on string hash
+      const hash = result.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const x = (hash % 100) + (Math.random() * 10 - 5); // Add some jitter
+      const y = result.score * 100; // Use score as Y axis to show relevance
+      
+      return {
+        x,
+        y,
+        z: 1,
+        result // Keep reference to original result
+      };
+    });
+  }, [results]);
+
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white p-2 border border-gray-200 shadow-lg rounded text-xs">
+          <p className="font-semibold">{data.result.metadata.s3_uri?.split('/').pop()}</p>
+          <p>Score: {(data.result.score * 100).toFixed(1)}%</p>
+          <p>Time: {data.result.metadata.start_time?.toFixed(1)}s</p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  if (results.length === 0) {
+    return null;
+  }
+
   return (
     <div className="bg-white p-4 rounded-lg shadow-md">
-      <h3 className="text-lg font-medium text-gray-900 mb-4">Embedding Visualization (t-SNE/PCA)</h3>
+      <h3 className="text-lg font-medium text-gray-900 mb-4">Result Distribution</h3>
       <div className="h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart
@@ -25,15 +58,19 @@ export const VisualizationPanel: React.FC = () => {
             }}
           >
             <CartesianGrid />
-            <XAxis type="number" dataKey="x" name="dimension 1" />
-            <YAxis type="number" dataKey="y" name="dimension 2" />
-            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-            <Scatter name="Embeddings" data={data} fill="#8884d8" />
+            <XAxis type="number" dataKey="x" name="Cluster" unit="" tick={false} />
+            <YAxis type="number" dataKey="y" name="Relevance" unit="%" domain={[0, 100]} />
+            <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+            <Scatter name="Results" data={data} fill="#8884d8" onClick={(data) => onPointClick(data.payload.result)}>
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.y > 80 ? '#4f46e5' : '#818cf8'} cursor="pointer" />
+              ))}
+            </Scatter>
           </ScatterChart>
         </ResponsiveContainer>
       </div>
       <p className="text-sm text-gray-500 mt-2 text-center">
-        Placeholder visualization. Real data integration coming soon.
+        Click on a point to play the video segment. Y-axis represents relevance score.
       </p>
     </div>
   );

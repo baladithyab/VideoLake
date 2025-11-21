@@ -167,6 +167,15 @@ src/
 
 ## Infrastructure (Terraform)
 
+### Dynamic Infrastructure Management
+
+The platform supports **dynamic provisioning** of vector store backends directly from the UI. This allows users to spin up and tear down expensive resources (like OpenSearch or Qdrant ECS clusters) on demand.
+
+**Key Components**:
+1. **Terraform Manager Service**: Wraps Terraform CLI commands (`apply`, `destroy`) in a Python API.
+2. **Operation Tracker**: Tracks long-running Terraform operations and streams logs to the UI via SSE.
+3. **State Awareness**: The backend parses `terraform.tfstate` to determine the current deployment status, ensuring the UI always reflects the actual infrastructure state.
+
 ### Default Deployment (Fast Path)
 
 **What Gets Deployed**:

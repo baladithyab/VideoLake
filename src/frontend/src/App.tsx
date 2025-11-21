@@ -1,50 +1,121 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
 import { BackendSelector } from './components/BackendSelector';
+import { InfrastructureManager } from './components/InfrastructureManager';
+import { BenchmarkDashboard } from './components/BenchmarkDashboard';
 import { SearchInterface } from './components/SearchInterface';
 import { ResultsGrid, type SearchResult } from './components/ResultsGrid';
 import { VideoPlayer } from './components/VideoPlayer';
 import { VisualizationPanel } from './components/VisualizationPanel';
+import { IngestionPanel } from './components/IngestionPanel';
 import { api } from './api/client';
+import { Settings, BarChart3 } from 'lucide-react';
 
-// Helper to generate a dummy vector for testing since backend requires vector
-const generateDummyVector = (dim: number = 1024): number[] => {
-  return Array.from({ length: dim }, () => Math.random());
-};
+interface BackendOption {
+  value: string;
+  label: string;
+  deployed?: boolean;
+  disabled?: boolean;
+}
+
+interface BackendStatus {
+  name: string;
+  deployed: boolean;
+  endpoint: string | null;
+  status: string;
+}
 
 function App() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
+  const [showInfrastructure, setShowInfrastructure] = useState(false);
+  const [showBenchmark, setShowBenchmark] = useState(false);
+  const [selectedBackend, setSelectedBackend] = useState('s3_vector');
+  const [availableBackends, setAvailableBackends] = useState<BackendOption[]>([
+    { value: 's3_vector', label: 'S3 Vector', deployed: true },
+    { value: 'lancedb', label: 'LanceDB', deployed: false },
+    { value: 'qdrant', label: 'Qdrant', deployed: false },
+    { value: 'opensearch', label: 'OpenSearch', deployed: false }
+  ]);
 
-  const handleSearch = async (query: string, type: 'text' | 'image') => {
+  // Fetch infrastructure status to determine which backends are deployed
+  useEffect(() => {
+    fetchInfrastructureStatus();
+    // Poll status every 30 seconds
+    const interval = setInterval(fetchInfrastructureStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchInfrastructureStatus = async () => {
+    try {
+      const response = await api.getInfrastructureStatus();
+      const deployedStores: BackendStatus[] = response.data.deployed_stores || [];
+      
+      // Map infrastructure status to backend options
+      const backendMap: Record<string, string> = {
+        's3vector': 's3_vector',
+        'lancedb': 'lancedb',
+        'qdrant': 'qdrant',
+        'opensearch': 'opensearch'
+      };
+
+      const updatedBackends = [
+        { value: 's3_vector', label: 'S3 Vector', deployed: true }, // S3 Vector is always available
+        { value: 'lancedb', label: 'LanceDB', deployed: false },
+        { value: 'qdrant', label: 'Qdrant', deployed: false },
+        { value: 'opensearch', label: 'OpenSearch', deployed: false }
+      ];
+
+      deployedStores.forEach((store) => {
+        const backendValue = backendMap[store.name.toLowerCase()];
+        if (backendValue) {
+          const backend = updatedBackends.find(b => b.value === backendValue);
+          if (backend) {
+            backend.deployed = store.deployed && store.status === 'deployed';
+          }
+        }
+      });
+
+      setAvailableBackends(updatedBackends);
+    } catch (error) {
+      console.error('Failed to fetch infrastructure status:', error);
+    }
+  };
+
+  const handleSearch = async (query: string, type: 'text' | 'image', backend: string) => {
     setIsSearching(true);
     try {
-      // In a real application, we would call an embedding service here
-      // to convert the text/image query into a vector.
-      // For now, we generate a dummy vector to satisfy the backend contract.
-      console.log(`Searching for "${query}" (${type})`);
-      const dummyVector = generateDummyVector(1024);
+      console.log(`Searching for "${query}" (${type}) using ${backend} backend`);
       
-      const response = await api.search({
-        query_vector: dummyVector,
-        top_k: 12
+      // Use the new searchQuery endpoint that accepts text and backend
+      const response = await api.searchQuery({
+        query_text: query,
+        top_k: 12,
+        backend: backend,
+        vector_types: ['visual-text', 'visual-image', 'audio']
       });
       
       if (response.data && response.data.results) {
         setResults(response.data.results);
-        toast.success(`Found ${response.data.results.length} results`);
+        toast.success(`Found ${response.data.results.length} results using ${backend}`);
       } else {
         setResults([]);
         toast('No results found', { icon: 'ℹ️' });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Search failed:', error);
-      toast.error('Search failed. Please try again.');
+      const errorMessage = error.response?.data?.detail || error.message || 'Search failed. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const handleBackendChange = (backend: string) => {
+    setSelectedBackend(backend);
+    console.log('Backend changed to:', backend);
   };
 
   const handlePlaySegment = (result: SearchResult) => {
@@ -66,26 +137,71 @@ function App() {
                 Multi-modal Video Search
               </span>
             </div>
-            <BackendSelector />
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  setShowBenchmark(!showBenchmark);
+                  setShowInfrastructure(false);
+                }}
+                className={`p-2 rounded-md ${showBenchmark ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}
+                title="Performance Benchmarks"
+              >
+                <BarChart3 className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => {
+                  setShowInfrastructure(!showInfrastructure);
+                  setShowBenchmark(false);
+                }}
+                className={`p-2 rounded-md ${showInfrastructure ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}
+                title="Manage Infrastructure"
+              >
+                <Settings className="h-5 w-5" />
+              </button>
+              <BackendSelector />
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Search Section */}
-        <section className="text-center space-y-4">
+        {showBenchmark ? (
+          <section>
+            <BenchmarkDashboard availableBackends={availableBackends} />
+          </section>
+        ) : showInfrastructure ? (
+          <section>
+            <InfrastructureManager />
+          </section>
+        ) : (
+          <>
+            {/* Search Section */}
+            <section className="text-center space-y-4">
           <h2 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
             Find moments in your videos
           </h2>
           <p className="max-w-2xl mx-auto text-xl text-gray-500">
             Search using natural language or images to find exact timestamps.
           </p>
-          <SearchInterface onSearch={handleSearch} isLoading={isSearching} />
+          <SearchInterface
+            onSearch={handleSearch}
+            isLoading={isSearching}
+            availableBackends={availableBackends}
+            selectedBackend={selectedBackend}
+            onBackendChange={handleBackendChange}
+          />
         </section>
 
         {/* Visualization Section */}
+        {results.length > 0 && (
+          <section>
+            <VisualizationPanel results={results} onPointClick={handlePlaySegment} />
+          </section>
+        )}
+
+        {/* Ingestion Section */}
         <section>
-          <VisualizationPanel />
+          <IngestionPanel />
         </section>
 
         {/* Results Section */}
@@ -97,7 +213,9 @@ function App() {
             </span>
           </div>
           <ResultsGrid results={results} onPlaySegment={handlePlaySegment} />
-        </section>
+            </section>
+          </>
+        )}
       </main>
 
       {/* Video Player Modal */}

@@ -39,6 +39,8 @@ from src.services.embedding_storage_integration import EmbeddingStorageIntegrati
 from src.services.comprehensive_video_processing_service import ComprehensiveVideoProcessingService
 from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.services.s3_vector_storage import S3VectorStorageManager
+from src.services.vector_store_manager import VectorStoreManager
+from src.services.vector_store_provider import VectorStoreType
 from src.services.twelvelabs_video_processing import TwelveLabsVideoProcessingService
 from src.exceptions import ValidationError
 from src.utils.logging_config import get_logger, get_structured_logger, LoggedOperation, log_function_calls
@@ -198,7 +200,8 @@ class SimilaritySearchEngine(ISearchService):
                  twelvelabs_service: Optional[TwelveLabsVideoProcessingService] = None,
                  s3_vector_manager: Optional[S3VectorStorageManager] = None,
                  text_storage: Optional[EmbeddingStorageIntegration] = None,
-                 video_storage: Optional[ComprehensiveVideoProcessingService] = None):
+                 video_storage: Optional[ComprehensiveVideoProcessingService] = None,
+                 vector_store_manager: Optional[VectorStoreManager] = None):
         """
         Initialize the similarity search engine.
         
@@ -208,12 +211,14 @@ class SimilaritySearchEngine(ISearchService):
             s3_vector_manager: S3 Vector storage manager
             text_storage: Text embedding storage service
             video_storage: Video embedding storage service
+            vector_store_manager: Unified vector store manager
         """
         self.bedrock_service = bedrock_service or BedrockEmbeddingService()
         self.twelvelabs_service = twelvelabs_service or TwelveLabsVideoProcessingService()
         self.s3_vector_manager = s3_vector_manager or S3VectorStorageManager()
         self.text_storage = text_storage or EmbeddingStorageIntegration()
         self.video_storage = video_storage or ComprehensiveVideoProcessingService()
+        self.vector_store_manager = vector_store_manager or VectorStoreManager()
         
         # Performance tracking with thread safety
         self._stats_lock = Lock()
@@ -247,7 +252,7 @@ class SimilaritySearchEngine(ISearchService):
             index_type: Type of index (determines supported query types)
             
         Returns:
-            SimilaritySearchResponse with comprehensive results and analytics
+            SearchResponse with comprehensive results and analytics
             
         Raises:
             ValidationError: If query/index combination is invalid
@@ -267,20 +272,66 @@ class SimilaritySearchEngine(ISearchService):
         # Prepare metadata filters
         combined_filters = self._prepare_metadata_filters(query)
         
-        # Execute S3 Vector search
-        search_results = self.s3_vector_manager.query_vectors(
-            index_arn=index_arn,
-            query_vector=query_embedding,
-            top_k=query.top_k,
-            metadata_filter=combined_filters,
-            return_distance=True,
-            return_metadata=True
-        )
+        # Determine backend and execute search
+        # Check if backend is specified in query (if it has the attribute)
+        backend = getattr(query, 'backend', "s3_vector") or "s3_vector"
         
-        # Convert to similarity results
-        similarity_results = self._convert_to_similarity_results(
-            search_results, query, input_type, index_type
-        )
+        if backend == "s3_vector":
+            # Execute S3 Vector search
+            search_results = self.s3_vector_manager.query_vectors(
+                index_arn=index_arn,
+                query_vector=query_embedding,
+                top_k=query.top_k,
+                metadata_filter=combined_filters,
+                return_distance=True,
+                return_metadata=True
+            )
+            
+            # Convert to similarity results
+            similarity_results = self._convert_to_similarity_results(
+                search_results, query, input_type, index_type
+            )
+        else:
+            # Use VectorStoreManager for other backends
+            try:
+                store_type = VectorStoreType(backend)
+                # For other backends, index_arn might be the collection/table name
+                # If index_arn is an ARN, we might need to extract the name or use a default
+                collection_name = index_arn.split('/')[-1] if '/' in index_arn else index_arn
+                
+                raw_results = self.vector_store_manager.query(
+                    store_type=store_type,
+                    name=collection_name,
+                    query_vector=query_embedding,
+                    top_k=query.top_k,
+                    filter_metadata=combined_filters
+                )
+                
+                # Convert raw results to SimilarityResult objects
+                similarity_results = []
+                for r in raw_results:
+                    similarity_results.append(SimilarityResult(
+                        key=r.get('id', ''),
+                        similarity_score=r.get('score', 0.0),
+                        content_type=r.get('metadata', {}).get('content_type', 'unknown'),
+                        metadata=r.get('metadata', {}),
+                        confidence_score=r.get('score', 0.0)
+                    ))
+                    
+            except ValueError:
+                logger.warning(f"Unknown backend: {backend}, falling back to S3 Vector")
+                # Fallback to S3 Vector
+                search_results = self.s3_vector_manager.query_vectors(
+                    index_arn=index_arn,
+                    query_vector=query_embedding,
+                    top_k=query.top_k,
+                    metadata_filter=combined_filters,
+                    return_distance=True,
+                    return_metadata=True
+                )
+                similarity_results = self._convert_to_similarity_results(
+                    search_results, query, input_type, index_type
+                )
         
         # Post-process results
         processed_results = self._post_process_results(similarity_results, query)
@@ -288,7 +339,7 @@ class SimilaritySearchEngine(ISearchService):
         # Generate response
         processing_time_ms = int((time.time() - start_time) * 1000)
         response = self._generate_search_response(
-            processed_results, query_id, input_type, index_type, 
+            processed_results, query_id, input_type, index_type,
             processing_time_ms, cost, query
         )
         
@@ -319,10 +370,21 @@ class SimilaritySearchEngine(ISearchService):
         Returns:
             SimilaritySearchResponse with text query results
         """
-        query = SearchQuery(
+        # Convert dict temporal filter to TemporalFilter object if needed
+        tf_obj = None
+        if temporal_filter:
+            tf_obj = TemporalFilter(
+                start_time=temporal_filter.get('start_time'),
+                end_time=temporal_filter.get('end_time'),
+                duration_min=temporal_filter.get('duration_min'),
+                duration_max=temporal_filter.get('duration_max')
+            )
+
+        query = SimilarityQuery(
             query_text=query_text,
             top_k=top_k,
             metadata_filters=metadata_filters,
+            temporal_filter=tf_obj,
             extract_entities=True,
             expand_synonyms=True,
             include_explanations=True
@@ -436,7 +498,7 @@ class SimilaritySearchEngine(ISearchService):
                     diversity_factor=query.diversity_factor
                 )
                 
-                future = executor.submit(self._search_single_index_with_metadata, 
+                future = executor.submit(self._search_single_index_with_metadata,
                                        index_query, index_arn, index_type, weight, i)
                 search_tasks.append(future)
             
@@ -474,8 +536,8 @@ class SimilaritySearchEngine(ISearchService):
         logger.info(f"Multi-index search completed: {query_id}, {len(fused_results)} final results")
         return response
 
-    def _search_single_index_with_metadata(self, query: SimilarityQuery, index_arn: str, 
-                                         index_type: IndexType, weight: float, 
+    def _search_single_index_with_metadata(self, query: SearchQuery, index_arn: str,
+                                         index_type: IndexType, weight: float,
                                          index_id: int) -> Dict[str, Any]:
         """Search a single index and return results with metadata."""
         try:
@@ -506,7 +568,7 @@ class SimilaritySearchEngine(ISearchService):
 
     def _fuse_multi_index_results(self,
                                 index_results: List[Dict[str, Any]],
-                                query: SimilarityQuery,
+                                query: SearchQuery,
                                 fusion_method: str) -> List[SimilarityResult]:
         """Fuse results from multiple indexes using the specified method."""
         if fusion_method == "weighted_average":
@@ -519,8 +581,8 @@ class SimilaritySearchEngine(ISearchService):
             logger.warning(f"Unknown fusion method: {fusion_method}, using weighted_average")
             return self._fuse_weighted_average(index_results, query)
 
-    def _fuse_weighted_average(self, index_results: List[Dict[str, Any]], 
-                             query: SimilarityQuery) -> List[SimilarityResult]:
+    def _fuse_weighted_average(self, index_results: List[Dict[str, Any]],
+                             query: SearchQuery) -> List[SimilarityResult]:
         """Fuse results using weighted average of similarity scores."""
         result_map = {}
         
@@ -557,8 +619,8 @@ class SimilaritySearchEngine(ISearchService):
         fused_results.sort(key=lambda x: x.similarity_score, reverse=True)
         return fused_results[:query.top_k]
 
-    def _fuse_rank_based(self, index_results: List[Dict[str, Any]], 
-                       query: SimilarityQuery) -> List[SimilarityResult]:
+    def _fuse_rank_based(self, index_results: List[Dict[str, Any]],
+                       query: SearchQuery) -> List[SimilarityResult]:
         """Fuse results using reciprocal rank fusion."""
         result_map = {}
         
@@ -593,8 +655,8 @@ class SimilaritySearchEngine(ISearchService):
         fused_results.sort(key=lambda x: x.similarity_score, reverse=True)
         return fused_results[:query.top_k]
 
-    def _fuse_max_score(self, index_results: List[Dict[str, Any]], 
-                      query: SimilarityQuery) -> List[SimilarityResult]:
+    def _fuse_max_score(self, index_results: List[Dict[str, Any]],
+                      query: SearchQuery) -> List[SimilarityResult]:
         """Fuse results by taking maximum score across indexes."""
         result_map = {}
         
@@ -612,8 +674,8 @@ class SimilaritySearchEngine(ISearchService):
         fused_results.sort(key=lambda x: x.similarity_score, reverse=True)
         return fused_results[:query.top_k]
 
-    def register_index(self, index_arn: str, index_type: IndexType, 
-                      vector_types: List[str], metadata: Dict[str, Any] = None) -> None:
+    def register_index(self, index_arn: str, index_type: IndexType,
+                      vector_types: List[str], metadata: Optional[Dict[str, Any]] = None) -> None:
         """Register an index for multi-index search coordination."""
         self.index_registry[index_arn] = {
             'index_type': index_type,
@@ -689,7 +751,7 @@ class SimilaritySearchEngine(ISearchService):
         return filtered_results
 
     def _validate_query_index_compatibility(self,
-                                          query: SimilarityQuery,
+                                          query: SearchQuery,
                                           index_type: IndexType,
                                           input_type: QueryInputType) -> None:
         """Validate that the query input type is compatible with the index type."""
@@ -713,7 +775,7 @@ class SimilaritySearchEngine(ISearchService):
             raise ValidationError("similarity_threshold must be between 0.0 and 1.0")
 
     def _generate_query_embedding(self,
-                                query: SimilarityQuery,
+                                query: SearchQuery,
                                 index_type: IndexType,
                                 index_arn: str) -> Tuple[List[float], float]:
         """
@@ -776,7 +838,7 @@ class SimilaritySearchEngine(ISearchService):
         else:
             raise ValidationError(f"Unsupported input type: {input_type}")
 
-    def _enhance_text_query(self, text: str, query: SimilarityQuery) -> str:
+    def _enhance_text_query(self, text: str, query: SearchQuery) -> str:
         """Enhance text query with entity extraction and synonym expansion."""
         enhanced_text = text
         
@@ -863,7 +925,7 @@ class SimilaritySearchEngine(ISearchService):
                 raise
             raise ValidationError(f"Failed to retrieve video embedding: {str(e)}")
 
-    def _prepare_metadata_filters(self, query: SimilarityQuery) -> Optional[Dict[str, Any]]:
+    def _prepare_metadata_filters(self, query: SearchQuery) -> Optional[Dict[str, Any]]:
         """Prepare combined metadata filters for S3 Vector search."""
         combined_filters = {}
         
@@ -884,7 +946,7 @@ class SimilaritySearchEngine(ISearchService):
 
     def _convert_to_similarity_results(self,
                                      search_results: Dict[str, Any],
-                                     query: SimilarityQuery,
+                                     query: SearchQuery,
                                      input_type: QueryInputType,
                                      index_type: IndexType) -> List[SimilarityResult]:
         """Convert S3 Vector search results to SimilarityResult objects."""
@@ -954,7 +1016,7 @@ class SimilaritySearchEngine(ISearchService):
 
     def _post_process_results(self,
                             results: List[SimilarityResult],
-                            query: SimilarityQuery) -> List[SimilarityResult]:
+                            query: SearchQuery) -> List[SimilarityResult]:
         """Apply post-processing to search results."""
         processed = results
         
@@ -1115,7 +1177,7 @@ class SimilaritySearchEngine(ISearchService):
                                 index_type: IndexType,
                                 processing_time_ms: int,
                                 cost: float,
-                                query: SimilarityQuery) -> SimilaritySearchResponse:
+                                query: SearchQuery) -> SearchResponse:
         """Generate comprehensive search response with analytics."""
         # Result distribution by content type
         distribution = {}
@@ -1140,7 +1202,7 @@ class SimilaritySearchEngine(ISearchService):
         if input_type == QueryInputType.TEXT and index_type == IndexType.MARENGO_MULTIMODAL:
             suggestions.append("This multimodal index supports video, audio, and image queries too")
         
-        return SimilaritySearchResponse(
+        return SearchResponse(
             results=results,
             total_results=len(results),
             query_id=query_id,

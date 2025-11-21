@@ -1,11 +1,12 @@
 import React, { useRef, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Repeat } from 'lucide-react';
 
 interface VideoPlayerProps {
   videoUrl: string;
   startTime?: number;
   endTime?: number;
   autoPlay?: boolean;
+  loop?: boolean;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -13,12 +14,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   startTime = 0,
   endTime,
   autoPlay = false,
+  loop: initialLoop = false,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [duration, setDuration] = React.useState(0);
   const [isMuted, setIsMuted] = React.useState(false);
+  const [isLooping, setIsLooping] = React.useState(initialLoop);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -33,8 +36,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (videoRef.current) {
       setCurrentTime(videoRef.current.currentTime);
       if (endTime && videoRef.current.currentTime >= endTime) {
-        videoRef.current.pause();
-        setIsPlaying(false);
+        if (isLooping) {
+          videoRef.current.currentTime = startTime;
+          videoRef.current.play().catch(e => console.error("Loop replay failed:", e));
+        } else {
+          videoRef.current.pause();
+          setIsPlaying(false);
+        }
       }
     }
   };
@@ -119,6 +127,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
           </button>
           
+          <button
+            onClick={() => setIsLooping(!isLooping)}
+            className={`hover:text-indigo-400 transition-colors ${isLooping ? 'text-indigo-400' : ''}`}
+            title="Toggle Loop"
+          >
+            <Repeat size={20} />
+          </button>
+
           <button onClick={toggleFullscreen} className="hover:text-indigo-400 transition-colors">
             <Maximize size={20} />
           </button>

@@ -109,6 +109,7 @@ async def health_check():
     overall_healthy = True
 
     # Check service initialization
+    storage_manager = None
     try:
         storage_manager = get_storage_manager()
         search_engine = get_search_engine()
@@ -127,8 +128,12 @@ async def health_check():
 
     # Check AWS S3 connectivity
     try:
-        storage_manager.s3_client.list_buckets()
-        checks["aws_s3"] = {"status": "healthy"}
+        if storage_manager:
+            storage_manager.s3_client.list_buckets()
+            checks["aws_s3"] = {"status": "healthy"}
+        else:
+            checks["aws_s3"] = {"status": "unhealthy", "error": "Storage manager not initialized"}
+            overall_healthy = False
     except Exception as e:
         checks["aws_s3"] = {"status": "unhealthy", "error": str(e)}
         overall_healthy = False
@@ -154,7 +159,10 @@ async def health_check():
     # Check AWS Bedrock
     try:
         # Quick check - list foundation models
-        response = bedrock_service.bedrock_client.list_foundation_models()
+        # Use the correct client for listing models (bedrock vs bedrock-runtime)
+        from src.utils.aws_clients import aws_client_factory
+        bedrock_client = aws_client_factory.get_bedrock_client()
+        response = bedrock_client.list_foundation_models()
         checks["aws_bedrock"] = {
             "status": "healthy",
             "models_available": len(response.get("modelSummaries", []))
@@ -177,9 +185,11 @@ from .routers import (
     search,
     embeddings,
     analytics,
-    infrastructure,
+    # infrastructure,
     benchmark
 )
+from src.api.routes import infrastructure as infrastructure_routes
+from src.api.routes import ingestion as ingestion_routes
 
 # Include routers
 app.include_router(resources.router, prefix="/api/resources", tags=["resources"])
@@ -187,6 +197,8 @@ app.include_router(processing.router, prefix="/api/processing", tags=["processin
 app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(embeddings.router, prefix="/api/embeddings", tags=["embeddings"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
-app.include_router(infrastructure.router, prefix="/api", tags=["infrastructure"])
+# app.include_router(infrastructure.router, prefix="/api", tags=["infrastructure"])
+app.include_router(infrastructure_routes.router, prefix="/api", tags=["infrastructure"])
 app.include_router(benchmark.router, prefix="/api/benchmark", tags=["benchmark"])
+app.include_router(ingestion_routes.router, prefix="/api/ingestion", tags=["ingestion"])
 

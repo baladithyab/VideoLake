@@ -159,16 +159,7 @@ class TwelveLabsVideoProcessingService:
                 bedrock_client = boto3.client('bedrock', config=client_config)
             else:
                 # Create bedrock client for default region
-                import boto3
-                from botocore.config import Config
-
-                client_config = Config(
-                    retries={'max_attempts': 3, 'mode': 'adaptive'},
-                    read_timeout=60,
-                    connect_timeout=10,
-                    region_name=config_manager.config.aws.region
-                )
-                bedrock_client = boto3.client('bedrock', config=client_config)
+                bedrock_client = aws_client_factory.get_bedrock_client()
             response = bedrock_client.list_foundation_models()
             
             available_models = [model['modelId'] for model in response['modelSummaries']]

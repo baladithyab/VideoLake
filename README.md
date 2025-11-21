@@ -126,10 +126,12 @@ See [REFACTORING_ARCHITECTURE.md](docs/REFACTORING_ARCHITECTURE.md) for detailed
 - **LanceDB Variants** 🔄 - Columnar storage on S3/EFS/EBS (add via terraform.tfvars)
 
 ### Architecture Highlights
+- **Serverless Backend**: ECS Fargate with Python FastAPI for scalable, maintenance-free compute
+- **Static Frontend**: S3 hosting with CloudFront CDN for global low-latency delivery
+- **Secure Storage**: S3 for video assets and EFS for vector persistence (LanceDB)
 - **Modular Design**: Fast S3-only default OR full 4-backend comparison
 - **Single Source of Truth**: Terraform state drives infrastructure discovery
 - **Zero Configuration Drift**: UI reflects actual deployed infrastructure
-- **Health Status**: Real-time connectivity checks for all backends
 
 ### 🚧 **Planned Enhancements**
 
@@ -201,7 +203,10 @@ STRUCTURED_LOGGING=true
 
 ## 🚀 Quick Start (< 15 minutes)
 
-**Fast Path - AWS S3Vector Only:**
+**Primary Deployment Guide:**
+For a complete production-ready deployment to AWS ECS/Fargate and S3/CloudFront, please follow our **[Quick Start Deployment Guide](QUICKSTART_DEPLOY.md)**.
+
+**Fast Path - Local Development (AWS S3Vector Only):**
 ```bash
 # 1. Deploy infrastructure (< 5 min)
 cd terraform && terraform init && terraform apply -auto-approve
@@ -217,15 +222,21 @@ cd .. && ./start.sh
 **Full Comparison - All 4 Vector Stores:**
 See [QUICKSTART.md](QUICKSTART.md) for complete setup including all backends: AWS S3Vector, OpenSearch, Qdrant, and LanceDB.
 
-### Infrastructure Management
+### 🆕 Infrastructure Manager
 
-**View Resources**: Navigate to `/resource-management` to see all deployed infrastructure with real-time health status
+The platform now features a **Dynamic Infrastructure Manager** in the UI:
+
+*   **Real-Time Visibility**: View the status of your deployed AWS resources (ECS, S3, CloudFront, etc.) directly from the dashboard.
+*   **Dynamic Configuration**: The frontend automatically adapts to your deployed environment, fetching API endpoints and bucket names dynamically.
+*   **Health Monitoring**: Monitor the health of your backend services and infrastructure components.
+
+**View Resources**: Navigate to `/resource-management` to see all deployed infrastructure with real-time health status.
 
 **Deploy/Modify Resources**:
-- **Option 1 (UI)**: Use Infrastructure Dashboard at `/infrastructure`
-- **Option 2 (CLI)**: Use Terraform commands in the `terraform/` directory
+- **Infrastructure**: Use Terraform commands in the `terraform/` directory.
+- **Application Deployment**: Use `scripts/deploy_ecs.sh` to deploy backend/frontend updates to ECS and S3/CloudFront.
 
-**Important**: Resource Management page is **view-only**. All infrastructure changes must go through Terraform (via UI or CLI).
+**Important**: The Resource Management page is **view-only**. All infrastructure changes must go through Terraform.
 
 📖 **[Full Infrastructure Guide](docs/RESOURCE_MANAGEMENT_REFACTOR.md)**
 
@@ -363,6 +374,11 @@ python -m pytest tests/integration_test_end_to_end_text_processing.py -v  # End-
 
 ## Architecture Overview
 
+**Physical Architecture**:
+- **Backend**: ECS Fargate (Python FastAPI) + ALB + EFS (LanceDB persistence)
+- **Frontend**: S3 Static Hosting + CloudFront CDN + OAC
+- **Storage**: S3 (Video Assets), EFS (Vector Indices)
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                    Videolake: AWS Vector Store Comparison                    │
@@ -457,6 +473,7 @@ Comprehensive implementation documentation is available in the `docs/` directory
 - **[Task 2 Implementation](docs/)**: S3 Vector storage infrastructure
 - **[Task 3 Implementation](docs/)**: Bedrock embedding services
 - **[Task 4 Implementation](docs/task_4_implementation_summary.md)**: Complete video processing pipeline
+- **[Final Architecture Report](docs/FINAL_ARCHITECTURE_REPORT.md)**: Summary of migration to ECS/Fargate and S3/CloudFront
 - **Architecture Decisions**: Technical choices and trade-offs explained
 - **Performance Analysis**: Benchmarks and optimization strategies
 

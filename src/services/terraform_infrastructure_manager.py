@@ -116,9 +116,10 @@ class TerraformInfrastructureManager:
         # Modules using count need [0] index
         # Only shared_bucket doesn't use count (it's always created)
         modules_with_count = [
-            "s3vector", "opensearch", "qdrant",
+            "s3vector", "opensearch", "qdrant", "qdrant_ebs",
             "lancedb_s3", "lancedb_efs", "lancedb_ebs",
-            "data_bucket"  # Legacy data bucket also uses count
+            "data_bucket",  # Legacy data bucket also uses count
+            "benchmark_runner"
         ]
         
         if vector_store in modules_with_count:
@@ -158,6 +159,8 @@ class TerraformInfrastructureManager:
                 'lancedb_s3': 'deploy_lancedb_s3',
                 'lancedb_efs': 'deploy_lancedb_efs',
                 'lancedb_ebs': 'deploy_lancedb_ebs',
+                'qdrant_ebs': 'deploy_qdrant_ebs',
+                'benchmark_runner': 'deploy_benchmark_runner',
                 'data_bucket': None,  # Legacy data_bucket uses different variable
             }
             
@@ -248,6 +251,8 @@ class TerraformInfrastructureManager:
                 'lancedb_s3': 'deploy_lancedb_s3',
                 'lancedb_efs': 'deploy_lancedb_efs',
                 'lancedb_ebs': 'deploy_lancedb_ebs',
+                'qdrant_ebs': 'deploy_qdrant_ebs',
+                'benchmark_runner': 'deploy_benchmark_runner',
                 'data_bucket': None,  # Legacy data_bucket uses different variable
             }
             
@@ -458,8 +463,8 @@ class TerraformInfrastructureManager:
         parser = TerraformStateParser(str(self.tfstate_path))
 
         # Check each vector store
-        all_stores = ["data_bucket", "s3vector", "opensearch", "qdrant",
-                      "lancedb_s3", "lancedb_efs", "lancedb_ebs"]
+        all_stores = ["data_bucket", "s3vector", "opensearch", "qdrant", "qdrant_ebs",
+                      "lancedb_s3", "lancedb_efs", "lancedb_ebs", "benchmark_runner"]
 
         for store in all_stores:
             resources = parser.get_resources_by_module(store)
@@ -574,9 +579,10 @@ class TerraformInfrastructureManager:
 
         # Make stdout and stderr non-blocking
         for pipe in [process.stdout, process.stderr]:
-            fd = pipe.fileno()
-            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
-            fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+            if pipe:
+                fd = pipe.fileno()
+                flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+                fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
         stdout_lines = []
         stderr_lines = []
@@ -678,13 +684,15 @@ class TerraformInfrastructureManager:
             "lancedb_s3": 2.0,  # ~$2/month for 100GB S3
             "lancedb_efs": 30.0,  # ~$30/month for 100GB EFS
             "lancedb_ebs": 8.0,  # ~$8/month for 100GB gp3
+            "qdrant_ebs": 150.0, # ~$150/month for EC2 + EBS
+            "benchmark_runner": 10.0, # ~$10/month for ECS task
         }
         return cost_map.get(vector_store, 0.0)
 
     def _get_empty_status(self) -> Dict[str, DeploymentStatus]:
         """Get status when nothing is deployed."""
-        stores = ["data_bucket", "s3vector", "opensearch", "qdrant",
-                  "lancedb_s3", "lancedb_efs", "lancedb_ebs"]
+        stores = ["data_bucket", "s3vector", "opensearch", "qdrant", "qdrant_ebs",
+                  "lancedb_s3", "lancedb_efs", "lancedb_ebs", "benchmark_runner"]
 
         return {
             store: DeploymentStatus(

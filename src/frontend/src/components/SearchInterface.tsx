@@ -1,23 +1,91 @@
 import React, { useState } from 'react';
-import { Search, Image as ImageIcon } from 'lucide-react';
+import { Search, Image as ImageIcon, Database } from 'lucide-react';
+import { Badge } from './ui/badge';
 
-interface SearchInterfaceProps {
-  onSearch: (query: string, type: 'text' | 'image') => void;
-  isLoading?: boolean;
+interface BackendOption {
+  value: string;
+  label: string;
+  deployed?: boolean;
+  disabled?: boolean;
 }
 
-export const SearchInterface: React.FC<SearchInterfaceProps> = ({ onSearch, isLoading = false }) => {
+interface SearchInterfaceProps {
+  onSearch: (query: string, type: 'text' | 'image', backend: string) => void;
+  isLoading?: boolean;
+  availableBackends?: BackendOption[];
+  selectedBackend?: string;
+  onBackendChange?: (backend: string) => void;
+}
+
+export const SearchInterface: React.FC<SearchInterfaceProps> = ({
+  onSearch,
+  isLoading = false,
+  availableBackends = [
+    { value: 's3_vector', label: 'S3 Vector', deployed: true },
+    { value: 'lancedb', label: 'LanceDB', deployed: false },
+    { value: 'qdrant', label: 'Qdrant', deployed: false },
+    { value: 'opensearch', label: 'OpenSearch', deployed: false }
+  ],
+  selectedBackend = 's3_vector',
+  onBackendChange
+}) => {
   const [query, setQuery] = useState('');
+  const [localBackend, setLocalBackend] = useState(selectedBackend);
+
+  const handleBackendChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newBackend = e.target.value;
+    setLocalBackend(newBackend);
+    if (onBackendChange) {
+      onBackendChange(newBackend);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (query.trim()) {
-      onSearch(query, 'text');
+      onSearch(query, 'text', localBackend);
     }
   };
 
+  const currentBackend = availableBackends.find(b => b.value === localBackend);
+
   return (
-    <div className="w-full max-w-3xl mx-auto p-4">
+    <div className="w-full max-w-4xl mx-auto p-4 space-y-3">
+      {/* Backend Selector */}
+      <div className="flex items-center justify-center space-x-3">
+        <Database className="h-5 w-5 text-gray-500" />
+        <label htmlFor="backend-select" className="text-sm font-medium text-gray-700">
+          Vector Store:
+        </label>
+        <select
+          id="backend-select"
+          value={localBackend}
+          onChange={handleBackendChange}
+          className="block w-48 pl-3 pr-10 py-2 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
+        >
+          {availableBackends.map((backend) => (
+            <option
+              key={backend.value}
+              value={backend.value}
+              disabled={backend.disabled}
+            >
+              {backend.label} {backend.deployed ? '✓' : '(not deployed)'}
+            </option>
+          ))}
+        </select>
+        {currentBackend?.deployed && (
+          <Badge variant="default" className="bg-green-500">
+            Active
+          </Badge>
+        )}
+        {currentBackend && !currentBackend.deployed && (
+          <Badge variant="secondary">
+            Not Deployed
+          </Badge>
+        )}
+      </div>
+
+      {/* Search Form */}
       <form onSubmit={handleSubmit} className="relative flex items-center">
         <div className="relative flex-grow">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

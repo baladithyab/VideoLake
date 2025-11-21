@@ -338,7 +338,7 @@ class OpenSearchAdapter(BackendAdapter):
         )
 
 
-    def _auth(self):
+    def _auth(self) -> Any:
         """Return auth object for OpenSearch requests (HTTP Basic Auth or SigV4)."""
         if self.use_basic_auth:
             return (self.username, self.password)
@@ -973,7 +973,26 @@ class LanceDBEmbeddedAdapter(BackendAdapter):
             table = self.db.open_table(table_name)
             search = table.search(query_vector).limit(top_k)
             results_df = search.to_pandas()
-            return results_df.to_dict("records")
+            
+            # Normalize results to match common interface
+            results = []
+            for _, row in results_df.iterrows():
+                result = {
+                    "id": row.get("id"),
+                    "score": row.get("_distance", 0.0), # LanceDB returns distance by default
+                    "metadata": row.get("metadata", {})
+                }
+                # If metadata is flattened in columns, collect it
+                if not result["metadata"]:
+                    meta = {}
+                    for col in results_df.columns:
+                        if col not in ["id", "vector", "_distance"]:
+                            meta[col] = row[col]
+                    result["metadata"] = meta
+                
+                results.append(result)
+                
+            return results
         except Exception as e:  # pragma: no cover - defensive logging
             logger.error(f"Failed to search vectors in embedded LanceDB: {e}")
             return []

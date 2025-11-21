@@ -10,7 +10,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, validator, Field
 from typing import List, Dict, Any, Optional
 
-from src.services.similarity_search_engine import SimilaritySearchEngine, SimilarityQuery, IndexType
+from src.services.similarity_search_engine import SimilaritySearchEngine
+from src.services.interfaces.search_service_interface import SearchQuery, IndexType
 from src.services.multi_vector_coordinator import MultiVectorCoordinator, SearchRequest, VectorType
 from src.services.bedrock_embedding import BedrockEmbeddingService
 from src.utils.logging_config import get_logger
@@ -103,27 +104,32 @@ async def search_query(
         backend = request.backend or ("opensearch" if request.use_opensearch else "s3_vector")
 
         with tracker.time_operation(f"prepare_query_{backend}"):
-
-            # Map backend string to IndexType
+            # Map backend string to IndexType for compatibility
+            # For now, using MARENGO_MULTIMODAL as default since it supports all query types
             backend_map = {
-                "s3_vector": IndexType.S3_VECTOR,
-                "opensearch": IndexType.OPENSEARCH,
-                "lancedb": IndexType.S3_VECTOR,  # Uses same interface
-                "qdrant": IndexType.S3_VECTOR     # Uses same interface
+                "s3_vector": IndexType.MARENGO_MULTIMODAL,
+                "opensearch": IndexType.MARENGO_MULTIMODAL,
+                "lancedb": IndexType.MARENGO_MULTIMODAL,
+                "qdrant": IndexType.MARENGO_MULTIMODAL
             }
-
-            # Create query
-            query = SimilarityQuery(
+            
+            query = SearchQuery(
                 query_text=request.query_text,
                 top_k=request.top_k,
-                index_type=backend_map.get(backend, IndexType.S3_VECTOR)
+                backend=backend,
+                extract_entities=True,
+                expand_synonyms=True
             )
 
-        # Execute search
+        # Execute search using find_similar_content
         with tracker.time_operation(f"execute_search_{backend}"):
-            results = search_engine.search(
+            index_type = backend_map.get(backend, IndexType.MARENGO_MULTIMODAL)
+            index_arn = request.index_arn or "default"
+            
+            results = search_engine.find_similar_content(
                 query=query,
-                index_arn=request.index_arn
+                index_arn=index_arn,
+                index_type=index_type
             )
 
         report = tracker.finish()
@@ -133,14 +139,14 @@ async def search_query(
             "backend": backend,
             "results": [
                 {
-                    "id": r.id,
-                    "score": r.score,
+                    "id": r.key,
+                    "score": r.similarity_score,
                     "metadata": r.metadata,
-                    "vector_type": r.vector_type
+                    "content_type": r.content_type
                 }
                 for r in results.results
             ],
-            "query_time_ms": results.query_time_ms,
+            "query_time_ms": results.processing_time_ms,
             "total_results": results.total_results,
             "timing_report": report.to_dict()
         }

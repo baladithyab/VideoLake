@@ -75,6 +75,7 @@ class SearchQuery:
     similarity_threshold: float = 0.0
     target_indexes: Optional[List[str]] = None
     vector_types: Optional[List[str]] = None
+    backend: Optional[str] = None
     
     # Filtering
     metadata_filters: Optional[Dict[str, Any]] = None

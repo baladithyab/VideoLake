@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { BenchmarkRequest, BenchmarkResult, BenchmarkProgress } from '../types/benchmark';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -17,6 +18,15 @@ export interface SearchRequest {
   query_vector: number[];
   top_k?: number;
   collection?: string;
+  backend?: string;
+}
+
+export interface TextSearchRequest {
+  query_text: string;
+  top_k?: number;
+  backend?: string;
+  vector_types?: string[];
+  index_arn?: string;
 }
 
 export interface ProcessVideoRequest {
@@ -25,13 +35,39 @@ export interface ProcessVideoRequest {
   bucket_name?: string;
 }
 
+export interface IngestionRequest {
+  video_path: string;
+  model_type: string;
+  backend_types: string[];
+}
+
+export interface DeployRequest {
+  vector_stores: string[];
+  wait_for_completion?: boolean;
+}
+
+export interface DestroyRequest {
+  vector_stores: string[];
+  confirm: boolean;
+}
+
 export const api = {
   // Config
   getConfig: () => apiClient.get('/config'),
   switchBackend: (config: BackendConfig) => apiClient.post('/config/backend', config),
 
+  // Infrastructure
+  getInfrastructureStatus: () => apiClient.get('/api/infrastructure/status'),
+  deployInfrastructure: (request: DeployRequest) => apiClient.post('/api/infrastructure/deploy', request),
+  destroyInfrastructure: (request: DestroyRequest) => apiClient.delete('/api/infrastructure/destroy', { data: request }),
+  
+  // Single Store Operations
+  deploySingleStore: (store: string) => apiClient.post(`/api/infrastructure/deploy/${store}`),
+  destroySingleStore: (store: string, confirm: boolean) => apiClient.delete(`/api/infrastructure/destroy/${store}`, { params: { confirm } }),
+
   // Search
-  search: (request: SearchRequest) => apiClient.post('/search', request),
+  search: (request: SearchRequest) => apiClient.post('/api/search', request),
+  searchQuery: (request: TextSearchRequest) => apiClient.post('/api/search/query', request),
 
   // Ingest
   uploadVideo: (file: File, bucketName?: string) => {
@@ -40,11 +76,18 @@ export const api = {
     if (bucketName) {
       formData.append('bucket_name', bucketName);
     }
-    return apiClient.post('/ingest/upload', formData, {
+    return apiClient.post('/api/ingest/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
   },
-  processVideo: (request: ProcessVideoRequest) => apiClient.post('/ingest/process', request),
+  processVideo: (request: ProcessVideoRequest) => apiClient.post('/api/ingest/process', request),
+  startIngestion: (request: IngestionRequest) => apiClient.post('/ingestion/start', request),
+
+  // Benchmark
+  startBenchmark: (request: BenchmarkRequest) => apiClient.post<BenchmarkResult>('/api/benchmark/start', request),
+  getBenchmarkResults: (benchmarkId: string) => apiClient.get<BenchmarkResult>(`/api/benchmark/results/${benchmarkId}`),
+  getBenchmarkProgress: (benchmarkId: string) => apiClient.get<BenchmarkProgress>(`/api/benchmark/progress/${benchmarkId}`),
+  listBenchmarks: () => apiClient.get<BenchmarkResult[]>('/api/benchmark/list'),
 };

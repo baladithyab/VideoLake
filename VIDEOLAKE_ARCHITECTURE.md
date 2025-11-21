@@ -1,202 +1,137 @@
-# VideoLake System Architecture
+# VideoLake Architecture
 
-## 1. System Overview
+## 1. Executive Summary
 
-VideoLake is a unified multi-modal video search and analytics platform designed to run on a single powerful EC2 instance (`videolake_platform`). It serves two primary purposes:
-1.  **User Interface**: A React-based frontend for users to upload videos, search content using natural language, and visualize embedding spaces.
-2.  **Headless Benchmark API**: A robust API for running automated benchmarks to compare different vector storage backends (S3Vector, LanceDB, Qdrant, OpenSearch) and embedding models.
+VideoLake is a unified platform designed to serve two dual purposes:
+1.  **Interactive Demo UI**: A multi-modal video search engine allowing users to search video content using text or images, visualize embedding spaces, and play back specific video segments.
+2.  **Headless Performance Benchmark**: A rigorous testing ground for comparing vector database backends (S3Vector, LanceDB, Qdrant, OpenSearch) in terms of cost, latency, and accuracy.
 
-The system leverages a modular "Provider" pattern for vector storage, allowing dynamic switching between backends without changing the core application logic.
+The system leverages a "Serverless-first" approach where possible, utilizing AWS managed services (Bedrock, S3) and dynamic infrastructure provisioning via Terraform.
 
-## 2. Component Architecture
-
-The system follows a layered architecture:
+## 2. System Architecture
 
 ```mermaid
 graph TD
-    subgraph "Client Layer"
-        ReactUI[React Frontend]
-        BenchmarkScript[Benchmark Scripts]
+    subgraph "Frontend (React)"
+        UI[Unified UI]
+        UI --> |Manage Infra| IM[Infra Manager]
+        UI --> |Search/Viz| Search[Search Interface]
+        UI --> |Upload/Ingest| Ingest[Ingestion UI]
+        UI --> |Run Tests| Bench[Benchmark UI]
     end
 
-    subgraph "Application Layer (FastAPI)"
-        API[Unified API Gateway]
-        
-        subgraph "Services"
-            Processing[Video Processing Service]
-            Search[Search Engine]
-            Vis[Visualization Service]
-            Manager[Vector Store Manager]
-        end
-        
-        API --> Processing
-        API --> Search
-        API --> Vis
-        API --> Manager
+    subgraph "API Layer (FastAPI)"
+        API[REST API]
+        API --> TIM[Terraform Infra Manager]
+        API --> CVPS[Comprehensive Video Processing]
+        API --> SSE[Similarity Search Engine]
+        API --> BS[Benchmark Service]
     end
 
-    subgraph "Model Layer"
-        Bedrock[AWS Bedrock]
-        Marengo[TwelveLabs Marengo 2.7]
-        Bedrock --> Marengo
+    subgraph "Processing Layer"
+        CVPS --> |Async Invoke| Bedrock[AWS Bedrock (Marengo 2.7)]
+        Bedrock --> |Embeddings| CVPS
     end
 
     subgraph "Storage Layer"
-        S3Media[S3 Media Bucket]
+        Raw[S3 Raw Videos]
+        Meta[S3 Metadata]
         
-        subgraph "Vector Backends"
-            S3Vector[S3 Vector Store]
-            LanceDB[LanceDB]
-            Qdrant[Qdrant]
-            OpenSearch[OpenSearch]
+        subgraph "Pluggable Vector Backends"
+            S3V[S3Vector]
+            LDB[LanceDB (S3/EFS/EBS)]
+            Qdrant[Qdrant (EC2)]
+            OS[OpenSearch]
         end
     end
 
-    ReactUI --> API
-    BenchmarkScript --> API
-    
-    Processing --> S3Media
-    Processing --> Bedrock
-    
-    Manager --> S3Vector
-    Manager --> LanceDB
-    Manager --> Qdrant
-    Manager --> OpenSearch
-    
-    Search --> Manager
-    Vis --> Manager
-```
-
-### Key Components
-*   **Unified API Gateway**: FastAPI application serving REST endpoints for both UI and Benchmarks.
-*   **Vector Store Manager**: Implements the Strategy pattern to manage connections to different vector backends dynamically.
-*   **Video Processing Service**: Handles video uploads, interacts with AWS Bedrock to invoke TwelveLabs Marengo models, and processes async job results.
-*   **Visualization Service**: Performs dimensionality reduction (PCA, t-SNE, UMAP) on high-dimensional embeddings for 2D/3D visualization.
-
-## 3. Data Models
-
-### 3.1 Video Asset
-Represents a video file stored in S3.
-```json
-{
-  "video_id": "uuid-string",
-  "title": "Video Title",
-  "s3_uri": "s3://bucket/path/video.mp4",
-  "metadata": {
-    "duration": 120.5,
-    "format": "mp4",
-    "file_size": 10485760
-  },
-  "processing_status": "completed"
-}
-```
-
-### 3.2 Embedding Segment
-Represents a specific segment of a video with its vector representation.
-```json
-{
-  "id": "segment-uuid",
-  "vector": [0.12, -0.45, ...],  // 1024d for Marengo
-  "vector_type": "visual-text",   // or "visual-image", "audio"
-  "metadata": {
-    "video_id": "uuid-string",
-    "start_sec": 10.0,
-    "end_sec": 15.0,
-    "text_content": "Optional text description if available"
-  }
-}
-```
-
-### 3.3 Search Result
-Standardized response format across all backends.
-```json
-{
-  "id": "segment-uuid",
-  "score": 0.89,
-  "metadata": {
-    "video_id": "uuid-string",
-    "start_sec": 10.0,
-    "end_sec": 15.0
-  },
-  "vector_type": "visual-text",
-  "backend_source": "lancedb"
-}
-```
-
-## 4. Ingestion Workflow
-
-The ingestion process is asynchronous to handle large video files and model processing times.
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API as FastAPI
-    participant S3 as S3 Bucket
-    participant Bedrock as AWS Bedrock
-    participant DB as Vector Store
-
-    Client->>API: Upload Video
-    API->>S3: Stream Upload
-    S3-->>API: S3 URI
-    API->>Bedrock: Start Async Inference (Marengo)
-    Bedrock-->>API: Job ID
-    API-->>Client: Job ID (Processing Started)
-    
-    loop Polling / Webhook
-        API->>Bedrock: Check Job Status
+    subgraph "Infrastructure Control"
+        TIM --> |Apply/Destroy| TF[Terraform Core]
+        TF --> |Provision| S3V
+        TF --> |Provision| LDB
+        TF --> |Provision| Qdrant
+        TF --> |Provision| OS
     end
+
+    Ingest --> API
+    Search --> API
+    Bench --> API
     
-    Bedrock-->>API: Job Completed (Result S3 URI)
-    API->>S3: Fetch Results (Embeddings + Timestamps)
-    
-    Note over API: Process Segments & Timestamps
-    
-    API->>DB: Upsert Vectors (Batch)
-    DB-->>API: Success
+    CVPS --> Raw
+    CVPS --> S3V
+    SSE --> S3V
+    SSE --> LDB
+    SSE --> Qdrant
+    SSE --> OS
 ```
 
-## 5. Marengo Timestamp Strategy
+## 3. Core Components
 
-TwelveLabs Marengo is a "chunk-less" model, meaning it understands the video holistically. However, for search applications, we need to map embeddings back to specific timestamps.
+### 3.1 Infrastructure Manager
+*   **Role**: Dynamic provisioning of vector backends.
+*   **Implementation**: `src/services/terraform_infrastructure_manager.py`
+*   **Mechanism**: Wraps the Terraform CLI. The UI triggers `deploy_vector_store("qdrant")`, which runs `terraform apply -target=module.qdrant`.
+*   **State Tracking**: Parses `terraform.tfstate` to report deployment status, endpoints, and estimated costs back to the UI.
 
-**Strategy:**
-1.  **Fixed-Interval Segmentation**: We configure the Marengo API to output embeddings at fixed intervals (e.g., every 5 seconds) using the `useFixedLengthSec` parameter.
-2.  **Result Parsing**: The API returns a list of segments. We extract:
-    *   `start_offset_sec`: The start time of the segment.
-    *   `end_offset_sec`: The end time of the segment.
-    *   `embedding`: The vector representation.
-3.  **Storage**: These timestamps are stored as **metadata** alongside the vector in the chosen backend (LanceDB, Qdrant, etc.).
-4.  **Retrieval**: When a search hit occurs, the backend returns the metadata, allowing the UI to seek the video player to `start_offset_sec`.
+### 3.2 Ingestion Pipeline (The "Virtual Chunking" Strategy)
+*   **Goal**: Process videos into searchable segments without generating physical video clips.
+*   **Implementation**: `src/services/comprehensive_video_processing_service.py`
+*   **Workflow**:
+    1.  **Upload/Download**: Video is stored in `s3://<bucket>/videos/`.
+    2.  **Embedding**: AWS Bedrock (Marengo 2.7) processes the video.
+    3.  **Output**: Bedrock returns a list of embeddings, each with a `startSec` and `endSec`.
+    4.  **Storage**:
+        *   **Vector**: The float array is stored in the active Vector DB.
+        *   **Metadata**: `{ "s3_uri": "...", "start_time": 10.5, "end_time": 15.5 }` is attached to the vector.
+    5.  **Playback**: The UI receives this metadata and uses the HTML5 Video Player to seek (`currentTime = 10.5`) and play the original file.
 
-**Handling "Global" Embeddings:**
-If `useFixedLengthSec` is not used, Marengo provides a single embedding for the whole video. In this case, `start_sec` is 0 and `end_sec` is the video duration.
+### 3.3 Unified UI
+*   **Framework**: React + Vite + Tailwind CSS.
+*   **Components**:
+    *   **InfrastructureManager**: Toggles backends on/off.
+    *   **IngestionPanel**: Accepts URLs or file uploads.
+    *   **SearchInterface**: Text/Image queries -> Vector Search -> Results Grid.
+    *   **VideoPlayer**: Plays specific segments based on result metadata.
+    *   **VisualizationPanel**: Uses `recharts` (or `plotly.js`) to render 2D projections (t-SNE/PCA) of the vector space.
+    *   **BenchmarkDashboard**: Triggers standard benchmark suites and displays comparative graphs (Latency vs. Recall, Cost vs. QPS).
 
-## 6. Dynamic Backend Management
+### 3.4 Benchmarking Engine
+*   **Role**: Execute standardized tests against deployed backends.
+*   **Implementation**: `src/backend/benchmark_service.py` wrapping `scripts/`
+*   **Metrics**:
+    *   **Indexing Speed**: Vectors/sec.
+    *   **Query Latency**: p50, p95, p99.
+    *   **Recall**: vs. Exact KNN.
+    *   **Cost**: $/hour (infrastructure) + $/query.
 
-The `VectorStoreManager` allows switching backends at runtime.
+## 4. Data Flow
 
-*   **Configuration**: Backends are configured via environment variables or API payload.
-*   **Unified Interface**: All backends implement the `VectorStoreProvider` abstract base class:
-    *   `upsert_vectors(name, vectors)`
-    *   `query(name, query_vector, top_k)`
-    *   `delete(name)`
-*   **Benchmark Mode**: The benchmark script iterates through available providers, running the same dataset and queries against each, collecting metrics (latency, recall, cost).
-*   **UI Mode**: The UI typically queries a primary backend (e.g., LanceDB) but can be toggled to "Compare Mode" to show results from multiple backends side-by-side.
+### 4.1 Ingestion Flow
+1.  User provides Video URL.
+2.  `ComprehensiveVideoProcessingService` downloads video to S3.
+3.  Service calls `TwelveLabsVideoProcessingService` (Bedrock).
+4.  Bedrock returns JSON with embeddings + timestamps.
+5.  Service iterates through embeddings:
+    *   Constructs Metadata: `{"source": s3_uri, "start": t1, "end": t2}`.
+    *   Pushes to `EmbeddingStorageIntegration` (routes to active backends).
 
-## 7. Visualization Data Flow
+### 4.2 Search Flow
+1.  User enters "dog playing fetch".
+2.  `SimilaritySearchEngine` generates query embedding (via Bedrock Titan or Marengo text-to-vec).
+3.  Engine queries active Vector DB (e.g., Qdrant).
+4.  DB returns Top K vectors + Metadata.
+5.  UI displays thumbnails (generated on fly or pre-processed) and plays video from `Metadata.start`.
 
-To visualize the high-dimensional embedding space:
+## 5. Key Technical Decisions
 
-1.  **Data Fetch**: The frontend requests a visualization for a specific index/dataset.
-2.  **Backend Processing**:
-    *   The `SemanticMappingVisualizer` service fetches a subset of vectors (e.g., random sample + query vector + top results).
-    *   It applies dimensionality reduction (PCA, t-SNE, or UMAP) to reduce vectors to 2D or 3D points.
-3.  **Response**: The API returns a JSON object containing `x`, `y`, `z` coordinates and metadata for each point.
-4.  **Rendering**: The React frontend uses a library like `plotly.js` or `three.js` to render the interactive scatter plot.
+1.  **No Physical Chunking**: We strictly use "Virtual Chunks" (metadata pointers). This saves massive S3 storage costs and complexity.
+2.  **Terraform Wrapper**: We chose a Python wrapper over a pure CI/CD pipeline to allow the *Application* to control the *Infrastructure* in real-time (Demo requirement).
+3.  **Bedrock First**: We prioritize Amazon Bedrock for Marengo access due to IAM integration and consolidated billing, falling back to direct TwelveLabs API only if necessary.
+4.  **S3Vector as Reference**: S3Vector serves as the baseline "Serverless Vector DB" implementation for cost comparison.
 
-```mermaid
-graph LR
-    VectorStore[Vector Store] -->|Raw Vectors| Visualizer[Visualization Service]
-    Visualizer -->|Dimensionality Reduction| API[API Response]
-    API -->|JSON Points| Frontend[React UI]
-    Frontend -->|Render| Plot[Interactive Plot]
+## 6. Security & Access
+*   **IAM Roles**: The EC2/ECS instance running the API has an IAM role allowing:
+    *   `bedrock:InvokeModel`
+    *   `s3:*` (scoped to project buckets)
+    *   `terraform` state management (S3 backend or local).
+*   **Video Access**: The UI uses S3 Presigned URLs to play private video content securely in the browser.
