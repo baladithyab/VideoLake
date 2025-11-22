@@ -259,3 +259,25 @@ variable "lancedb_storage_gb" {
   type        = number
   default     = 100
 }
+
+#------------------------------------------------------------------------------
+# VIDEO INGESTION PIPELINE
+#------------------------------------------------------------------------------
+
+variable "deploy_ingestion_pipeline" {
+  description = "Whether to deploy the video ingestion pipeline infrastructure"
+  type        = bool
+  default     = false
+}
+
+variable "embeddings_bucket_name" {
+  description = "Name of the S3 bucket for storing embeddings (leave empty for auto-generated name)"
+  type        = string
+  default     = ""
+}
+
+variable "notification_email" {
+  description = "Email address for ingestion pipeline notifications"
+  type        = string
+  default     = ""
+}

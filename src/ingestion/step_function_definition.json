@@ -1,62 +1,302 @@
 {
-  "Comment": "VideoLake Ingestion Pipeline",
-  "StartAt": "ProcessVideo",
+  "Comment": "VideoLake video ingestion pipeline with AWS Bedrock Marengo",
+  "StartAt": "ValidateInput",
   "States": {
-    "ProcessVideo": {
+    "ValidateInput": {
       "Type": "Task",
-      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
-        "LaunchType": "FARGATE",
-        "Cluster": "${ECS_CLUSTER_ARN}",
-        "TaskDefinition": "${INGESTION_TASK_ARN}",
-        "NetworkConfiguration": {
-          "AwsvpcConfiguration": {
-            "Subnets": [
-              "${SUBNET_1}",
-              "${SUBNET_2}"
-            ],
-            "SecurityGroups": [
-              "${SECURITY_GROUP}"
-            ],
-            "AssignPublicIp": "ENABLED"
-          }
-        },
-        "Overrides": {
-          "ContainerOverrides": [
-            {
-              "Name": "ingestion-worker",
-              "Environment": [
-                {
-                  "Name": "VIDEO_PATH",
-                  "Value.$": "$.video_path"
-                },
-                {
-                  "Name": "MODEL_TYPE",
-                  "Value.$": "$.model_type"
-                },
-                {
-                  "Name": "BACKEND_TYPES",
-                  "Value.$": "$.backend_types_str"
-                }
-              ],
-              "Command": ["python", "scripts/ingest_video_task.py"]
-            }
-          ]
+        "FunctionName": "${ValidateInputLambdaArn}",
+        "Payload": {
+          "video_path.$": "$.video_path",
+          "model_type.$": "$.model_type",
+          "backend_types_str.$": "$.backend_types_str"
         }
       },
-      "ResultPath": "$.processing_output",
-      "End": true,
+      "ResultSelector": {
+        "validated.$": "$.Payload.validated",
+        "video_path.$": "$.Payload.video_path",
+        "model_type.$": "$.Payload.model_type",
+        "backend_types_str.$": "$.Payload.backend_types_str",
+        "video_id.$": "$.Payload.video_id"
+      },
+      "ResultPath": "$.validation",
+      "Next": "StartEmbeddingJob",
       "Catch": [
-          {
-            "ErrorEquals": ["States.ALL"],
-            "Next": "FailState"
-          }
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleError"
+        }
       ]
     },
-    "FailState": {
-      "Type": "Fail",
-      "Error": "IngestionFailed",
-      "Cause": "Video processing failed."
+    "StartEmbeddingJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${StartEmbeddingJobLambdaArn}",
+        "Payload": {
+          "video_path.$": "$.validation.video_path",
+          "model_type.$": "$.validation.model_type",
+          "video_id.$": "$.validation.video_id"
+        }
+      },
+      "ResultSelector": {
+        "job_id.$": "$.Payload.job_id",
+        "video_id.$": "$.Payload.video_id",
+        "video_path.$": "$.Payload.video_path",
+        "model_type.$": "$.Payload.model_type",
+        "status.$": "$.Payload.status"
+      },
+      "ResultPath": "$.embedding_job",
+      "Next": "WaitForEmbedding",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleError"
+        }
+      ]
+    },
+    "WaitForEmbedding": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "CheckEmbeddingStatus"
+    },
+    "CheckEmbeddingStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${CheckEmbeddingStatusLambdaArn}",
+        "Payload": {
+          "job_id.$": "$.embedding_job.job_id",
+          "video_id.$": "$.embedding_job.video_id"
+        }
+      },
+      "ResultSelector": {
+        "status.$": "$.Payload.status",
+        "job_id.$": "$.Payload.job_id",
+        "video_id.$": "$.Payload.video_id",
+        "output_location.$": "$.Payload.output_location",
+        "error_message.$": "$.Payload.error_message"
+      },
+      "ResultPath": "$.job_status",
+      "Next": "IsEmbeddingComplete",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleError"
+        }
+      ]
+    },
+    "IsEmbeddingComplete": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.job_status.status",
+          "StringEquals": "COMPLETED",
+          "Next": "RetrieveEmbeddings"
+        },
+        {
+          "Variable": "$.job_status.status",
+          "StringEquals": "FAILED",
+          "Next": "HandleEmbeddingJobFailure"
+        },
+        {
+          "Variable": "$.job_status.status",
+          "StringEquals": "IN_PROGRESS",
+          "Next": "WaitForEmbedding"
+        }
+      ],
+      "Default": "WaitForEmbedding"
+    },
+    "HandleEmbeddingJobFailure": {
+      "Type": "Pass",
+      "Parameters": {
+        "Error": "EmbeddingJobFailed",
+        "Cause.$": "$.job_status.error_message"
+      },
+      "ResultPath": "$.error",
+      "Next": "HandleError"
+    },
+    "RetrieveEmbeddings": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${RetrieveEmbeddingsLambdaArn}",
+        "Payload": {
+          "job_id.$": "$.job_status.job_id",
+          "video_id.$": "$.job_status.video_id",
+          "output_location.$": "$.job_status.output_location"
+        }
+      },
+      "ResultSelector": {
+        "embeddings.$": "$.Payload.embeddings",
+        "output_key.$": "$.Payload.output_key",
+        "jsonl_content.$": "$.Payload.jsonl_content",
+        "video_id.$": "$.Payload.video_id",
+        "metadata.$": "$.Payload.metadata"
+      },
+      "ResultPath": "$.embeddings",
+      "Next": "SaveToS3",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleError"
+        }
+      ]
+    },
+    "SaveToS3": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+      "Parameters": {
+        "Bucket": "${EmbeddingsBucket}",
+        "Key.$": "$.embeddings.output_key",
+        "Body.$": "$.embeddings.jsonl_content",
+        "ContentType": "application/x-ndjson"
+      },
+      "ResultPath": "$.s3_output",
+      "Next": "CheckBackendUpsert",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleError"
+        }
+      ]
+    },
+    "CheckBackendUpsert": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.validation.backend_types_str",
+          "IsPresent": true,
+          "Next": "UpsertToBackends"
+        }
+      ],
+      "Default": "NotifyCompletion"
+    },
+    "UpsertToBackends": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${BackendUpsertLambdaArn}",
+        "Payload": {
+          "embeddings_s3_key.$": "$.embeddings.output_key",
+          "embeddings_bucket": "${EmbeddingsBucket}",
+          "backend_types_str.$": "$.validation.backend_types_str",
+          "video_id.$": "$.embeddings.video_id",
+          "metadata.$": "$.embeddings.metadata"
+        }
+      },
+      "ResultSelector": {
+        "upsert_results.$": "$.Payload.upsert_results",
+        "status.$": "$.Payload.status"
+      },
+      "ResultPath": "$.backend_upsert",
+      "Next": "NotifyCompletion",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandlePartialSuccess"
+        }
+      ]
+    },
+    "HandlePartialSuccess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${CompletionTopicArn}",
+        "Subject": "VideoLake Ingestion Partial Success",
+        "Message": {
+          "status": "partial_success",
+          "video_path.$": "$.validation.video_path",
+          "embeddings_saved": true,
+          "output_key.$": "$.embeddings.output_key",
+          "backend_upsert_failed": true,
+          "error.$": "$.error",
+          "timestamp.$": "$$.State.EnteredTime"
+        }
+      },
+      "End": true
+    },
+    "NotifyCompletion": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${CompletionTopicArn}",
+        "Subject": "VideoLake Ingestion Completed Successfully",
+        "Message": {
+          "status": "success",
+          "video_path.$": "$.validation.video_path",
+          "video_id.$": "$.embeddings.video_id",
+          "output_key.$": "$.embeddings.output_key",
+          "embeddings_count.$": "$.embeddings.metadata.embeddings_count",
+          "backend_types.$": "$.validation.backend_types_str",
+          "backend_upsert.$": "$.backend_upsert",
+          "timestamp.$": "$$.State.EnteredTime"
+        }
+      },
+      "End": true
+    },
+    "HandleError": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${ErrorTopicArn}",
+        "Subject": "VideoLake Ingestion Failed",
+        "Message": {
+          "status": "failed",
+          "error.$": "$.error",
+          "video_path.$": "$.video_path",
+          "state_entered.$": "$$.State.EnteredTime",
+          "execution_id.$": "$$.Execution.Name"
+        }
+      },
+      "End": true
     }
   }
 }

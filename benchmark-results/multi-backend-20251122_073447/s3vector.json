@@ -1,0 +1,22 @@
+{
+  "success": true,
+  "duration_seconds": 10.726312637329102,
+  "query_count": 50,
+  "successful_queries": 50,
+  "throughput_qps": 4.661434147089174,
+  "latency_p50_ms": 212.27264404296875,
+  "latency_p95_ms": 261.4632844924927,
+  "latency_p99_ms": 316.8880629539488,
+  "latency_min_ms": 121.49596214294434,
+  "latency_max_ms": 356.0171127319336,
+  "latency_mean_ms": 214.51969146728516,
+  "latency_std_ms": 38.24824868181304,
+  "backend": "s3vector",
+  "operation": "search",
+  "endpoint_info": {
+    "type": "sdk",
+    "service": "s3vectors",
+    "endpoint": "s3vectors.us-east-1.amazonaws.com",
+    "region": "us-east-1"
+  }
+}

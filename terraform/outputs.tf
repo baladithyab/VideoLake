@@ -291,3 +291,22 @@ output "infrastructure_deployed" {
     }
   }
 }
+
+#------------------------------------------------------------------------------
+# INGESTION PIPELINE (Conditional)
+#------------------------------------------------------------------------------
+
+output "ingestion_pipeline_arn" {
+  description = "ARN of the ingestion pipeline Step Function"
+  value       = length(module.ingestion_pipeline) > 0 ? module.ingestion_pipeline[0].state_machine_arn : null
+}
+
+output "embeddings_bucket_name" {
+  description = "Name of the embeddings S3 bucket"
+  value       = length(module.ingestion_pipeline) > 0 ? module.ingestion_pipeline[0].embeddings_bucket_name : null
+}
+
+output "ingestion_lambda_functions" {
+  description = "ARNs of the ingestion Lambda functions"
+  value       = length(module.ingestion_pipeline) > 0 ? module.ingestion_pipeline[0].lambda_function_arns : {}
+}

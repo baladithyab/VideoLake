@@ -53,6 +53,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 
   # Optional: Store state in S3 for team collaboration
@@ -81,6 +85,13 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+# Random suffix for unique resource names
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
 # Compute shared bucket name
 locals {
   shared_bucket_name = coalesce(
@@ -88,6 +99,12 @@ locals {
     var.data_bucket_name, # Backward compatibility
     "${var.project_name}-shared-media"
   )
+  
+  common_tags = {
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 #------------------------------------------------------------------------------
@@ -385,4 +402,37 @@ module "benchmark_runner" {
   tags = {
     Component = "BenchmarkRunner"
   }
+}
+
+# -----------------------------------------------------------------------------
+# Video Ingestion Pipeline Module (OPTIONAL)
+# -----------------------------------------------------------------------------
+# Deploy automated video ingestion pipeline with:
+# - Step Functions orchestration
+# - Lambda functions for validation and processing
+# - Bedrock async embedding generation
+# - SNS notifications for completion/errors
+#
+# DEFAULT: false (not deployed)
+# Enable: terraform apply -var="deploy_ingestion_pipeline=true"
+# Use Case: Automated video processing workflows
+# -----------------------------------------------------------------------------
+module "ingestion_pipeline" {
+  source = "./modules/ingestion_pipeline"
+  count  = var.deploy_ingestion_pipeline ? 1 : 0
+
+  project_name           = var.project_name
+  environment            = var.environment
+  
+  # ECS Configuration
+  ecs_cluster_arn              = module.videolake_backend.ecs_cluster_arn
+  ingestion_task_definition_arn = module.videolake_backend.task_definition_arn
+  subnet_ids                    = module.videolake_backend.subnet_ids
+  security_group_id             = module.videolake_backend.security_group_id
+  
+  # S3 Configuration
+  embeddings_bucket_name   = var.embeddings_bucket_name != "" ? var.embeddings_bucket_name : "${var.project_name}-embeddings-${random_string.suffix.result}"
+  
+  # Notification Configuration
+  notification_email = var.notification_email
 }
