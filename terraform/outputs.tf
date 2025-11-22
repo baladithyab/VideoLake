@@ -310,3 +310,22 @@ output "ingestion_lambda_functions" {
   description = "ARNs of the ingestion Lambda functions"
   value       = length(module.ingestion_pipeline) > 0 ? module.ingestion_pipeline[0].lambda_function_arns : {}
 }
+
+#------------------------------------------------------------------------------
+# LANCEDB BENCHMARK RUNNER (Conditional)
+#------------------------------------------------------------------------------
+
+output "lancedb_benchmark_runner" {
+  description = "LanceDB Benchmark Runner EC2 information"
+  value = var.deploy_lancedb_benchmark_ec2 ? {
+    deployed    = true
+    public_ip   = module.lancedb_benchmark_ec2[0].public_ip
+    instance_id = module.lancedb_benchmark_ec2[0].instance_id
+    message     = "Benchmark runner deployed. Connect via SSM or SSH (if key provided)."
+  } : {
+    deployed    = false
+    public_ip   = ""
+    instance_id = ""
+    message     = "Benchmark runner not deployed. Set var.deploy_lancedb_benchmark_ec2=true to enable."
+  }
+}

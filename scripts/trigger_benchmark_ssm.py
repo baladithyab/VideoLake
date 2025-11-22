@@ -5,7 +5,7 @@ import sys
 
 # TODO: Fetch this dynamically from Terraform output
 # For now, this script needs to be updated to look up the instance by tag or use the new platform instance ID
-INSTANCE_ID = "i-023372b93ac8bdf0e"
+INSTANCE_ID = "i-0a837af6849da8f93"
 
 BUCKET = "videolake-vectors"
 S3_PREFIX = "benchmark-scripts"
@@ -17,13 +17,13 @@ def upload_to_s3(local_path, s3_key):
 
 print("Uploading scripts to S3...")
 upload_to_s3("requirements-benchmark.txt", f"{S3_PREFIX}/requirements-benchmark.txt")
-upload_to_s3("scripts/run_quick_health_index_and_benchmark.sh", f"{S3_PREFIX}/run_quick_health_index_and_benchmark.sh")
+upload_to_s3("scripts/run_all_benchmarks_custom.sh", f"{S3_PREFIX}/run_all_benchmarks_custom.sh")
 upload_to_s3("scripts/backend_adapters.py", f"{S3_PREFIX}/backend_adapters.py")
 upload_to_s3("scripts/index_embeddings.py", f"{S3_PREFIX}/index_embeddings.py")
 upload_to_s3("scripts/benchmark_backend.py", f"{S3_PREFIX}/benchmark_backend.py")
 
 commands = [
-    "sudo yum install -y git python3-pip",
+    "sudo yum install -y git python3-pip wget unzip",
     "export AWS_DEFAULT_REGION=us-east-1",
     "export AWS_REGION=us-east-1",
     "cd /home/ec2-user",
@@ -34,18 +34,18 @@ commands = [
     "cd S3Vector",
     # Download from S3
     f"aws s3 cp s3://{BUCKET}/{S3_PREFIX}/requirements-benchmark.txt requirements-benchmark.txt",
-    f"aws s3 cp s3://{BUCKET}/{S3_PREFIX}/run_quick_health_index_and_benchmark.sh scripts/run_quick_health_index_and_benchmark.sh",
+    f"aws s3 cp s3://{BUCKET}/{S3_PREFIX}/run_all_benchmarks_custom.sh scripts/run_all_benchmarks_custom.sh",
     f"aws s3 cp s3://{BUCKET}/{S3_PREFIX}/backend_adapters.py scripts/backend_adapters.py",
     f"aws s3 cp s3://{BUCKET}/{S3_PREFIX}/index_embeddings.py scripts/index_embeddings.py",
     f"aws s3 cp s3://{BUCKET}/{S3_PREFIX}/benchmark_backend.py scripts/benchmark_backend.py",
     
     "touch scripts/__init__.py",
-    "chmod +x scripts/run_quick_health_index_and_benchmark.sh",
+    "chmod +x scripts/run_all_benchmarks_custom.sh",
     "python3 -m venv venv",
     "source venv/bin/activate",
     "pip3 install -r requirements-benchmark.txt qdrant-client opensearch-py PyYAML",
     "export PYTHONPATH=$PYTHONPATH:.",
-    "./scripts/run_quick_health_index_and_benchmark.sh"
+    "./scripts/run_all_benchmarks_custom.sh"
 ]
 
 # Join commands into a single string for the SSM parameter

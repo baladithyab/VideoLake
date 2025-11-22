@@ -138,9 +138,8 @@ def main():
         '--backends',
         nargs='+',
         default=['s3vector', 'qdrant', 'lancedb'],
-        choices=list(BACKEND_CONFIGS.keys()),
         help=(
-            'Backends to index to (space-separated). '
+            'Backends to index to (space-separated or comma-separated). '
             'Variants include qdrant-efs, qdrant-ebs, lancedb-efs, lancedb-s3, lancedb-ebs.'
         ),
     )
@@ -235,9 +234,20 @@ def main():
         print(f"❌ Error loading embeddings: {e}")
         return 1
 
+    # Process backends list (handle comma-separation)
+    backends = []
+    for b in args.backends:
+        backends.extend(b.split(','))
+    backends = [b.strip() for b in backends if b.strip()]
+
     # Index to each backend
     results = {}
-    for backend in args.backends:
+    for backend in backends:
+        if backend not in BACKEND_CONFIGS:
+            print(f"❌ Unknown backend: {backend}")
+            results[backend] = 'failed (unknown backend)'
+            continue
+
         try:
             success = index_to_backend(backend, embeddings, args.collection)
             results[backend] = 'success' if success else 'failed'

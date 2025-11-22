@@ -403,6 +403,21 @@ module "benchmark_runner" {
     Component = "BenchmarkRunner"
   }
 }
+# LanceDB Benchmark Runner EC2 (OPTIONAL)
+module "lancedb_benchmark_ec2" {
+  count  = var.deploy_lancedb_benchmark_ec2 ? 1 : 0
+  source = "./modules/lancedb_benchmark_ec2"
+
+  aws_region        = var.aws_region
+  deployment_name   = "lancedb-benchmark-runner"
+  availability_zone = data.aws_availability_zones.available.names[0]
+  instance_type     = "t3.xlarge"
+  
+  tags = {
+    Component = "BenchmarkRunner"
+    Type      = "EC2"
+  }
+}
 
 # -----------------------------------------------------------------------------
 # Video Ingestion Pipeline Module (OPTIONAL)

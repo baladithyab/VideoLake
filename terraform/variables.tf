@@ -95,6 +95,11 @@ variable "deploy_benchmark_runner" {
   type        = bool
   default     = false
 }
+variable "deploy_lancedb_benchmark_ec2" {
+  description = "Deploy EC2 instance for running LanceDB benchmarks (OPTIONAL)"
+  type        = bool
+  default     = false
+}
 
 #------------------------------------------------------------------------------
 # SHARED MEDIA STORAGE (Always Created)
