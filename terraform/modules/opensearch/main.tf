@@ -95,9 +95,9 @@ resource "aws_opensearch_domain" "s3vector_backend" {
   tags = merge(var.tags, {
     Name         = var.domain_name
     Service      = "OpenSearch"
-    VectorStore  = "OpenSearch-S3Vector-Backend"
+    VectorStore  = "OpenSearch-Standard-Backend"
     ManagedBy    = "Terraform"
-    EnginePattern = "S3Vector"
+    EnginePattern = "Standard"
   })
 
   depends_on = [aws_iam_service_linked_role.opensearch]
@@ -106,43 +106,43 @@ resource "aws_opensearch_domain" "s3vector_backend" {
 # Enable S3 Vectors engine for OpenSearch domain
 # Note: This must be done AFTER domain creation via AWS CLI
 # Terraform AWS provider doesn't support this yet (preview feature)
-resource "null_resource" "enable_s3vector_engine" {
-  count = var.enable_s3vector_engine ? 1 : 0
-
-  depends_on = [aws_opensearch_domain.s3vector_backend]
-
-  # Enable S3 Vector engine using AIML options (S3VectorsEngine)
-  # This is the supported way to turn on the preview S3 Vectors engine
-  # on OpenSearch 2.19+ domains.
-  provisioner "local-exec" {
-    command = <<-EOT
-      echo "Waiting for OpenSearch domain to be active..."
-      aws opensearch wait domain-available \
-        --domain-name "${var.domain_name}" \
-        --region ${var.region}
-
-      echo "Enabling S3 Vectors engine for domain: ${var.domain_name}"
-      aws opensearch update-domain-config \
-        --domain-name "${var.domain_name}" \
-        --region ${var.region} \
-        --aiml-options '{"S3VectorsEngine":{"Enabled":true},"NaturalLanguageQueryGenerationOptions":{"DesiredState":"DISABLED"}}' \
-        --output json
-
-      echo "S3 Vectors engine enabled (via AIML options). Waiting for domain update to complete..."
-      aws opensearch wait domain-available \
-        --domain-name "${var.domain_name}" \
-        --region ${var.region}
-
-      echo "S3 Vectors engine configuration complete"
-    EOT
-  }
-
-  triggers = {
-    domain_name = var.domain_name
-    region      = var.region
-    enabled     = var.enable_s3vector_engine
-  }
-}
+# resource "null_resource" "enable_s3vector_engine" {
+#   count = var.enable_s3vector_engine ? 1 : 0
+#
+#   depends_on = [aws_opensearch_domain.s3vector_backend]
+#
+#   # Enable S3 Vector engine using AIML options (S3VectorsEngine)
+#   # This is the supported way to turn on the preview S3 Vectors engine
+#   # on OpenSearch 2.19+ domains.
+#   provisioner "local-exec" {
+#     command = <<-EOT
+#       echo "Waiting for OpenSearch domain to be active..."
+#       aws opensearch wait domain-available \
+#         --domain-name "${var.domain_name}" \
+#         --region ${var.region}
+#
+#       echo "Enabling S3 Vectors engine for domain: ${var.domain_name}"
+#       aws opensearch update-domain-config \
+#         --domain-name "${var.domain_name}" \
+#         --region ${var.region} \
+#         --aiml-options '{"S3VectorsEngine":{"Enabled":true},"NaturalLanguageQueryGenerationOptions":{"DesiredState":"DISABLED"}}' \
+#         --output json
+#
+#       echo "S3 Vectors engine enabled (via AIML options). Waiting for domain update to complete..."
+#       aws opensearch wait domain-available \
+#         --domain-name "${var.domain_name}" \
+#         --region ${var.region}
+#
+#       echo "S3 Vectors engine configuration complete"
+#     EOT
+#   }
+#
+#   triggers = {
+#     domain_name = var.domain_name
+#     region      = var.region
+#     enabled     = var.enable_s3vector_engine
+#   }
+# }
 
 # Map benchmark runner or Cloud9 IAM role to OpenSearch all_access role
 # This uses the OpenSearch security plugin REST API.
@@ -151,7 +151,7 @@ resource "null_resource" "opensearch_security_role_mapping" {
 
   depends_on = [
     aws_opensearch_domain.s3vector_backend,
-    null_resource.enable_s3vector_engine,
+    # null_resource.enable_s3vector_engine,
   ]
 
   provisioner "local-exec" {

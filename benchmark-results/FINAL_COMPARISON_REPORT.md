@@ -21,11 +21,13 @@ The following table illustrates the dramatic performance improvement achieved by
 | **Qdrant** | EBS | 3.93 | **187.35** | **47.6x** |
 | **LanceDB** | EBS | 2.17 | 36.49 | 16.8x |
 | **LanceDB** | S3 | 2.21 | 36.83 | 16.6x |
+| **OpenSearch** | Provisioned | 1.28 | 1.42 | 1.1x |
 
 **Analysis:**
 *   The cross-region setup was heavily bottlenecked by network round-trip time (RTT), masking the true capabilities of the backends.
 *   Qdrant's highly optimized Rust architecture scales exceptionally well when network constraints are removed.
 *   LanceDB also sees significant gains, but the improvement factor is lower, suggesting other internal bottlenecks (likely in the HTTP/server layer) compared to Qdrant.
+*   **OpenSearch**: OpenSearch showed a slight improvement (1.1x) when running in-region, correcting the previous anomaly. However, with ~1.42 QPS, it remains significantly slower than the dedicated vector databases (Qdrant and LanceDB) for this specific workload.
 
 ## 3. Embedded vs. Remote Architecture
 
@@ -62,6 +64,13 @@ Based on the most favorable configuration for each backend in the `us-east-1` re
     *   **Throughput**: ~36 QPS
     *   **Latency (P95)**: ~29ms
     *   **Verdict**: Viable, but significantly slower than the alternatives. Use this only if you need shared access to a LanceDB dataset from multiple clients and cannot use S3 directly.
+
+4.  **OpenSearch (Standard Provisioned)**
+    *   **Score**: ⚠️ Not Recommended
+    *   **Throughput**: ~1.42 QPS
+    *   **Latency (P50)**: ~645ms
+    *   **Latency (P95)**: ~978ms
+    *   **Verdict**: While performance improved with optimization, it still significantly underperforms compared to dedicated vector databases. Best suited for hybrid search use cases rather than pure vector search performance.
 
 *Note: S3Vector was not included in the final in-region ranking due to missing data in the latest run, but it held the top spot in cross-region scenarios, suggesting it handles high-latency connections very well.*
 

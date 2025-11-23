@@ -173,13 +173,13 @@ variable "opensearch_domain_name" {
 variable "opensearch_instance_type" {
   description = "OpenSearch instance type (use OR1 for S3Vector engine)"
   type        = string
-  default     = "or1.medium.search"
+  default     = "or1.large.search"
 }
 
 variable "opensearch_instance_count" {
   description = "Number of OpenSearch instances"
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "opensearch_multi_az" {

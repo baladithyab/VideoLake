@@ -26,13 +26,13 @@ variable "enable_s3vector_engine" {
 variable "instance_type" {
   description = "Instance type (use OR1 family for S3Vector engine)"
   type        = string
-  default     = "or1.medium.search" # OR1 instances for S3Vector
+  default     = "or1.large.search" # OR1 instances for S3Vector
 }
 
 variable "instance_count" {
   description = "Number of instances"
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "multi_az" {
