@@ -1,0 +1,29 @@
+==========================================
+Benchmark Session Summary
+==========================================
+
+Session ID: 20251122_225724
+Date: Sat Nov 22 22:57:30 UTC 2025
+
+Configuration:
+  Query Count: 100
+  Top-K: 10
+  Dimension: 1024
+  Modalities: text image audio
+  Backends: opensearch
+
+Results:
+  Total Benchmarks: 3
+  Successful: 3
+  Failed: 0
+  Success Rate: 100%
+
+Output Directory: /home/ec2-user/S3Vector/benchmark-results/session_20251122_225724
+Log File: /home/ec2-user/S3Vector/logs/benchmark_20251122_225724.log
+
+Results by Backend/Modality:
+
+  opensearch:
+    text: ✓ SUCCESS
+    image: ✓ SUCCESS
+    audio: ✓ SUCCESS

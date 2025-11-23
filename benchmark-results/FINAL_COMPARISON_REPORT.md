@@ -1,6 +1,6 @@
 # Final Vector Backend Comparison Report
 
-**Date:** November 22, 2025
+**Date:** November 23, 2025
 **Scope:** Cross-Region vs. In-Region vs. Embedded Execution Contexts
 
 ## 1. Executive Summary
@@ -27,7 +27,7 @@ The following table illustrates the dramatic performance improvement achieved by
 *   The cross-region setup was heavily bottlenecked by network round-trip time (RTT), masking the true capabilities of the backends.
 *   Qdrant's highly optimized Rust architecture scales exceptionally well when network constraints are removed.
 *   LanceDB also sees significant gains, but the improvement factor is lower, suggesting other internal bottlenecks (likely in the HTTP/server layer) compared to Qdrant.
-*   **OpenSearch**: OpenSearch showed a slight improvement (1.1x) when running in-region, correcting the previous anomaly. However, with ~1.42 QPS, it remains significantly slower than the dedicated vector databases (Qdrant and LanceDB) for this specific workload.
+*   **OpenSearch**: OpenSearch showed a slight improvement (1.1x) when running in-region, correcting the previous anomaly. Verification confirmed this configuration uses standard k-NN indices without S3 Vectors. However, with ~1.42 QPS, it remains significantly slower than the dedicated vector databases (Qdrant and LanceDB) for this specific workload.
 
 ## 3. Embedded vs. Remote Architecture
 
@@ -70,7 +70,7 @@ Based on the most favorable configuration for each backend in the `us-east-1` re
     *   **Throughput**: ~1.42 QPS
     *   **Latency (P50)**: ~645ms
     *   **Latency (P95)**: ~978ms
-    *   **Verdict**: While performance improved with optimization, it still significantly underperforms compared to dedicated vector databases. Best suited for hybrid search use cases rather than pure vector search performance.
+    *   **Verdict**: Verified to be running standard k-NN indices (no S3 Vectors). While performance improved with optimization, it still significantly underperforms compared to dedicated vector databases. Best suited for hybrid search use cases rather than pure vector search performance.
 
 *Note: S3Vector was not included in the final in-region ranking due to missing data in the latest run, but it held the top spot in cross-region scenarios, suggesting it handles high-latency connections very well.*
 

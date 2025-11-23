@@ -1,0 +1,22 @@
+{
+  "success": true,
+  "duration_seconds": 1.0168211460113525,
+  "query_count": 100,
+  "successful_queries": 0,
+  "throughput_qps": 98.34571241192846,
+  "latency_p50_ms": 9.155631065368652,
+  "latency_p95_ms": 14.997005462646479,
+  "latency_p99_ms": 18.602154254913344,
+  "latency_min_ms": 7.781505584716797,
+  "latency_max_ms": 21.34227752685547,
+  "latency_mean_ms": 10.155484676361084,
+  "latency_std_ms": 2.413435242223826,
+  "backend": "opensearch",
+  "operation": "search",
+  "endpoint_info": {
+    "type": "rest",
+    "backend": "opensearch",
+    "endpoint": "https://search-videolake-jp74yuza4pylhzhut4vimyh43a.us-east-1.es.amazonaws.com",
+    "region": "us-east-1"
+  }
+}
