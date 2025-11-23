@@ -10,6 +10,7 @@
 
 ## Table of Contents
 
+- [Methodology](#methodology)
 - [Quick Start](#quick-start)
 - [Prerequisites Checklist](#prerequisites-checklist)
 - [Phase 1: Infrastructure Deployment](#phase-1-infrastructure-deployment)
@@ -20,6 +21,28 @@
 - [Phase 8: Final Recommendations](#phase-8-final-recommendations)
 - [Quick Reference Commands](#quick-reference-commands)
 - [Troubleshooting](#troubleshooting)
+
+---
+
+## Methodology
+
+We employ two distinct benchmarking methodologies to ensure accuracy and relevance:
+
+### 1. Remote/In-Region Benchmarking (Preferred)
+This method executes benchmark scripts on a dedicated EC2 instance (`lancedb-benchmark-runner`) located in the **same AWS region (us-east-1)** as the vector databases.
+
+-   **Why**: Eliminates variable internet latency, providing a true measure of database performance.
+-   **How**: Uses AWS Systems Manager (SSM) to trigger scripts on the remote instance.
+-   **Use Case**: Performance tuning, backend comparison, latency analysis.
+
+### 2. Local/Cross-Region Benchmarking
+This method executes benchmark scripts from your local machine, connecting to the vector databases over the public internet.
+
+-   **Why**: Simulates the experience of a remote client or end-user.
+-   **How**: Runs Python scripts directly from your local terminal.
+-   **Use Case**: End-to-end connectivity testing, user experience validation.
+
+**Recommendation**: Always use **In-Region Benchmarking** for comparative performance analysis to isolate database latency from network noise.
 
 ---
 

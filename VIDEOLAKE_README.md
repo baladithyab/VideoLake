@@ -49,6 +49,7 @@ VideoLake is a **production-ready video search platform** that allows you to:
 
 ### Benchmarking & Analytics
 - **Performance Comparison**: Compare latency and throughput across backends
+- **Benchmarking Infrastructure**: Dedicated EC2 benchmark runner for in-region performance testing (eliminates network latency)
 - **ECS Benchmarking**: Run large-scale benchmarks on dedicated ECS infrastructure
 - **Visual Analytics**: Interactive charts and graphs
 - **Historical Data**: Track performance over time
@@ -112,7 +113,7 @@ VideoLake uses a **modular, microservices-based architecture**:
 - AWS S3Vector (native AWS service)
 - LanceDB (S3, EFS, EBS variants)
 - Qdrant (ECS Fargate deployment)
-- OpenSearch Serverless
+- OpenSearch Serverless (Optimized configuration available)
 
 ---
 
@@ -338,6 +339,10 @@ python scripts/run_smoke_tests.py
 *Based on 100-query benchmark with CC-Open dataset*
 
 See [Benchmark Results](benchmark-results/) for detailed analysis.
+
+For a deep dive into our benchmarking methodology and infrastructure, see:
+- [Benchmark SSM Guide](BENCHMARK_SSM_GUIDE.md) - How to run remote benchmarks
+- [Final Comparison Report](benchmark-results/FINAL_COMPARISON_REPORT.md) - Comprehensive analysis of all backends
 
 ---
 

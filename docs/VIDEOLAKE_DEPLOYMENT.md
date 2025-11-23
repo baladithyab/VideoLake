@@ -325,7 +325,7 @@ web_allowed_origins = [
 # OpenSearch Configuration (if deployed)
 # ============================================================================
 opensearch_domain_name = "videolake-opensearch"
-opensearch_instance_type = "t3.small.search"
+opensearch_instance_type = "t3.small.search" # Use r6g.large.search for production
 opensearch_instance_count = 1
 opensearch_ebs_volume_size = 20  # GB
 
@@ -513,6 +513,11 @@ terraform output -raw shared_bucket_name >> .env
 - ECS Fargate service
 - EFS or EBS storage
 - S3 bucket (S3 variant)
+
+**Benchmark Runner (If Enabled):**
+- EC2 Instance (t3.xlarge)
+- IAM Role for SSM and S3 access
+- Security Group
 
 **Qdrant (If Enabled):**
 - ECS Fargate service
