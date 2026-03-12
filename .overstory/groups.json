@@ -36,5 +36,17 @@
 		"status": "active",
 		"createdAt": "2026-03-12T19:28:35.667Z",
 		"completedAt": null
+	},
+	{
+		"id": "group-c6129e14",
+		"name": "wave-1-regen",
+		"memberIssueIds": [
+			"S3Vector-09de",
+			"S3Vector-bc7f",
+			"S3Vector-82f4"
+		],
+		"status": "active",
+		"createdAt": "2026-03-12T19:53:46.831Z",
+		"completedAt": null
 	}
 ]
