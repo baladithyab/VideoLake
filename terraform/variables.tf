@@ -286,3 +286,189 @@ variable "notification_email" {
   type        = string
   default     = ""
 }
+#------------------------------------------------------------------------------
+# EMBEDDING PROVIDERS (Multimodal Platform)
+#------------------------------------------------------------------------------
+
+variable "deploy_bedrock_native" {
+  description = "Deploy Bedrock native embedding provider (serverless)"
+  type        = bool
+  default     = true # Always enabled by default - serverless, pay-per-use
+}
+
+variable "deploy_marketplace_provider" {
+  description = "Deploy AWS Marketplace embedding provider (SageMaker endpoint)"
+  type        = bool
+  default     = false # Requires marketplace subscription
+}
+
+variable "deploy_sagemaker_custom" {
+  description = "Deploy SageMaker custom embedding provider (BYOM)"
+  type        = bool
+  default     = false # Requires custom model artifacts
+}
+
+# Bedrock Native Configuration
+variable "bedrock_text_model" {
+  description = "Bedrock text embedding model ID"
+  type        = string
+  default     = "amazon.titan-embed-text-v2:0"
+}
+
+variable "bedrock_image_model" {
+  description = "Bedrock image embedding model ID (leave empty to disable)"
+  type        = string
+  default     = "amazon.titan-embed-image-v1"
+}
+
+variable "bedrock_multimodal_model" {
+  description = "Bedrock multimodal embedding model ID (leave empty to disable)"
+  type        = string
+  default     = ""
+}
+
+# Marketplace Provider Configuration
+variable "marketplace_model_package_arn" {
+  description = "ARN of AWS Marketplace model package (required if deploy_marketplace_provider=true)"
+  type        = string
+  default     = ""
+}
+
+variable "marketplace_instance_type" {
+  description = "SageMaker instance type for marketplace model"
+  type        = string
+  default     = "ml.g4dn.xlarge"
+}
+
+# SageMaker Custom Provider Configuration
+variable "sagemaker_container_image_uri" {
+  description = "ECR URI for custom model container (required if deploy_sagemaker_custom=true)"
+  type        = string
+  default     = ""
+}
+
+variable "sagemaker_model_artifact_key" {
+  description = "S3 key for model.tar.gz artifact"
+  type        = string
+  default     = ""
+}
+
+variable "sagemaker_model_name" {
+  description = "Model identifier for SageMaker custom model"
+  type        = string
+  default     = ""
+}
+
+variable "sagemaker_embedding_dimension" {
+  description = "Embedding dimension for SageMaker custom model"
+  type        = number
+  default     = 384
+}
+
+#------------------------------------------------------------------------------
+# PGVECTOR AURORA (New Vector Store Backend)
+#------------------------------------------------------------------------------
+
+variable "deploy_pgvector" {
+  description = "Deploy pgvector Aurora Serverless PostgreSQL (OPTIONAL - SQL-based vector search)"
+  type        = bool
+  default     = false # Enable for ACID compliance and SQL interface
+}
+
+variable "pgvector_vpc_id" {
+  description = "VPC ID for pgvector Aurora cluster (required if deploy_pgvector=true)"
+  type        = string
+  default     = ""
+}
+
+variable "pgvector_private_subnet_ids" {
+  description = "List of private subnet IDs for pgvector Aurora (required if deploy_pgvector=true)"
+  type        = list(string)
+  default     = []
+}
+
+variable "pgvector_allowed_security_groups" {
+  description = "Security groups allowed to access pgvector Aurora"
+  type        = list(string)
+  default     = []
+}
+
+variable "pgvector_min_acu" {
+  description = "Minimum Aurora Capacity Units for pgvector"
+  type        = number
+  default     = 0.5
+}
+
+variable "pgvector_max_acu" {
+  description = "Maximum Aurora Capacity Units for pgvector"
+  type        = number
+  default     = 2
+}
+
+variable "pgvector_embedding_dimension" {
+  description = "Vector dimension for pgvector embeddings"
+  type        = number
+  default     = 1536
+}
+
+#------------------------------------------------------------------------------
+# SAMPLE DATASETS (Multimodal Platform)
+#------------------------------------------------------------------------------
+
+variable "deploy_sample_datasets" {
+  description = "Deploy sample multimodal datasets (text, image, audio, video)"
+  type        = bool
+  default     = true # Enable by default for platform evaluation
+}
+
+variable "sample_datasets_auto_populate" {
+  description = "Automatically populate sample datasets on deployment"
+  type        = bool
+  default     = false # Manual population recommended for large datasets
+}
+
+variable "sample_datasets_enable_text" {
+  description = "Enable text dataset (MS MARCO)"
+  type        = bool
+  default     = true
+}
+
+variable "sample_datasets_enable_image" {
+  description = "Enable image dataset (COCO)"
+  type        = bool
+  default     = false
+}
+
+variable "sample_datasets_enable_audio" {
+  description = "Enable audio dataset (LibriSpeech)"
+  type        = bool
+  default     = false
+}
+
+variable "sample_datasets_enable_video" {
+  description = "Enable video dataset (Kinetics)"
+  type        = bool
+  default     = false
+}
+
+#------------------------------------------------------------------------------
+# COST ESTIMATOR (Infrastructure Planning)
+#------------------------------------------------------------------------------
+
+variable "deploy_cost_estimator" {
+  description = "Deploy cost estimation API and Lambda function"
+  type        = bool
+  default     = true # Enable by default for cost transparency
+}
+
+variable "cost_estimator_enable_api_gateway" {
+  description = "Enable API Gateway endpoint for cost estimation"
+  type        = bool
+  default     = true
+}
+
+variable "cost_estimator_enable_cors" {
+  description = "Enable CORS for cost estimation API"
+  type        = bool
+  default     = true
+}
