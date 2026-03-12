@@ -13,5 +13,28 @@
 		"status": "active",
 		"createdAt": "2026-03-12T18:44:58.924Z",
 		"completedAt": null
+	},
+	{
+		"id": "group-bade6aef",
+		"name": "impl-wave-1",
+		"memberIssueIds": [
+			"S3Vector-a338",
+			"S3Vector-c5bf",
+			"S3Vector-f595",
+			"S3Vector-d17f"
+		],
+		"status": "active",
+		"createdAt": "2026-03-12T19:25:21.201Z",
+		"completedAt": null
+	},
+	{
+		"id": "group-7de58113",
+		"name": "impl-wave-1b",
+		"memberIssueIds": [
+			"S3Vector-96c5"
+		],
+		"status": "active",
+		"createdAt": "2026-03-12T19:28:35.667Z",
+		"completedAt": null
 	}
 ]
