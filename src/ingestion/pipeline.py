@@ -15,7 +15,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from src.utils.logging_config import get_logger
-from src.config.app_config import get_config
+from src.config.unified_config_manager import get_config
 
 logger = get_logger(__name__)
 

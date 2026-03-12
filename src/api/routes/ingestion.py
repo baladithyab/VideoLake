@@ -12,7 +12,7 @@ from src.ingestion.pipeline import VideoIngestionPipeline
 from src.utils.logging_config import get_logger
 from src.services.video_dataset_manager import VideoDatasetManager
 from src.services.s3_bucket_utils import S3BucketUtilityService
-from src.config.app_config import get_config
+from src.config.unified_config_manager import get_config
 
 logger = get_logger(__name__)
 router = APIRouter()

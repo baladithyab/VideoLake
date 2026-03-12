@@ -30,7 +30,7 @@ from src.exceptions import VectorStorageError, ValidationError, OpenSearchIntegr
 from src.utils.logging_config import get_structured_logger, LoggedOperation
 from src.utils.timing_tracker import TimingTracker
 from src.utils.resource_registry import resource_registry
-from src.config.app_config import get_config
+from src.config.unified_config_manager import get_config
 
 # Import shared components
 from src.shared import (

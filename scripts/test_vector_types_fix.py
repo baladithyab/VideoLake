@@ -15,7 +15,7 @@ sys.path.insert(0, str(project_root))
 
 from frontend.components.processing_components import ProcessingComponents
 from src.services.comprehensive_video_processing_service import VectorType
-from src.config.app_config import get_config
+from src.config.unified_config_manager import get_config
 
 def test_vector_types_configuration():
     """Test that vector types are properly configured in processing components."""

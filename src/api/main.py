@@ -16,6 +16,7 @@ import logging
 from src.utils.logging_config import get_logger
 from src.api.exception_handlers import register_exception_handlers
 from src.api.middleware.observability import ObservabilityMiddleware, PerformanceLoggingMiddleware
+from src.api.middleware.auth import APIKeyMiddleware
 from src.core.dependencies import initialize_services, cleanup_services
 
 logger = get_logger(__name__)
@@ -73,6 +74,9 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=3600,  # Cache preflight requests for 1 hour
 )
+
+# Add API key authentication (dev mode if API_KEY not set)
+app.add_middleware(APIKeyMiddleware)
 
 
 @app.get("/")
