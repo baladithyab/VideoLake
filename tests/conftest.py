@@ -6,6 +6,14 @@ Provides:
 - Custom pytest markers for test categorization
 - Shared fixtures for FastAPI TestClient, AWS mocks, config loading
 - Test collection hooks for conditional test execution
+- Provider interface fixtures for TDD
+
+This conftest supports the comprehensive test suite structure:
+- tests/unit/ - Unit tests with minimal mocking
+- tests/integration/ - API integration tests with TestClient
+- tests/providers/ - Provider tests with real backends
+- tests/e2e/ - End-to-end workflow tests
+- tests/terraform/ - Infrastructure validation tests
 """
 
 import json
