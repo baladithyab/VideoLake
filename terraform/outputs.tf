@@ -329,3 +329,160 @@ output "lancedb_benchmark_runner" {
     message     = "Benchmark runner not deployed. Set var.deploy_lancedb_benchmark_ec2=true to enable."
   }
 }
+
+# =============================================================================
+# EMBEDDING PROVIDERS OUTPUTS
+# =============================================================================
+
+output "bedrock_native_enabled" {
+  description = "Whether Bedrock native provider is enabled"
+  value       = var.deploy_bedrock_native
+}
+
+output "bedrock_embedding_role_arn" {
+  description = "IAM role ARN for Bedrock embedding access"
+  value       = var.deploy_bedrock_native ? module.bedrock_native[0].embedding_role_arn : ""
+}
+
+output "bedrock_text_model_id" {
+  description = "Bedrock text embedding model ID"
+  value       = var.deploy_bedrock_native ? module.bedrock_native[0].text_model_id : ""
+}
+
+output "marketplace_provider_enabled" {
+  description = "Whether AWS Marketplace provider is enabled"
+  value       = var.deploy_marketplace_provider
+}
+
+output "marketplace_endpoint_name" {
+  description = "SageMaker endpoint name for marketplace provider"
+  value       = var.deploy_marketplace_provider ? module.marketplace_provider[0].endpoint_name : ""
+}
+
+output "sagemaker_custom_enabled" {
+  description = "Whether SageMaker custom provider is enabled"
+  value       = var.deploy_sagemaker_custom
+}
+
+output "sagemaker_custom_endpoint_name" {
+  description = "SageMaker endpoint name for custom provider"
+  value       = var.deploy_sagemaker_custom ? module.sagemaker_custom[0].endpoint_name : ""
+}
+
+output "sagemaker_model_artifacts_bucket" {
+  description = "S3 bucket for SageMaker model artifacts"
+  value       = var.deploy_sagemaker_custom ? module.sagemaker_custom[0].model_artifacts_bucket : ""
+}
+
+# =============================================================================
+# PGVECTOR AURORA OUTPUTS
+# =============================================================================
+
+output "pgvector_enabled" {
+  description = "Whether pgvector Aurora is deployed"
+  value       = var.deploy_pgvector
+}
+
+output "pgvector_cluster_endpoint" {
+  description = "pgvector Aurora cluster endpoint"
+  value       = var.deploy_pgvector ? module.pgvector[0].cluster_endpoint : ""
+  sensitive   = true
+}
+
+output "pgvector_database_name" {
+  description = "pgvector database name"
+  value       = var.deploy_pgvector ? module.pgvector[0].database_name : ""
+}
+
+output "pgvector_secret_arn" {
+  description = "Secrets Manager ARN for pgvector credentials"
+  value       = var.deploy_pgvector ? module.pgvector[0].secret_arn : ""
+}
+
+output "pgvector_connection_string" {
+  description = "pgvector connection string (password from Secrets Manager)"
+  value       = var.deploy_pgvector ? module.pgvector[0].connection_string : ""
+  sensitive   = true
+}
+
+# =============================================================================
+# SAMPLE DATASETS OUTPUTS
+# =============================================================================
+
+output "sample_datasets_enabled" {
+  description = "Whether sample datasets are deployed"
+  value       = var.deploy_sample_datasets
+}
+
+output "sample_datasets_bucket_name" {
+  description = "S3 bucket name for sample datasets"
+  value       = var.deploy_sample_datasets ? module.sample_datasets[0].bucket_name : ""
+}
+
+output "sample_datasets_text_path" {
+  description = "S3 path for text dataset"
+  value       = var.deploy_sample_datasets ? module.sample_datasets[0].text_dataset_path : ""
+}
+
+output "sample_datasets_image_path" {
+  description = "S3 path for image dataset"
+  value       = var.deploy_sample_datasets ? module.sample_datasets[0].image_dataset_path : ""
+}
+
+output "sample_datasets_populate_function" {
+  description = "Lambda function name for populating datasets"
+  value       = var.deploy_sample_datasets ? module.sample_datasets[0].populate_lambda_function_name : ""
+}
+
+# =============================================================================
+# COST ESTIMATOR OUTPUTS
+# =============================================================================
+
+output "cost_estimator_enabled" {
+  description = "Whether cost estimator is deployed"
+  value       = var.deploy_cost_estimator
+}
+
+output "cost_estimator_api_url" {
+  description = "Cost estimator API Gateway endpoint URL"
+  value       = var.deploy_cost_estimator ? module.cost_estimator[0].api_gateway_url : ""
+}
+
+output "cost_estimator_lambda_function" {
+  description = "Cost estimator Lambda function name"
+  value       = var.deploy_cost_estimator ? module.cost_estimator[0].lambda_function_name : ""
+}
+
+output "cost_estimator_example_curl" {
+  description = "Example curl command to test cost estimator API"
+  value       = var.deploy_cost_estimator ? module.cost_estimator[0].example_curl_command : ""
+}
+
+# =============================================================================
+# DEPLOYMENT SUMMARY
+# =============================================================================
+
+output "multimodal_platform_summary" {
+  description = "Summary of deployed multimodal platform components"
+  value = {
+    embedding_providers = {
+      bedrock_native = var.deploy_bedrock_native
+      marketplace    = var.deploy_marketplace_provider
+      sagemaker      = var.deploy_sagemaker_custom
+    }
+    vector_stores = {
+      s3vector   = var.deploy_s3vector
+      opensearch = var.deploy_opensearch
+      qdrant_ecs = var.deploy_qdrant
+      qdrant_ebs = var.deploy_qdrant_ebs
+      lancedb_s3 = var.deploy_lancedb_s3
+      lancedb_efs = var.deploy_lancedb_efs
+      lancedb_ebs = var.deploy_lancedb_ebs
+      pgvector   = var.deploy_pgvector
+    }
+    support_services = {
+      sample_datasets = var.deploy_sample_datasets
+      cost_estimator  = var.deploy_cost_estimator
+    }
+  }
+}

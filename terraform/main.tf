@@ -451,3 +451,166 @@ module "ingestion_pipeline" {
   # Notification Configuration
   notification_email = var.notification_email
 }
+
+# =============================================================================
+# EMBEDDING PROVIDERS (Multimodal Platform)
+# =============================================================================
+# Deploy embedding model providers for multimodal vector generation.
+# Supports 3 provider types: Bedrock native, AWS Marketplace, SageMaker custom.
+#
+# DEFAULT: Bedrock native only (serverless, pay-per-use)
+# Enable others with -var flags as needed.
+# =============================================================================
+
+# Bedrock Native Provider (Serverless - Always Recommended)
+module "bedrock_native" {
+  count  = var.deploy_bedrock_native ? 1 : 0
+  source = "./modules/embedding_provider_bedrock_native"
+
+  deployment_name              = var.project_name
+  aws_region                   = var.aws_region
+  bedrock_text_model           = var.bedrock_text_model
+  bedrock_image_model          = var.bedrock_image_model
+  bedrock_multimodal_model     = var.bedrock_multimodal_model
+  enable_logging               = var.environment == "prod"
+  enable_monitoring            = var.environment == "prod"
+
+  tags = {
+    Provider = "Bedrock-Native"
+    Component = "Embedding-Provider"
+  }
+}
+
+# AWS Marketplace Provider (Optional - Requires Subscription)
+module "marketplace_provider" {
+  count  = var.deploy_marketplace_provider ? 1 : 0
+  source = "./modules/embedding_provider_marketplace"
+
+  deployment_name           = "${var.project_name}-marketplace"
+  marketplace_model_package_arn = var.marketplace_model_package_arn
+  instance_type             = var.marketplace_instance_type
+  min_instances             = 1
+  max_instances             = 3
+  enable_monitoring         = true
+
+  tags = {
+    Provider = "AWS-Marketplace"
+    Component = "Embedding-Provider"
+  }
+}
+
+# SageMaker Custom Provider (Optional - BYOM)
+module "sagemaker_custom" {
+  count  = var.deploy_sagemaker_custom ? 1 : 0
+  source = "./modules/embedding_provider_sagemaker"
+
+  deployment_name      = "${var.project_name}-sagemaker"
+  container_image_uri  = var.sagemaker_container_image_uri
+  model_artifact_key   = var.sagemaker_model_artifact_key
+  model_name           = var.sagemaker_model_name
+  embedding_dimension  = var.sagemaker_embedding_dimension
+  instance_type        = "ml.m5.xlarge"
+  initial_instances    = 1
+  enable_monitoring    = true
+
+  tags = {
+    Provider = "SageMaker-Custom"
+    Component = "Embedding-Provider"
+  }
+}
+
+# =============================================================================
+# PGVECTOR AURORA (New Vector Store Backend)
+# =============================================================================
+# Deploy Aurora PostgreSQL Serverless v2 with pgvector extension.
+#
+# DEFAULT: false (not deployed)
+# Enable: terraform apply -var="deploy_pgvector=true"
+#
+# Requirements:
+# - VPC with private subnets
+# - Security groups for access control
+#
+# Use Case: SQL-based vector search with ACID compliance
+# =============================================================================
+module "pgvector" {
+  count  = var.deploy_pgvector ? 1 : 0
+  source = "./modules/pgvector_aurora"
+
+  deployment_name         = "${var.project_name}-pgvector"
+  environment             = var.environment
+  vpc_id                  = var.pgvector_vpc_id
+  private_subnet_ids      = var.pgvector_private_subnet_ids
+  allowed_security_groups = var.pgvector_allowed_security_groups
+  min_acu                 = var.pgvector_min_acu
+  max_acu                 = var.pgvector_max_acu
+  embedding_dimension     = var.pgvector_embedding_dimension
+  instance_count          = var.environment == "prod" ? 2 : 1
+
+  tags = {
+    VectorStore = "pgvector"
+    Component = "Database"
+  }
+}
+
+# =============================================================================
+# SAMPLE DATASETS (Multimodal Platform)
+# =============================================================================
+# Deploy sample datasets for platform evaluation and benchmarking.
+#
+# Datasets:
+# - Text: MS MARCO (10K passages)
+# - Image: COCO (1K images)
+# - Audio: LibriSpeech (100 clips)
+# - Video: Kinetics (50 clips)
+#
+# DEFAULT: true (deployed, but not auto-populated)
+# Auto-populate: terraform apply -var="sample_datasets_auto_populate=true"
+# =============================================================================
+module "sample_datasets" {
+  count  = var.deploy_sample_datasets ? 1 : 0
+  source = "./modules/sample_datasets"
+
+  project_name         = var.project_name
+  auto_populate        = var.sample_datasets_auto_populate
+  enable_text_dataset  = var.sample_datasets_enable_text
+  enable_image_dataset = var.sample_datasets_enable_image
+  enable_audio_dataset = var.sample_datasets_enable_audio
+  enable_video_dataset = var.sample_datasets_enable_video
+
+  tags = {
+    Component = "Sample-Datasets"
+    Purpose   = "Evaluation-Benchmarking"
+  }
+}
+
+# =============================================================================
+# COST ESTIMATOR (Infrastructure Planning)
+# =============================================================================
+# Deploy cost estimation API for real-time infrastructure cost projections.
+#
+# Features:
+# - Lambda function for cost calculation
+# - API Gateway endpoint for UI integration
+# - AWS Pricing API integration
+# - Per-resource cost breakdown
+#
+# DEFAULT: true (deployed)
+# Estimated cost: ~$0 (within free tier for typical usage)
+# =============================================================================
+module "cost_estimator" {
+  count  = var.deploy_cost_estimator ? 1 : 0
+  source = "./modules/cost_estimator"
+
+  project_name                  = var.project_name
+  enable_api_gateway            = var.cost_estimator_enable_api_gateway
+  enable_cors                   = var.cost_estimator_enable_cors
+  api_stage_name                = var.environment
+  enable_api_key_auth           = var.environment == "prod"
+  log_retention_days            = var.environment == "prod" ? 30 : 7
+
+  tags = {
+    Component = "Cost-Estimator"
+    Purpose   = "Infrastructure-Planning"
+  }
+}
