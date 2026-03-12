@@ -36,7 +36,7 @@ class BenchmarkService:
     async def start_benchmark(self, backends: List[str], config: Dict[str, Any]) -> str:
         """
         Start a benchmark job for the specified backends.
-        
+
         Args:
             backends: List of backend names to benchmark (e.g., ["s3vector", "lancedb-s3"])
             config: Configuration dictionary containing:
@@ -48,7 +48,7 @@ class BenchmarkService:
                 - duration: Duration for mixed workload (default: 60)
                 - collection: Optional collection name
                 - use_ecs: Boolean to run on ECS (default: False)
-        
+
         Returns:
             job_id: Unique identifier for the benchmark job
         """
@@ -63,7 +63,7 @@ class BenchmarkService:
             "errors": [],
             "type": "ecs" if use_ecs else "local"
         }
-        
+
         if use_ecs:
             try:
                 task_arn = await self._run_ecs_benchmark(job_id, backends, config)
@@ -76,35 +76,35 @@ class BenchmarkService:
         else:
             # Run in background locally
             asyncio.create_task(self._run_benchmark_task(job_id, backends, config))
-            
+
         return job_id
 
     async def _run_ecs_benchmark(self, job_id: str, backends: List[str], config: Dict[str, Any]) -> str:
         """Run benchmark on ECS"""
-        
+
         # Construct command overrides
         # The container runs scripts/benchmark_backend.py by default
         # We need to construct the arguments based on config
-        
+
         # Note: The current benchmark_backend.py script might need adjustments to handle multiple backends
         # or we run one task per backend. For now, let's assume we run one task that iterates or we pick the first backend.
         # If multiple backends are requested, we might need to launch multiple tasks or update the script.
         # For simplicity, let's assume the script can handle one backend at a time, so we might need to loop here
         # or just take the first one if the script is limited.
         # However, the requirement says "Pass configuration as environment variables overrides".
-        
+
         # Let's look at how we can pass config.
         # We will pass the config as environment variables that the script can pick up,
         # OR we override the command. Overriding command is usually cleaner for CLI args.
-        
+
         backend = backends[0] if backends else "s3vector" # Default to first backend
-        
+
         cmd = ["python", "scripts/benchmark_backend.py"]
         cmd.extend(["--backend", backend])
-        
+
         operation = config.get("operation", "search")
         cmd.extend(["--operation", operation])
-        
+
         if "vectors" in config:
             cmd.extend(["--vectors", str(config.get("vectors"))])
         if "queries" in config:
@@ -117,7 +117,7 @@ class BenchmarkService:
             collection = config.get("collection")
             if collection:
                 cmd.extend(["--collection", str(collection)])
-            
+
         # Add job_id to track results
         cmd.extend(["--job_id", job_id])
 
@@ -133,7 +133,7 @@ class BenchmarkService:
                 }
             ]
         }
-        
+
         # Network configuration for Fargate
         network_config = {
             'awsvpcConfiguration': {
@@ -159,17 +159,17 @@ class BenchmarkService:
             count=1,
             startedBy=f'benchmark-service-{job_id}'
         )
-        
+
         if not response['tasks']:
             raise Exception(f"Failed to start ECS task: {response.get('failures')}")
-            
+
         task_arn = response['tasks'][0]['taskArn']
         logger.info(f"Started ECS benchmark task: {task_arn}")
         return task_arn
 
     async def _run_benchmark_task(self, job_id: str, backends: List[str], config: Dict[str, Any]):
         self.jobs[job_id]["status"] = "running"
-        
+
         try:
             # Run benchmarks for each backend sequentially in the thread pool
             loop = asyncio.get_running_loop()
@@ -179,7 +179,7 @@ class BenchmarkService:
                 backends,
                 config
             )
-            
+
             self.jobs[job_id]["results"] = results
             self.jobs[job_id]["status"] = "completed"
         except Exception as e:
@@ -194,24 +194,24 @@ class BenchmarkService:
 
         results = {}
         operation = config.get("operation", "search")
-        
+
         for backend in backends:
             try:
                 logger.info(f"Starting benchmark for {backend}...")
-                
+
                 # Initialize benchmark runner
                 # We pass a copy of config to avoid modifying the original
                 runner_config = config.copy()
-                
+
                 # Extract specific params
                 collection = runner_config.get("collection")
-                
+
                 runner = BackendBenchmark(
                     backend=backend,
                     config=runner_config,
                     collection=collection
                 )
-                
+
                 # Validate connectivity
                 validation = runner.validate_backend()
                 if not validation.get("accessible", False):
@@ -237,23 +237,23 @@ class BenchmarkService:
                     res = runner.benchmark_mixed_workload(duration, dimension)
                 else:
                     res = {"success": False, "error": f"Unknown operation: {operation}"}
-                
+
                 results[backend] = res
-                
+
             except Exception as e:
                 logger.error(f"Error benchmarking {backend}: {e}")
                 results[backend] = {
                     "success": False,
                     "error": str(e)
                 }
-                
+
         return results
 
     def get_status(self, job_id: str) -> Dict[str, Any]:
         job = self.jobs.get(job_id)
         if not job:
             return {"status": "not_found"}
-            
+
         # If it's an ECS job, check ECS status if it's not already completed/failed
         if job.get("type") == "ecs" and job.get("status") in ["submitted", "pending", "running"]:
             try:
@@ -263,12 +263,12 @@ class BenchmarkService:
                         cluster=self.ecs_cluster,
                         tasks=[task_arn]
                     )
-                    
+
                     if response['tasks']:
                         task = response['tasks'][0]
                         last_status = task['lastStatus']
                         job["ecs_status"] = last_status
-                        
+
                         if last_status == 'STOPPED':
                             # Task finished
                             exit_code = task['containers'][0].get('exitCode')
@@ -285,7 +285,7 @@ class BenchmarkService:
                             job["status"] = "running"
             except Exception as e:
                 logger.error(f"Error checking ECS task status: {e}")
-                
+
         return job
 
     def get_results(self, job_id: str) -> Dict[str, Any]:
@@ -293,10 +293,10 @@ class BenchmarkService:
         job = self.jobs.get(job_id)
         if not job:
             return {"status": "not_found"}
-            
+
         if job.get("status") != "completed":
             return {"status": job.get("status"), "message": "Job not completed yet"}
-            
+
         return job.get("results", {})
 
     def list_benchmarks(self) -> List[Dict[str, Any]]:

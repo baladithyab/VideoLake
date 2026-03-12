@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import logging
 
-from src.backend.benchmark_service import BenchmarkService
+from src.services.benchmark_service import BenchmarkService
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
