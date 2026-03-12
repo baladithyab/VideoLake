@@ -83,7 +83,7 @@ def run_comprehensive_demo(args_list):
         env = os.environ.copy()
         env['REAL_AWS_DEMO'] = '1'
         
-        cmd = [sys.executable, "examples/comprehensive_real_demo.py"] + args_list
+        cmd = [sys.executable, "archive/legacy-examples/comprehensive_real_demo.py"] + args_list
         
         result = subprocess.run(
             cmd,
@@ -113,7 +113,7 @@ def run_cross_modal_demo():
         env['REAL_AWS_DEMO'] = '1'
         
         result = subprocess.run([
-            sys.executable, "examples/cross_modal_search_demo.py"
+            sys.executable, "archive/legacy-examples/cross_modal_search_demo.py"
         ], env=env, cwd=Path(__file__).parent.parent)
         
         if result.returncode == 0:

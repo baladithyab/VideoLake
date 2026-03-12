@@ -61,6 +61,9 @@ Thumbs.db
 *.log
 logs/
 
+# Checkpoints and progress data
+.checkpoints/
+
 # Temporary files
 *.tmp
 *.temp
