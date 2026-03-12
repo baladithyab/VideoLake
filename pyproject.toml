@@ -95,6 +95,25 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "-ra",
+    "--tb=short",
+]
+markers = [
+    "unit: Unit tests (fast, no external dependencies)",
+    "integration: Integration tests (may use mocks for external services)",
+    "e2e: End-to-end tests (full system test)",
+    "requires_aws: Tests requiring AWS credentials (no cost)",
+    "real_aws: Tests using real AWS resources (will incur costs)",
+    "expensive: Expensive tests (e.g., OpenSearch domain)",
+    "slow: Slow tests (takes >1 minute)",
+    "api: FastAPI endpoint tests",
+    "terraform: Terraform infrastructure tests",
+    "provider: Provider interface tests",
+    "frontend: Frontend component tests",
+]
+timeout = 300
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
 ]
 
 [tool.black]
