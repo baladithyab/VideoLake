@@ -34,7 +34,7 @@ from src.services.enhanced_storage_integration_manager import (
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.opensearch_s3vector_pattern2_correct import OpenSearchS3VectorPattern2Manager
 from src.utils.logging_config import get_logger
-from src.config.app_config import get_config
+from src.config.unified_config_manager import get_config
 
 logger = get_logger(__name__)
 

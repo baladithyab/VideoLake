@@ -12,7 +12,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from src.ingestion.pipeline import VideoIngestionPipeline, IngestionResult
-from src.backend.benchmark_service import BenchmarkService
+from src.services.benchmark_service import BenchmarkService
 from src.services.video_dataset_manager import VideoDatasetManager, VideoDatasetConfig, VideoMetadata
 
 class TestVideoIngestionPipeline(unittest.TestCase):

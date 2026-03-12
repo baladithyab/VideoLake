@@ -16,6 +16,7 @@ import logging
 from src.utils.logging_config import get_logger
 from src.api.exception_handlers import register_exception_handlers
 from src.api.middleware.observability import ObservabilityMiddleware, PerformanceLoggingMiddleware
+from src.api.middleware.auth import APIKeyMiddleware
 from src.core.dependencies import initialize_services, cleanup_services
 
 logger = get_logger(__name__)
@@ -74,6 +75,9 @@ app.add_middleware(
     max_age=3600,  # Cache preflight requests for 1 hour
 )
 
+# Add API key authentication (dev mode if API_KEY not set)
+app.add_middleware(APIKeyMiddleware)
+
 
 @app.get("/")
 async def root():
@@ -95,6 +99,7 @@ async def health_check():
     - AWS connectivity
     - External API availability
     """
+    import asyncio
     from datetime import datetime
     import os
     import requests
@@ -129,7 +134,8 @@ async def health_check():
     # Check AWS S3 connectivity
     try:
         if storage_manager:
-            storage_manager.s3_client.list_buckets()
+            # Run blocking boto3 call in thread pool
+            await asyncio.to_thread(storage_manager.s3_client.list_buckets)
             checks["aws_s3"] = {"status": "healthy"}
         else:
             checks["aws_s3"] = {"status": "unhealthy", "error": "Storage manager not initialized"}
@@ -142,7 +148,9 @@ async def health_check():
     try:
         api_key = os.getenv("TWELVE_LABS_API_KEY")
         if api_key:
-            response = requests.get(
+            # Run blocking requests call in thread pool
+            response = await asyncio.to_thread(
+                requests.get,
                 "https://api.twelvelabs.io/v1.2/engines",
                 headers={"x-api-key": api_key},
                 timeout=5
@@ -162,7 +170,10 @@ async def health_check():
         # Use the correct client for listing models (bedrock vs bedrock-runtime)
         from src.utils.aws_clients import aws_client_factory
         bedrock_client = aws_client_factory.get_bedrock_client()
-        response = bedrock_client.list_foundation_models()
+        # Run blocking boto3 call in thread pool
+        response = await asyncio.to_thread(
+            bedrock_client.list_foundation_models
+        )
         checks["aws_bedrock"] = {
             "status": "healthy",
             "models_available": len(response.get("modelSummaries", []))
@@ -185,10 +196,9 @@ from .routers import (
     search,
     embeddings,
     analytics,
-    # infrastructure,
+    infrastructure,
     benchmark
 )
-from src.api.routes import infrastructure as infrastructure_routes
 from src.api.routes import ingestion as ingestion_routes
 
 # Include routers
@@ -197,8 +207,7 @@ app.include_router(processing.router, prefix="/api/processing", tags=["processin
 app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(embeddings.router, prefix="/api/embeddings", tags=["embeddings"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
-# app.include_router(infrastructure.router, prefix="/api", tags=["infrastructure"])
-app.include_router(infrastructure_routes.router, prefix="/api", tags=["infrastructure"])
+app.include_router(infrastructure.router, prefix="/api", tags=["infrastructure"])
 app.include_router(benchmark.router, prefix="/api/benchmark", tags=["benchmark"])
 app.include_router(ingestion_routes.router, prefix="/api/ingestion", tags=["ingestion"])
 

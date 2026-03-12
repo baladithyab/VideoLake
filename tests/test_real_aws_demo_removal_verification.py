@@ -61,7 +61,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.config.app_config import get_config_manager
+from src.config.unified_config_manager import get_unified_config_manager as get_config_manager
 from src.services.s3_vector_storage import S3VectorStorageManager
 from src.services.bedrock_embedding import BedrockEmbeddingService
 # OpenSearch integration import - may not be available

@@ -5,48 +5,54 @@ Configuration Package
 Unified configuration management system for the S3Vector demo.
 """
 
-from .app_config import (
-    AppConfig,
-    ConfigManager,
-    get_config_manager,
+from .unified_config_manager import (
+    UnifiedConfiguration,
+    UnifiedConfigManager,
+    get_unified_config_manager,
     get_config,
     get_feature_flag,
     set_feature_flag,
     Environment,
     LogLevel,
-    AWSConfig,
-    TwelveLabsConfig,
-    OpenSearchConfig,
-    FeatureFlags,
-    UIConfig,
-    PerformanceConfig,
-    SecurityConfig
+    AWSConfiguration,
+    VideoProcessingConfiguration,
+    StorageConfiguration,
+    FeatureConfiguration,
+    UIConfiguration,
+    PerformanceConfiguration,
+    SecurityConfiguration
 )
 
-# Backward compatibility - import old config manager
-try:
-    from ..config import config_manager as old_config_manager
-except ImportError:
-    old_config_manager = None
-
-# Export both old and new for compatibility
-config_manager = old_config_manager  # Backward compatibility
+# Backward compatibility aliases
+AppConfig = UnifiedConfiguration
+ConfigManager = UnifiedConfigManager
+get_config_manager = get_unified_config_manager
+AWSConfig = AWSConfiguration
+UIConfig = UIConfiguration
+PerformanceConfig = PerformanceConfiguration
+SecurityConfig = SecurityConfiguration
 
 __all__ = [
-    'AppConfig',
-    'ConfigManager',
+    'UnifiedConfiguration',
+    'UnifiedConfigManager',
+    'AppConfig',  # Backward compatibility
+    'ConfigManager',  # Backward compatibility
     'get_config_manager',
+    'get_unified_config_manager',
     'get_config',
     'get_feature_flag',
     'set_feature_flag',
     'Environment',
     'LogLevel',
-    'AWSConfig',
-    'TwelveLabsConfig',
-    'OpenSearchConfig',
-    'FeatureFlags',
-    'UIConfig',
-    'PerformanceConfig',
-    'SecurityConfig',
-    'config_manager'  # Backward compatibility
+    'AWSConfiguration',
+    'AWSConfig',  # Backward compatibility
+    'VideoProcessingConfiguration',
+    'StorageConfiguration',
+    'FeatureConfiguration',
+    'UIConfiguration',
+    'UIConfig',  # Backward compatibility
+    'PerformanceConfiguration',
+    'PerformanceConfig',  # Backward compatibility
+    'SecurityConfiguration',
+    'SecurityConfig'  # Backward compatibility
 ]
