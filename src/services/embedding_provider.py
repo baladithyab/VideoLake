@@ -5,6 +5,10 @@ Provides a unified interface for generating embeddings across text, image, audio
 and video modalities. Supports multiple backend providers (AWS Bedrock, SageMaker,
 external APIs) with auto-registration and factory pattern for dynamic discovery.
 
+This module provides the foundation for the multi-modal vector platform architecture,
+enabling seamless integration of diverse embedding providers with consistent interfaces
+and auto-discovery capabilities.
+
 Architecture:
 - ModalityType: Type-safe enum for content modalities
 - EmbeddingProvider: Abstract base class for all providers
@@ -24,7 +28,12 @@ logger = get_logger(__name__)
 
 
 class ModalityType(str, Enum):
-    """Supported modality types for embedding generation."""
+    """
+    Supported modality types for multi-modal embeddings.
+
+    This enum defines the core content types that can be embedded in the
+    vector platform, enabling cross-modal search and unified retrieval.
+    """
     TEXT = "text"
     IMAGE = "image"
     AUDIO = "audio"
@@ -43,7 +52,21 @@ class EmbeddingProviderType(str, Enum):
 
 @dataclass
 class EmbeddingRequest:
-    """Request for generating embeddings."""
+    """
+    Request for generating embeddings.
+
+    Attributes:
+        modality: The type of content being embedded
+        content: The content to embed (text string, S3 URI, base64 bytes, or batch)
+        model_id: Optional specific model to use (provider will choose default if None)
+        dimensions: Optional dimension override for configurable models (also accepts 'dimension')
+        normalize: Normalize embeddings to unit length
+        metadata: Additional provider-specific parameters
+        image_size: For image resizing (optional)
+        audio_sample_rate: For audio processing (optional)
+        video_segment_duration: Seconds per segment for video (optional)
+        embedding_mode: Provider-specific embedding mode (optional)
+    """
     modality: ModalityType
     content: Union[str, bytes, List[str]]  # Text, URI, binary data, or batch
     model_id: Optional[str] = None  # Provider-specific model ID
@@ -57,10 +80,38 @@ class EmbeddingRequest:
     video_segment_duration: Optional[int] = None  # Seconds per segment
     embedding_mode: Optional[str] = None  # Provider-specific mode
 
+    # Backward compatibility alias
+    @property
+    def dimension(self) -> Optional[int]:
+        """Alias for dimensions (backward compatibility)."""
+        return self.dimensions
+
+    @dimension.setter
+    def dimension(self, value: Optional[int]):
+        """Alias for dimensions (backward compatibility)."""
+        self.dimensions = value
+
 
 @dataclass
 class EmbeddingResponse:
-    """Response from embedding generation."""
+    """
+    Response from embedding generation.
+
+    Supports both single and batch embeddings for flexibility.
+
+    Attributes:
+        embedding: Single embedding vector (for single requests)
+        embeddings: List of embedding vectors (for batch requests) - alias for [embedding]
+        model_id: The model used to generate embeddings
+        modality: The modality that was processed
+        provider: Provider name (e.g., 'bedrock', 'sagemaker')
+        dimensions: The dimension of the embedding vectors
+        processing_time_ms: Time taken to generate embeddings
+        input_tokens: Number of input tokens processed (optional)
+        cost_estimate: Estimated cost in USD (optional)
+        metadata: Provider-specific metadata
+        created_at: Timestamp of creation
+    """
     embedding: List[float]
     modality: ModalityType
     model_id: str
@@ -72,14 +123,27 @@ class EmbeddingResponse:
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
 
+    # Backward compatibility aliases
+    @property
+    def embeddings(self) -> List[List[float]]:
+        """Return embeddings as list (backward compatibility with batch API)."""
+        return [self.embedding]
+
+    @property
+    def dimension(self) -> int:
+        """Alias for dimensions (backward compatibility)."""
+        return self.dimensions
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "embedding": self.embedding,
+            "embeddings": self.embeddings,  # Include batch format
             "modality": self.modality.value,
             "model_id": self.model_id,
             "provider": self.provider,
             "dimensions": self.dimensions,
+            "dimension": self.dimension,  # Alias
             "processing_time_ms": self.processing_time_ms,
             "input_tokens": self.input_tokens,
             "cost_estimate": self.cost_estimate,
@@ -107,13 +171,36 @@ class EmbeddingModelInfo:
         return modality in self.supported_modalities
 
 
+@dataclass
+class ProviderCapabilities:
+    """
+    Capabilities supported by an embedding provider.
+
+    Defines what modalities, dimensions, and features are available
+    from a specific embedding provider. Complementary to EmbeddingModelInfo.
+    """
+    supported_modalities: List[ModalityType]
+    max_batch_size: int
+    supports_configurable_dimensions: bool
+    available_dimensions: List[int]
+    max_input_tokens: Optional[int] = None
+    cost_per_1k_tokens: Optional[float] = None
+    typical_latency_ms: Optional[float] = None
+
+
 class EmbeddingProvider(ABC):
     """
     Abstract base class for embedding providers.
 
     All embedding provider implementations must inherit from this class
     and implement the required methods. This ensures a consistent interface
-    across different backends (AWS Bedrock, SageMaker, external APIs).
+    across different backends (AWS Bedrock, SageMaker, external APIs) and enables
+    dynamic provider selection based on modality and capability requirements.
+
+    Implementations:
+    - BedrockMultiModalProvider: AWS Bedrock (Titan Text/Image, Nova Multi-modal)
+    - SageMakerEmbeddingProvider: SageMaker endpoints (Voyage, Jina, etc.)
+    - ExternalEmbeddingProvider: External APIs (OpenAI, Cohere, etc.)
     """
 
     @property
@@ -121,6 +208,16 @@ class EmbeddingProvider(ABC):
     def provider_type(self) -> EmbeddingProviderType:
         """Return the type of this provider."""
         pass
+
+    @property
+    def provider_name(self) -> str:
+        """Return human-readable provider name (e.g., 'AWS Bedrock')."""
+        return self.provider_type.value.title()
+
+    @property
+    def provider_id(self) -> str:
+        """Return unique provider identifier (e.g., 'bedrock')."""
+        return self.provider_type.value
 
     @abstractmethod
     def get_supported_modalities(self) -> List[ModalityType]:
@@ -132,10 +229,69 @@ class EmbeddingProvider(ABC):
         """Return list of available models from this provider."""
         pass
 
+    def list_available_models(self) -> List[Dict[str, Any]]:
+        """
+        List all models available from this provider (dict format).
+
+        Returns:
+            List of model information dictionaries with:
+                - model_id (str): Model identifier
+                - modality (ModalityType): Supported modality
+                - dimensions (int): Embedding dimensions
+                - description (str): Human-readable description
+        """
+        models = []
+        for model_info in self.get_available_models():
+            for modality in model_info.supported_modalities:
+                models.append({
+                    "model_id": model_info.model_id,
+                    "modality": modality.value,
+                    "dimensions": model_info.dimensions,
+                    "max_tokens": model_info.max_input_tokens,
+                    "cost_per_1k_tokens": model_info.cost_per_1k_tokens,
+                    "description": model_info.description,
+                    "supports_batch": model_info.supports_batch
+                })
+        return models
+
     @abstractmethod
     def get_default_model(self, modality: ModalityType) -> Optional[str]:
         """Get default model ID for a specific modality."""
         pass
+
+    def get_capabilities(self) -> ProviderCapabilities:
+        """
+        Return provider capabilities.
+
+        Default implementation derives capabilities from available models.
+        Providers can override for more specific capabilities.
+
+        Returns:
+            ProviderCapabilities defining supported modalities and features
+        """
+        models = self.get_available_models()
+        modalities = set()
+        dimensions = set()
+        max_tokens = 0
+        supports_batch = False
+
+        for model in models:
+            modalities.update(model.supported_modalities)
+            dimensions.add(model.dimensions)
+            if model.max_input_tokens:
+                max_tokens = max(max_tokens, model.max_input_tokens)
+            if model.supports_batch:
+                supports_batch = True
+
+        return ProviderCapabilities(
+            supported_modalities=list(modalities),
+            max_batch_size=96 if supports_batch else 1,
+            supports_configurable_dimensions=len(dimensions) > 1,
+            available_dimensions=sorted(list(dimensions)),
+            max_input_tokens=max_tokens if max_tokens > 0 else None,
+            cost_per_1k_tokens=None,
+            typical_latency_ms=None
+        )
 
     @abstractmethod
     async def generate_embedding(self, request: EmbeddingRequest) -> EmbeddingResponse:
@@ -150,10 +306,32 @@ class EmbeddingProvider(ABC):
 
         Raises:
             ValueError: If modality not supported or invalid input
+            ValidationError: If request validation fails
             ModelAccessError: If model access fails
             VectorEmbeddingError: If embedding generation fails
         """
         pass
+
+    async def generate_embeddings(
+        self, request: EmbeddingRequest
+    ) -> EmbeddingResponse:
+        """
+        Generate embeddings for the given request (backward compatibility alias).
+
+        This is an alias for generate_embedding() to support both naming conventions.
+
+        Args:
+            request: Embedding request with modality and content
+
+        Returns:
+            EmbeddingResponse with generated embeddings
+
+        Raises:
+            ValidationError: If request validation fails
+            ModelAccessError: If model access fails
+            VectorEmbeddingError: If embedding generation fails
+        """
+        return await self.generate_embedding(request)
 
     @abstractmethod
     async def batch_generate_embeddings(
@@ -176,18 +354,41 @@ class EmbeddingProvider(ABC):
         pass
 
     @abstractmethod
-    def validate_connectivity(self) -> Dict[str, Any]:
+    async def validate_connectivity(self) -> Dict[str, Any]:
         """
         Validate connectivity to the provider backend.
 
         Returns:
             Dictionary with:
                 - accessible (bool): Whether backend is accessible
-                - models_available (List[str]): List of accessible model IDs
+                - models_available (List[str]): List of accessible model IDs (optional)
                 - response_time_ms (float): Response time in milliseconds
+                - health_status (str): Health status (optional)
                 - error_message (Optional[str]): Error if not accessible
         """
         pass
+
+    def supports_modality(self, modality: ModalityType) -> bool:
+        """
+        Check if provider supports a given modality.
+
+        Args:
+            modality: The modality to check
+
+        Returns:
+            True if modality is supported
+        """
+        return modality in self.get_supported_modalities()
+
+    def supports_batch_processing(self) -> bool:
+        """
+        Check if provider supports batch embedding generation.
+
+        Returns:
+            True if batch processing is supported
+        """
+        capabilities = self.get_capabilities()
+        return capabilities.max_batch_size > 1
 
     def validate_request(self, request: EmbeddingRequest) -> bool:
         """
@@ -269,8 +470,9 @@ class EmbeddingProviderFactory:
     """
     Factory for creating and managing embedding providers.
 
-    Supports auto-registration via decorator pattern, allowing providers
-    to register themselves without modifying factory code.
+    This factory maintains a registry of available embedding providers and enables
+    dynamic provider selection based on modality requirements. Supports both manual
+    registration and decorator-based auto-registration with optional singleton pattern.
     """
 
     _providers: Dict[str, type] = {}
@@ -279,11 +481,14 @@ class EmbeddingProviderFactory:
     @classmethod
     def register_provider(cls, provider_name: str, provider_class: type):
         """
-        Register a provider class.
+        Register an embedding provider.
 
         Args:
-            provider_name: Unique name for the provider
-            provider_class: Class implementing EmbeddingProvider
+            provider_name: Unique identifier for the provider (e.g., 'bedrock', 'sagemaker')
+            provider_class: Provider class (must inherit from EmbeddingProvider)
+
+        Raises:
+            TypeError: If provider_class doesn't inherit from EmbeddingProvider
         """
         if not issubclass(provider_class, EmbeddingProvider):
             raise TypeError(f"{provider_class} must inherit from EmbeddingProvider")
@@ -298,40 +503,104 @@ class EmbeddingProviderFactory:
 
         Args:
             provider_name: Name of the provider to create
-            **kwargs: Provider-specific initialization arguments
+            **kwargs: Provider-specific initialization arguments (optional)
 
         Returns:
             EmbeddingProvider instance
+
+        Raises:
+            ValueError: If provider_name is not registered
         """
         if provider_name not in cls._providers:
             raise ValueError(
-                f"No provider registered with name: {provider_name}. "
-                f"Available: {list(cls._providers.keys())}"
+                f"Unknown provider: {provider_name}. "
+                f"Available providers: {list(cls._providers.keys())}"
             )
 
-        # Use singleton pattern for providers (reuse instances)
-        cache_key = f"{provider_name}:{hash(frozenset(kwargs.items()))}"
-        if cache_key not in cls._instances:
+        # Use singleton pattern for providers if no kwargs (reuse instances)
+        if not kwargs:
+            if provider_name not in cls._instances:
+                provider_class = cls._providers[provider_name]
+                cls._instances[provider_name] = provider_class()
+                logger.info(f"Created new instance of provider: {provider_name}")
+            return cls._instances[provider_name]
+        else:
+            # Create new instance with custom kwargs
             provider_class = cls._providers[provider_name]
-            cls._instances[cache_key] = provider_class(**kwargs)
-            logger.info(f"Created new instance of provider: {provider_name}")
-
-        return cls._instances[cache_key]
+            return provider_class(**kwargs)
 
     @classmethod
     def get_available_providers(cls) -> List[str]:
-        """Get list of registered provider names."""
+        """
+        Get list of available provider IDs.
+
+        Returns:
+            List of registered provider identifiers
+        """
         return list(cls._providers.keys())
 
     @classmethod
     def is_provider_available(cls, provider_name: str) -> bool:
-        """Check if a provider is registered."""
+        """
+        Check if a provider is available.
+
+        Args:
+            provider_name: The provider identifier to check
+
+        Returns:
+            True if provider is registered
+        """
         return provider_name in cls._providers
+
+    @classmethod
+    def get_provider_for_modality(
+        cls, modality: ModalityType
+    ) -> Optional[EmbeddingProvider]:
+        """
+        Get first available provider supporting the modality.
+
+        Args:
+            modality: The required modality
+
+        Returns:
+            EmbeddingProvider instance or None if no provider supports the modality
+        """
+        for provider_class in cls._providers.values():
+            try:
+                provider = provider_class()
+                if provider.supports_modality(modality):
+                    return provider
+            except Exception as e:
+                logger.warning(f"Failed to instantiate provider: {e}")
+        return None
+
+    @classmethod
+    def get_all_providers_for_modality(
+        cls, modality: ModalityType
+    ) -> List[EmbeddingProvider]:
+        """
+        Get all providers supporting the modality.
+
+        Args:
+            modality: The required modality
+
+        Returns:
+            List of EmbeddingProvider instances supporting the modality
+        """
+        providers = []
+        for provider_class in cls._providers.values():
+            try:
+                provider = provider_class()
+                if provider.supports_modality(modality):
+                    providers.append(provider)
+            except Exception as e:
+                logger.warning(f"Failed to instantiate provider: {e}")
+        return providers
 
     @classmethod
     def get_providers_for_modality(cls, modality: ModalityType) -> List[str]:
         """
-        Get list of providers that support a specific modality.
+        Get list of provider names that support a specific modality.
 
         Args:
             modality: Modality to check
@@ -342,7 +611,6 @@ class EmbeddingProviderFactory:
         supporting_providers = []
 
         for provider_name, provider_class in cls._providers.items():
-            # Instantiate temporarily to check modalities
             try:
                 provider = cls.create_provider(provider_name)
                 if modality in provider.get_supported_modalities():
@@ -442,7 +710,10 @@ def register_embedding_provider(provider_name: str):
             ...
 
     Args:
-        provider_name: Unique name for the provider
+        provider_name: Unique identifier for the provider (e.g., 'bedrock', 'sagemaker')
+
+    Returns:
+        Decorator function that registers the provider class
     """
     def decorator(cls):
         EmbeddingProviderFactory.register_provider(provider_name, cls)

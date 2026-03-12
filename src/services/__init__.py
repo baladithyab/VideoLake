@@ -6,7 +6,25 @@ of the vector embedding pipeline including multi-vector architecture,
 OpenSearch integration, and multi-backend vector store coordination.
 """
 
+# Import embedding providers to trigger auto-registration
+from . import bedrock_multimodal_provider
+from . import sagemaker_embedding_provider
+from . import external_embedding_provider
+
 from .bedrock_embedding import BedrockEmbeddingService, EmbeddingResult, ModelInfo
+from .embedding_provider import (
+    EmbeddingProvider,
+    EmbeddingProviderFactory,
+    ModalityType,
+    EmbeddingRequest,
+    EmbeddingResponse,
+    ProviderCapabilities
+)
+from .unified_ingestion_service import (
+    UnifiedIngestionService,
+    IngestionRequest,
+    IngestionResult
+)
 from .opensearch_integration import (
     OpenSearchIntegrationManager,
     IntegrationPattern,
@@ -39,18 +57,31 @@ from .multi_vector_coordinator import (
 __all__ = [
     # Bedrock services
     'BedrockEmbeddingService',
-    'EmbeddingResult', 
+    'EmbeddingResult',
     'ModelInfo',
-    
+
+    # Multi-modal embedding providers
+    'EmbeddingProvider',
+    'EmbeddingProviderFactory',
+    'ModalityType',
+    'EmbeddingRequest',
+    'EmbeddingResponse',
+    'ProviderCapabilities',
+
+    # Unified ingestion
+    'UnifiedIngestionService',
+    'IngestionRequest',
+    'IngestionResult',
+
     # OpenSearch integration
     'OpenSearchIntegrationManager',
     'IntegrationPattern',
     'HybridSearchResult',
     'CostAnalysis',
-    
+
     # S3 Vector Storage
     'S3VectorStorageManager',
-    
+
     # Similarity Search Engine
     'SimilaritySearchEngine',
     'SimilarityQuery',
@@ -58,13 +89,13 @@ __all__ = [
     'SimilaritySearchResponse',
     'IndexType',
     'QueryInputType',
-    
+
     # TwelveLabs Video Processing
     'TwelveLabsVideoProcessingService',
     'VideoEmbeddingResult',
     'VideoProcessingConfig',
     'AsyncJobInfo',
-    
+
     # Multi-Vector Coordinator
     'MultiVectorCoordinator',
     'MultiVectorConfig',

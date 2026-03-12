@@ -82,6 +82,27 @@ class VectorStoreStatus:
     estimated_time_remaining: Optional[int] = None
 
 
+@dataclass
+class VectorStoreCapabilities:
+    """
+    Capabilities supported by a vector store provider.
+
+    Defines the features, limits, and performance characteristics of a
+    specific vector store backend to enable intelligent provider selection
+    and cost estimation.
+    """
+    max_dimension: int
+    max_vectors: Optional[int] = None  # None = unlimited
+    supports_metadata_filtering: bool = True
+    supports_hybrid_search: bool = False
+    supports_batch_upsert: bool = True
+    estimated_cost_per_million_vectors: float = 0.0  # USD per month
+    typical_query_latency_ms: float = 0.0  # P50 latency
+    supports_sparse_vectors: bool = False
+    supports_multi_vector: bool = False
+    max_batch_size: int = 1000
+
+
 class VectorStoreProvider(ABC):
     """
     Abstract base class for Videolake vector store providers.
@@ -183,10 +204,10 @@ class VectorStoreProvider(ABC):
     def validate_connectivity(self) -> Dict[str, Any]:
         """
         Validate connectivity to the vector store backend.
-        
+
         Tests actual connectivity to the backend service and returns
         detailed health information including response time.
-        
+
         Returns:
             Dictionary with:
                 - accessible (bool): Whether backend is accessible
@@ -194,6 +215,16 @@ class VectorStoreProvider(ABC):
                 - response_time_ms (float): Response time in milliseconds
                 - health_status (str): Health status (healthy, degraded, unhealthy)
                 - error_message (Optional[str]): Error message if not accessible
+        """
+        pass
+
+    @abstractmethod
+    def get_capabilities(self) -> VectorStoreCapabilities:
+        """
+        Return capabilities of this vector store provider.
+
+        Returns:
+            VectorStoreCapabilities defining supported features and limits
         """
         pass
     
