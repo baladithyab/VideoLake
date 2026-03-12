@@ -54,7 +54,8 @@
 		"name": "wave-2-parallel",
 		"memberIssueIds": [
 			"S3Vector-b3f9",
-			"S3Vector-d07b"
+			"S3Vector-d07b",
+			"S3Vector-1108"
 		],
 		"status": "active",
 		"createdAt": "2026-03-12T20:46:02.392Z",
