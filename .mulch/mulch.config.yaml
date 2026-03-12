@@ -3,6 +3,7 @@ domains:
   - codebase-maintenance
   - project-maintenance
   - architecture
+  - documentation
 governance:
   max_entries: 100
   warn_entries: 150
