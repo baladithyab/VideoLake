@@ -1,0 +1,1 @@
+{"classification":"tactical","recorded_at":"2026-03-12T18:38:59.413Z","tags":["merge-conflict"],"evidence":{"bead":"S3Vector-3d0e"},"type":"pattern","name":"","description":"Merge conflict failed at tier ai-resolve. Branch: overstory/docs-mover/S3Vector-3d0e. Agent: docs-mover. Conflicting files: .mulch/mulch.config.yaml.","id":"mx-ecd3cf"}

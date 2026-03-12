@@ -1,0 +1,17 @@
+[
+	{
+		"id": "group-72efa707",
+		"name": "planning-phase",
+		"memberIssueIds": [
+			"S3Vector-252d",
+			"S3Vector-f594",
+			"S3Vector-9772",
+			"S3Vector-338d",
+			"S3Vector-2f39",
+			"S3Vector-e164"
+		],
+		"status": "active",
+		"createdAt": "2026-03-12T18:44:58.924Z",
+		"completedAt": null
+	}
+]
