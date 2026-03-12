@@ -14,16 +14,51 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Check if Python is installed
+# Check if Python is installed and version is 3.11+
 if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 is not installed. Please install Python 3.8 or higher."
+    echo "❌ Python 3 is not installed. Please install Python 3.11 or higher."
     exit 1
+fi
+
+PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+PYTHON_MAJOR=$(echo "$PYTHON_VERSION" | cut -d. -f1)
+PYTHON_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f2)
+
+if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 11 ]); then
+    echo "❌ Python $PYTHON_VERSION detected. Please install Python 3.11 or higher."
+    exit 1
+fi
+echo "✅ Python $PYTHON_VERSION detected"
+
+# Detect package manager preference (uv > pip)
+if command -v uv &> /dev/null; then
+    PYTHON_PKG_MANAGER="uv"
+    echo "✅ Using uv for Python package management"
+else
+    PYTHON_PKG_MANAGER="pip"
+    echo "ℹ️  Using pip (consider installing uv for faster installs: curl -LsSf https://astral.sh/uv/install.sh | sh)"
 fi
 
 # Check if Node.js is installed
 if ! command -v node &> /dev/null; then
     echo "❌ Node.js is not installed. Please install Node.js 18 or higher."
     exit 1
+fi
+
+NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+if [ "$NODE_VERSION" -lt 18 ]; then
+    echo "❌ Node.js $NODE_VERSION detected. Please install Node.js 18 or higher."
+    exit 1
+fi
+echo "✅ Node.js $(node -v) detected"
+
+# Detect package manager preference (bun > npm)
+if command -v bun &> /dev/null; then
+    JS_PKG_MANAGER="bun"
+    echo "✅ Using bun for JavaScript package management"
+else
+    JS_PKG_MANAGER="npm"
+    echo "ℹ️  Using npm (consider installing bun for faster installs: curl -fsSL https://bun.sh/install | bash)"
 fi
 
 # Check if .env exists
@@ -38,12 +73,12 @@ if [ ! -f .env ]; then
     fi
 fi
 
-# Check if frontend/.env exists
-if [ ! -f frontend/.env ]; then
-    echo "⚠️  Warning: frontend/.env file not found. Creating from .env.example..."
-    if [ -f frontend/.env.example ]; then
-        cp frontend/.env.example frontend/.env
-        echo "✅ Created frontend/.env file."
+# Check if src/frontend/.env exists
+if [ ! -f src/frontend/.env ]; then
+    echo "⚠️  Warning: src/frontend/.env file not found. Creating from .env.example..."
+    if [ -f src/frontend/.env.example ]; then
+        cp src/frontend/.env.example src/frontend/.env
+        echo "✅ Created src/frontend/.env file."
     fi
 fi
 
@@ -90,17 +125,25 @@ sleep 2
 
 # Start frontend
 echo -e "${BLUE}⚛️  Starting React Frontend...${NC}"
-cd frontend
+cd src/frontend
 
 # Check if node_modules exists
 if [ ! -d "node_modules" ]; then
     echo -e "${YELLOW}📦 Installing frontend dependencies...${NC}"
-    npm install
+    if [ "$JS_PKG_MANAGER" = "bun" ]; then
+        bun install
+    else
+        npm install
+    fi
 fi
 
-npm run dev &
+if [ "$JS_PKG_MANAGER" = "bun" ]; then
+    bun run dev &
+else
+    npm run dev &
+fi
 FRONTEND_PID=$!
-cd ..
+cd ../..
 echo -e "${GREEN}✅ Frontend started (PID: $FRONTEND_PID)${NC}"
 echo -e "${GREEN}   App: http://localhost:5172${NC}"
 echo ""

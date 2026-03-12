@@ -7,9 +7,15 @@ Get started with the Videolake AWS Vector Store Comparison Platform in under 15 
 - AWS Account with appropriate permissions
 - AWS CLI configured with credentials
 - Terraform >= 1.0
-- Node.js >= 18.x and npm
+- Node.js >= 18.x
 - Python >= 3.11
 - Git
+
+**Recommended (for 10x faster installs):**
+- **uv**: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **bun**: `curl -fsSL https://bun.sh/install | bash`
+
+The `start.sh` script will auto-detect and use these tools if available.
 
 ## What You'll Deploy
 
@@ -34,8 +40,9 @@ See the [full documentation](docs/) for multi-backend comparison setup.
 # Navigate to project root
 cd S3Vector
 
-# Install Python dependencies
-pip install -r requirements.txt
+# Install Python dependencies (use uv if available for 10-100x speedup)
+uv pip install -e .
+# Or: pip install -r requirements.txt
 
 # Configure environment variables
 cp .env.example .env
@@ -46,10 +53,11 @@ cp .env.example .env
 
 ```bash
 # Navigate to frontend directory
-cd frontend
+cd src/frontend
 
-# Install Node dependencies
-npm install
+# Install Node dependencies (use bun if available for 10x speedup)
+bun install
+# Or: npm install
 
 # Configure frontend environment
 cp .env.example .env
@@ -80,8 +88,8 @@ INFO:     Application startup complete.
 
 ```bash
 # From project root
-cd frontend
-npm run dev
+cd src/frontend
+bun run dev  # Or: npm run dev
 ```
 
 You should see:
@@ -166,11 +174,12 @@ pip install fastapi uvicorn python-multipart
 - Check VITE_API_URL in frontend/.env
 - Check browser console for CORS errors
 
-**Problem**: `npm install fails`
+**Problem**: `npm install fails` or `bun install fails`
 ```bash
 # Clear cache and reinstall
-rm -rf node_modules package-lock.json
-npm install
+cd src/frontend
+rm -rf node_modules package-lock.json bun.lockb
+bun install  # Or: npm install
 ```
 
 ### CORS Issues
@@ -230,18 +239,24 @@ npm run preview
 ```bash
 # Backend
 python run_api.py                    # Start API server
-pip install -r requirements.txt      # Install dependencies
+uv pip install -e .                  # Install dependencies (fast)
+pip install -r requirements.txt      # Install dependencies (standard)
 
 # Frontend
-cd frontend
-npm install                          # Install dependencies
-npm run dev                          # Start dev server
-npm run build                        # Build for production
+cd src/frontend
+bun install                          # Install dependencies (fast)
+npm install                          # Install dependencies (standard)
+bun run dev                          # Start dev server (fast)
+npm run dev                          # Start dev server (standard)
+bun run build                        # Build for production
 npm run preview                      # Preview production build
 
-# Both
+# Easy Start (both services)
+./start.sh                           # Auto-detects uv/bun, starts backend + frontend
+
+# Manual Start (both services)
 # Terminal 1: python run_api.py
-# Terminal 2: cd frontend && npm run dev
+# Terminal 2: cd src/frontend && bun run dev
 ```
 
 ## Architecture Overview

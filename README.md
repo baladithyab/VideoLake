@@ -208,14 +208,19 @@ For a complete production-ready deployment to AWS ECS/Fargate and S3/CloudFront,
 
 **Fast Path - Local Development (AWS S3Vector Only):**
 ```bash
-# 1. Deploy infrastructure (< 5 min)
-cd terraform && terraform init && terraform apply -auto-approve
+# 1. Install dependencies (uv/bun recommended for speed)
+uv pip install -e .  # Or: pip install -e .
+cd src/frontend && bun install  # Or: npm install
+cd ../..
 
-# 2. Start backend
-cd .. && ./start.sh
+# 2. Deploy infrastructure (< 5 min)
+cd terraform && terraform init && terraform apply -auto-approve && cd ..
 
-# 3. Access UI
-# Frontend: http://localhost:5173
+# 3. Start both backend and frontend
+./start.sh  # Auto-detects uv/bun and uses them if available
+
+# 4. Access UI
+# Frontend: http://localhost:5172
 # Backend API: http://localhost:8000
 ```
 
@@ -335,10 +340,21 @@ This platform implements several cost optimization strategies with **proven resu
 ## Requirements
 
 ### **Environment**
-- Python 3.8+ with conda/virtualenv
+- Python 3.11+ (with uv recommended for fast package management)
+- Node.js 18+ (with bun recommended for fast package management)
 - AWS CLI configured with appropriate permissions
 - Access to AWS Bedrock models (Titan Text V2, TwelveLabs Marengo)
 - S3 Vector service access in supported regions
+
+**Modern Tooling:**
+- **uv**: Fast Python package installer (10-100x faster than pip)
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+- **bun**: Fast JavaScript runtime and package manager (10x faster than npm)
+  ```bash
+  curl -fsSL https://bun.sh/install | bash
+  ```
 
 ### **AWS Permissions Required**
 - **AWS S3 Vectors**: `s3vectors:*` for bucket/index operations
