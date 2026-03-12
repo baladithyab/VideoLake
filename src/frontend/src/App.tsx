@@ -12,42 +12,24 @@ import { MainLayout } from '@/components/templates/MainLayout';
 import { WelcomePage } from '@/components/pages/WelcomePage';
 import { NotFoundPage } from '@/components/pages/NotFoundPage';
 
-// Placeholder pages (to be implemented by other agents)
-function DeploymentPage() {
-  return (
-    <div className="text-center py-12">
-      <h2 className="text-2xl font-bold text-gray-900 mb-4">Deployment Wizard</h2>
-      <p className="text-gray-600">Coming soon...</p>
-    </div>
-  );
-}
+// Deployment wizard pages (default exports)
+import DeploymentConfigurePage from '@/components/pages/DeploymentConfigurePage';
+import DeploymentReviewPage from '@/components/pages/DeploymentReviewPage';
+import DeploymentProgressPage from '@/components/pages/DeploymentProgressPage';
 
-function BenchmarkPage() {
-  return (
-    <div className="text-center py-12">
-      <h2 className="text-2xl font-bold text-gray-900 mb-4">Benchmark Dashboard</h2>
-      <p className="text-gray-600">Coming soon...</p>
-    </div>
-  );
-}
+// Benchmark workflow pages (named exports)
+import { BenchmarkHubPage } from '@/components/pages/BenchmarkHubPage';
+import { BenchmarkConfigurePage } from '@/components/pages/BenchmarkConfigurePage';
+import { BenchmarkRunPage } from '@/components/pages/BenchmarkRunPage';
+import { BenchmarkResultsPage } from '@/components/pages/BenchmarkResultsPage';
+import { BenchmarkHistoryPage } from '@/components/pages/BenchmarkHistoryPage';
 
-function DemoPage() {
-  return (
-    <div className="text-center py-12">
-      <h2 className="text-2xl font-bold text-gray-900 mb-4">Search Demo</h2>
-      <p className="text-gray-600">Coming soon...</p>
-    </div>
-  );
-}
+// Demo pages (named exports)
+import { DemoSearchPage } from '@/components/pages/DemoSearchPage';
+import { VideoDetailPage } from '@/components/pages/VideoDetailPage';
 
-function HistoryPage() {
-  return (
-    <div className="text-center py-12">
-      <h2 className="text-2xl font-bold text-gray-900 mb-4">History</h2>
-      <p className="text-gray-600">Coming soon...</p>
-    </div>
-  );
-}
+// Infrastructure page (named export)
+import { InfrastructurePage } from '@/components/pages/InfrastructurePage';
 
 function SettingsPage() {
   return (
@@ -69,10 +51,27 @@ function App() {
                 {/* Routes with MainLayout */}
                 <Route element={<MainLayout><div /></MainLayout>}>
                   <Route path="/" element={<MainLayout><WelcomePage /></MainLayout>} />
-                  <Route path="/deployment" element={<MainLayout><DeploymentPage /></MainLayout>} />
-                  <Route path="/benchmark" element={<MainLayout><BenchmarkPage /></MainLayout>} />
-                  <Route path="/demo" element={<MainLayout><DemoPage /></MainLayout>} />
-                  <Route path="/history" element={<MainLayout><HistoryPage /></MainLayout>} />
+
+                  {/* Deployment wizard routes */}
+                  <Route path="/deployment/configure" element={<MainLayout><DeploymentConfigurePage /></MainLayout>} />
+                  <Route path="/deployment/review" element={<MainLayout><DeploymentReviewPage /></MainLayout>} />
+                  <Route path="/deployment/progress" element={<MainLayout><DeploymentProgressPage /></MainLayout>} />
+
+                  {/* Benchmark workflow routes */}
+                  <Route path="/benchmark" element={<MainLayout><BenchmarkHubPage /></MainLayout>} />
+                  <Route path="/benchmark/configure" element={<MainLayout><BenchmarkConfigurePage /></MainLayout>} />
+                  <Route path="/benchmark/run/:id" element={<MainLayout><BenchmarkRunPage /></MainLayout>} />
+                  <Route path="/benchmark/results/:id" element={<MainLayout><BenchmarkResultsPage /></MainLayout>} />
+                  <Route path="/benchmark/history" element={<MainLayout><BenchmarkHistoryPage /></MainLayout>} />
+
+                  {/* Demo routes */}
+                  <Route path="/demo/search" element={<MainLayout><DemoSearchPage /></MainLayout>} />
+                  <Route path="/demo/video/:id" element={<MainLayout><VideoDetailPage /></MainLayout>} />
+
+                  {/* Infrastructure page */}
+                  <Route path="/infrastructure" element={<MainLayout><InfrastructurePage /></MainLayout>} />
+
+                  {/* Settings placeholder */}
                   <Route path="/settings" element={<MainLayout><SettingsPage /></MainLayout>} />
                 </Route>
 
