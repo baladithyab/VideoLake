@@ -21,7 +21,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from tests.comprehensive_integration_test_plan import (
+from tests.helpers.comprehensive_integration_test_plan import (
     ComprehensiveIntegrationTestFramework,
     TestConfig, TestMode, TestCategory,
     COMPLETE_USER_JOURNEY_STEPS

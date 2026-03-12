@@ -96,80 +96,12 @@ python tests/test_all_resources_clean.py
 ✅ ARN generation working
 ```
 
-#### 4. `final_resource_test.py`
-**Purpose**: Comprehensive lifecycle test with detailed AWS CLI verification.
-
-**What it tests**:
-- ✅ Complete resource lifecycle (create → verify → delete → verify deletion)
-- ✅ Detailed AWS CLI commands for verification
-- ✅ ARN output and validation
-- ✅ Resource registry integration
-
-**Run**:
-```bash
-python tests/final_resource_test.py
-```
-
-#### 5. `test_resource_lifecycle.py`
-**Purpose**: Basic lifecycle test for S3Vector resources.
-
-**What it tests**:
-- ✅ S3Vector bucket and index creation
-- ✅ AWS CLI verification
-- ✅ Resource deletion
-
-**Run**:
-```bash
-python tests/test_resource_lifecycle.py
-```
-
-#### 6. `test_simplified_resource_manager.py`
-**Purpose**: Basic functionality test for the SimplifiedResourceManager class.
-
-**What it tests**:
-- ✅ Manager initialization
-- ✅ AWS client setup
-- ✅ Basic resource operations
-
-**Run**:
-```bash
-python tests/test_simplified_resource_manager.py
-```
-
-#### 7. `test_all_resources.py`
-**Purpose**: Original comprehensive test (may have threading issues on exit).
-
-**Note**: Use `test_all_resources_clean.py` instead for clean exit.
 
 ### Optional Backend Tests (Require Terraform Deployment)
 
 **Prerequisites**: Deploy backends via Terraform before running these tests.
 
-#### 1. `test_real_aws_e2e_workflows.py`
-**Purpose**: Test S3Vector with optional comparison backends using real AWS resources.
-
-**What it tests**:
-- ✅ S3Vector workflow (primary)
-- ✅ OpenSearch workflow (optional, requires Terraform deployment)
-- ✅ LanceDB workflow (optional, requires Terraform deployment)
-- ✅ Qdrant workflow (optional, requires Terraform deployment)
-- ✅ Performance comparison across backends
-
-**Prerequisites**:
-- Deploy backends: `terraform apply -var="deployment_mode=mode3"`
-- Verify deployment: `terraform output`
-- See [`README_REAL_AWS_TESTS.md`](README_REAL_AWS_TESTS.md) for details
-
-**Cost**: $0.05-$5 depending on backends tested (⚠️ OpenSearch is expensive!)
-
-**Run**:
-```bash
-# Core S3Vector only (no extra cost)
-pytest tests/test_real_aws_e2e_workflows.py::TestRealS3VectorWorkflow -v --real-aws
-
-# With optional backends (requires Terraform deployment)
-pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
-```
+**Note**: Real AWS integration tests with multiple backends have been removed during test suite cleanup. The existing test infrastructure focuses on core S3Vector functionality. Real AWS integration tests will be rebuilt as part of Wave 2 implementation with proper provider abstractions.
 
 ### Integration Tests
 
@@ -242,25 +174,7 @@ pytest tests/ -v -m "not expensive"
 
 # Run specific core test suites
 pytest tests/test_e2e_vector_store_workflows.py -v
-pytest tests/test_resource_registry_tracking.py -v
 pytest tests/test_all_resources_clean.py -v
-```
-
-### Running Optional Backend Tests
-
-**Prerequisites**: Deploy backends via Terraform first!
-
-```bash
-# Step 1: Deploy optional backends
-cd terraform
-terraform apply -var="deployment_mode=mode2"  # Or mode3 for full comparison
-
-# Step 2: Verify deployment
-terraform output
-
-# Step 3: Run tests with deployed backends
-cd ..
-pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
 ```
 
 ### Test Organization by Priority
@@ -268,54 +182,35 @@ pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
 **Tier 1 - Core Functionality (Run Always)**:
 ```bash
 pytest tests/test_e2e_vector_store_workflows.py -v
-pytest tests/test_resource_registry_tracking.py -v
+pytest tests/test_all_resources_clean.py -v
 ```
 
 **Tier 2 - Extended Validation (Run Pre-Release)**:
 ```bash
-pytest tests/test_all_resources_clean.py -v
 pytest tests/test_aws_service_integrations.py -v
+pytest tests/ -v -m integration
 ```
 
-**Tier 3 - Real AWS Integration (Run Weekly/Monthly)**:
-```bash
-# Requires Terraform deployment + costs money
-pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
-```
+**Note**: Real AWS integration tests with multiple backends have been removed during cleanup. New integration tests will be added as part of Wave 2 with proper provider abstractions.
 
 ## Test Categories
 
-### By Backend Type
+### By Test Type
 
-**S3Vector Only (Core)**:
-- All tests in Tier 1 and Tier 2
+**Unit Tests**:
+- Mock external dependencies
+- Fast execution
+- No AWS costs
+
+**Integration Tests**:
+- Test AWS service integration with S3Vector
+- Use actual AWS resources or moto mocks
+- Minimal AWS costs
+
+**End-to-End Tests**:
+- Complete workflow validation
+- S3Vector core functionality
 - No additional infrastructure required
-- Free/minimal AWS costs
-
-**Optional Backends (Comparison)**:
-- Requires Terraform deployment
-- Tests in `test_real_aws_e2e_workflows.py`
-- Costs vary by backend (OpenSearch is expensive!)
-
-### By Deployment Mode
-
-**Mode 1 Tests (S3Vector Only)**:
-```bash
-pytest tests/test_e2e_vector_store_workflows.py::TestS3VectorWorkflow -v
-```
-
-**Mode 2 Tests (S3Vector + One Backend)**:
-```bash
-# Requires: terraform apply -var="deployment_mode=mode2"
-pytest tests/test_real_aws_e2e_workflows.py::TestRealS3VectorWorkflow -v --real-aws
-pytest tests/test_real_aws_e2e_workflows.py::TestRealLanceDBWorkflow -v --real-aws
-```
-
-**Mode 3 Tests (Full Comparison)**:
-```bash
-# Requires: terraform apply -var="deployment_mode=mode3"
-pytest tests/test_real_aws_e2e_workflows.py::TestRealProviderComparison -v --real-aws
-```
 
 ## Troubleshooting
 
