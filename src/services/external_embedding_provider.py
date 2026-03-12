@@ -14,9 +14,11 @@ import os
 
 from src.services.embedding_provider import (
     EmbeddingProvider,
+    EmbeddingProviderType,
     ModalityType,
     EmbeddingRequest,
     EmbeddingResponse,
+    EmbeddingModelInfo,
     ProviderCapabilities,
     register_embedding_provider
 )
@@ -67,12 +69,43 @@ class ExternalEmbeddingProvider(EmbeddingProvider):
         self.cohere_api_key = os.getenv("COHERE_API_KEY")
 
     @property
+    def provider_type(self) -> EmbeddingProviderType:
+        """Return the provider type."""
+        return EmbeddingProviderType.EXTERNAL
+
+    @property
     def provider_name(self) -> str:
         return "External APIs"
 
     @property
     def provider_id(self) -> str:
         return "external"
+
+    def get_supported_modalities(self) -> List[ModalityType]:
+        """Return list of modalities supported by this provider."""
+        return [ModalityType.TEXT]
+
+    def get_available_models(self) -> List[EmbeddingModelInfo]:
+        """Return list of available models from this provider."""
+        models = []
+        for model_id, config in self.MODELS.items():
+            models.append(EmbeddingModelInfo(
+                model_id=model_id,
+                provider=self.provider_id,
+                supported_modalities=[config["modality"]],
+                dimensions=config["dimensions"][0] if isinstance(config["dimensions"], list) else config["dimensions"],
+                max_input_tokens=config.get("max_tokens"),
+                supports_batch=True,
+                cost_per_1k_tokens=config.get("cost_per_1k"),
+                description=config["description"]
+            ))
+        return models
+
+    def get_default_model(self, modality: ModalityType) -> Optional[str]:
+        """Get default model ID for a specific modality."""
+        if modality == ModalityType.TEXT:
+            return "openai.text-embedding-3-large"
+        return None
 
     def get_capabilities(self) -> ProviderCapabilities:
         """Return external provider capabilities."""
@@ -86,17 +119,17 @@ class ExternalEmbeddingProvider(EmbeddingProvider):
             typical_latency_ms=120.0
         )
 
-    async def generate_embeddings(
+    async def generate_embedding(
         self, request: EmbeddingRequest
     ) -> EmbeddingResponse:
         """
-        Generate embeddings using external APIs.
+        Generate embedding using external APIs.
 
         Args:
             request: Embedding request with modality and content
 
         Returns:
-            EmbeddingResponse with generated embeddings
+            EmbeddingResponse with generated embedding
         """
         start_time = time.time()
 
@@ -130,16 +163,35 @@ class ExternalEmbeddingProvider(EmbeddingProvider):
 
         processing_time_ms = int((time.time() - start_time) * 1000)
 
+        # Return first embedding (single mode)
+        embedding_vector = embeddings[0] if embeddings else []
+
         return EmbeddingResponse(
-            embeddings=embeddings,
+            embedding=embedding_vector,
             model_id=request.model_id,
             modality=request.modality,
-            dimension=len(embeddings[0]) if embeddings else 0,
-            metadata={
-                "provider": self.provider_id
-            },
-            processing_time_ms=processing_time_ms
+            provider=self.provider_id,
+            dimensions=len(embedding_vector),
+            processing_time_ms=processing_time_ms,
+            metadata={}
         )
+
+    async def batch_generate_embeddings(
+        self,
+        requests: List[EmbeddingRequest]
+    ) -> List[EmbeddingResponse]:
+        """
+        Generate embeddings for multiple inputs.
+
+        Args:
+            requests: List of embedding requests
+
+        Returns:
+            List of EmbeddingResponse objects
+        """
+        # Process requests concurrently
+        tasks = [self.generate_embedding(req) for req in requests]
+        return await asyncio.gather(*tasks)
 
     async def validate_connectivity(self) -> Dict[str, Any]:
         """Validate external API connectivity."""
