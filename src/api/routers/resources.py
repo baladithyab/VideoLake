@@ -1119,3 +1119,111 @@ async def store_embeddings_to_index(
     except Exception as e:
         logger.error(f"Failed to store embeddings from job {request.job_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Vector Store Provider Comparison ====================
+
+@router.get("/vector-stores/comparison")
+async def compare_vector_stores():
+    """
+    Compare capabilities of all available vector store providers.
+
+    Returns comprehensive comparison of all registered vector store backends
+    including capabilities, costs, performance characteristics, and deployment status.
+
+    Returns:
+        Dictionary with comparison data for each provider:
+        - provider_id: Backend identifier
+        - provider_name: Human-readable name
+        - deployed: Whether the backend is currently deployed
+        - capabilities: Feature support and limits
+        - estimated_monthly_cost: Cost estimate for 1M vectors
+        - health: Current health status
+    """
+    try:
+        from src.services.vector_store_provider import (
+            VectorStoreType,
+            VectorStoreProviderFactory
+        )
+        import asyncio
+
+        logger.info("Comparing vector store providers")
+
+        # Get all available provider types
+        available_types = VectorStoreProviderFactory.get_available_providers()
+
+        comparison = []
+
+        for store_type in available_types:
+            try:
+                # Create provider instance
+                provider = VectorStoreProviderFactory.create_provider(store_type)
+
+                # Get capabilities
+                capabilities = provider.get_capabilities()
+
+                # Validate connectivity (with timeout)
+                try:
+                    health = await asyncio.wait_for(
+                        asyncio.to_thread(provider.validate_connectivity),
+                        timeout=3.0
+                    )
+                except asyncio.TimeoutError:
+                    health = {
+                        "accessible": False,
+                        "health_status": "timeout",
+                        "error_message": "Health check timed out"
+                    }
+                except Exception as e:
+                    health = {
+                        "accessible": False,
+                        "health_status": "error",
+                        "error_message": str(e)
+                    }
+
+                # Build comparison entry
+                comparison.append({
+                    "provider_id": store_type.value,
+                    "provider_name": f"{store_type.value.replace('_', ' ').title()} Vector Store",
+                    "deployed": health.get("accessible", False),
+                    "capabilities": {
+                        "max_dimension": capabilities.max_dimension,
+                        "max_vectors": capabilities.max_vectors,
+                        "supports_metadata_filtering": capabilities.supports_metadata_filtering,
+                        "supports_hybrid_search": capabilities.supports_hybrid_search,
+                        "supports_batch_upsert": capabilities.supports_batch_upsert,
+                        "supports_sparse_vectors": capabilities.supports_sparse_vectors,
+                        "supports_multi_vector": capabilities.supports_multi_vector,
+                        "max_batch_size": capabilities.max_batch_size,
+                        "typical_query_latency_ms": capabilities.typical_query_latency_ms
+                    },
+                    "estimated_monthly_cost_per_million_vectors": capabilities.estimated_cost_per_million_vectors,
+                    "health": health
+                })
+
+            except Exception as e:
+                logger.error(f"Failed to query provider {store_type.value}: {e}")
+                comparison.append({
+                    "provider_id": store_type.value,
+                    "provider_name": f"{store_type.value.replace('_', ' ').title()} Vector Store",
+                    "deployed": False,
+                    "error": str(e)
+                })
+
+        # Calculate summary statistics
+        deployed_count = sum(1 for p in comparison if p.get("deployed", False))
+        total_count = len(comparison)
+
+        return {
+            "success": True,
+            "summary": {
+                "total_providers": total_count,
+                "deployed_providers": deployed_count,
+                "available_providers": deployed_count
+            },
+            "providers": comparison
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to compare vector stores: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -151,12 +151,12 @@ bun run typecheck  # No TypeScript errors
 
 ## Your Assignment
 
-- **Agent Name:** cleanup-removals
-- **Task ID:** S3Vector-a338
+- **Agent Name:** api-vectorstore
+- **Task ID:** S3Vector-b3f9
 - **Spec:** No spec file provided
-- **Branch:** overstory/cleanup-removals/S3Vector-a338
-- **Worktree:** /home/ubuntu/S3Vector/.overstory/worktrees/cleanup-removals
-- **Parent:** cleanup-impl
+- **Branch:** overstory/api-vectorstore/S3Vector-b3f9
+- **Worktree:** /home/ubuntu/S3Vector/.overstory/worktrees/api-vectorstore
+- **Parent:** backend-arch
 - **Depth:** 2
 
 No task spec was provided. Check your mail or ask your parent agent for details.
@@ -167,16 +167,16 @@ No task spec was provided. Check your mail or ask your parent agent for details.
 
 ## Working Directory
 
-Your worktree root is: `/home/ubuntu/S3Vector/.overstory/worktrees/cleanup-removals`
+Your worktree root is: `/home/ubuntu/S3Vector/.overstory/worktrees/api-vectorstore`
 
 **CRITICAL**: All file operations MUST use paths within this directory.
-- Use paths relative to your worktree root, or absolute paths starting with `/home/ubuntu/S3Vector/.overstory/worktrees/cleanup-removals`
+- Use paths relative to your worktree root, or absolute paths starting with `/home/ubuntu/S3Vector/.overstory/worktrees/api-vectorstore`
 - Writing to the canonical repo root instead of your worktree is a critical error (PATH_BOUNDARY_VIOLATION)
 - You may READ files from the canonical repo for context, but all WRITES go to your worktree
 
 ## File Scope (exclusive ownership)
 
-These paths are relative to your worktree root: `/home/ubuntu/S3Vector/.overstory/worktrees/cleanup-removals`
+These paths are relative to your worktree root: `/home/ubuntu/S3Vector/.overstory/worktrees/api-vectorstore`
 
 You may ONLY modify the files listed below within your worktree. Do not touch any other files.
 If you need changes outside your scope, send mail to your parent agent
@@ -194,26 +194,26 @@ No specific expertise domains configured
 
 ## Communication
 
-Use `ov mail` for all communication. Your address is **cleanup-removals**.
+Use `ov mail` for all communication. Your address is **api-vectorstore**.
 
 ```bash
 # Check your inbox (do this regularly)
-ov mail check --agent cleanup-removals
+ov mail check --agent api-vectorstore
 
 # Send a status update to your parent
-ov mail send --to cleanup-impl --subject "status" \
-  --body "Progress update here" --type status --agent cleanup-removals
+ov mail send --to backend-arch --subject "status" \
+  --body "Progress update here" --type status --agent api-vectorstore
 
 # Ask a question
-ov mail send --to cleanup-impl --subject "question" \
-  --body "Your question here" --type question --priority high --agent cleanup-removals
+ov mail send --to backend-arch --subject "question" \
+  --body "Your question here" --type question --priority high --agent api-vectorstore
 
 # Report completion
-ov mail send --to cleanup-impl --subject "done" \
-  --body "Summary of what was done" --type result --agent cleanup-removals
+ov mail send --to backend-arch --subject "done" \
+  --body "Summary of what was done" --type result --agent api-vectorstore
 
 # Reply to a message
-ov mail reply <message-id> --body "Your reply" --agent cleanup-removals
+ov mail reply <message-id> --body "Your reply" --agent api-vectorstore
 ```
 
 ## Spawning Sub-Workers
@@ -227,20 +227,20 @@ Before reporting completion, you MUST pass all quality gates:
 1. **Tests:** `bun test` — all tests must pass
 2. **Lint:** `bun run lint` — zero errors
 3. **Typecheck:** `bun run typecheck` — no TypeScript errors
-4. **Commit:** all changes committed to your branch (overstory/cleanup-removals/S3Vector-a338)
-5. **Record mulch learnings:** `ml record <domain> --type <convention|pattern|failure|decision> --description "..." --outcome-status success --outcome-agent cleanup-removals` — capture insights from your work
-6. **Signal completion:** send `worker_done` mail to cleanup-impl: `ov mail send --to cleanup-impl --subject "Worker done: S3Vector-a338" --body "Quality gates passed." --type worker_done --agent cleanup-removals`
-7. **Close issue:** `sd close S3Vector-a338 --reason "summary of changes"`
+4. **Commit:** all changes committed to your branch (overstory/api-vectorstore/S3Vector-b3f9)
+5. **Record mulch learnings:** `ml record <domain> --type <convention|pattern|failure|decision> --description "..." --outcome-status success --outcome-agent api-vectorstore` — capture insights from your work
+6. **Signal completion:** send `worker_done` mail to backend-arch: `ov mail send --to backend-arch --subject "Worker done: S3Vector-b3f9" --body "Quality gates passed." --type worker_done --agent api-vectorstore`
+7. **Close issue:** `sd close S3Vector-b3f9 --reason "summary of changes"`
 
 Do NOT push to the canonical branch. Your work will be merged by the
 coordinator via `ov merge`.
 
 ## Constraints
 
-- **WORKTREE ISOLATION**: All writes MUST target files within your worktree at `/home/ubuntu/S3Vector/.overstory/worktrees/cleanup-removals`
+- **WORKTREE ISOLATION**: All writes MUST target files within your worktree at `/home/ubuntu/S3Vector/.overstory/worktrees/api-vectorstore`
 - NEVER write to the canonical repo root — all writes go to your worktree copy
 - Only modify files in your File Scope
-- Commit only to your branch: overstory/cleanup-removals/S3Vector-a338
+- Commit only to your branch: overstory/api-vectorstore/S3Vector-b3f9
 - Never push to the canonical branch
 - Report completion via `sd close` AND `ov mail send --type result`
 - If you encounter a blocking issue, send mail with `--priority urgent --type error`

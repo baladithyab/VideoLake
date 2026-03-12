@@ -2,10 +2,10 @@
 AWS Bedrock Multi-Modal Embedding Provider
 
 Supports embedding generation for text, image, audio, and video using AWS Bedrock models:
-- Text: amazon.titan-embed-text-v2:0, cohere.embed-english-v3, cohere.embed-multilingual-v3
-- Image: amazon.titan-embed-image-v1
-- Multimodal: amazon.nova-canvas-v1:0 (text+image+video+audio unified space)
-- Video: twelvelabs.marengo-embed-2-7-v1:0, amazon.nova-canvas-v1:0
+- Text: amazon.titan-embed-text-v2:0 (1024D, configurable), cohere.embed-english-v3, cohere.embed-multilingual-v3
+- Image: amazon.titan-embed-image-v1 (1024D)
+- Multimodal: amazon.nova-canvas-v1:0 (3072D, 1024D, 384D, 256D - text+image+video+audio unified space)
+- Video: twelvelabs.marengo-embed-2-7-v1:0, amazon.nova-canvas-v1:0 (unified video/audio embeddings)
 
 Uses asyncio.to_thread to wrap blocking boto3 calls and prevent event loop blocking.
 """
@@ -23,18 +23,24 @@ from src.services.embedding_provider import (
     EmbeddingRequest,
     EmbeddingResponse,
     EmbeddingModelInfo,
+    ProviderCapabilities,
     register_embedding_provider
 )
 from src.utils.aws_clients import aws_client_factory
 from src.utils.logging_config import get_logger
-from src.exceptions import ModelAccessError, ValidationError, VectorEmbeddingError
+from src.exceptions import ValidationError, ModelAccessError, VectorEmbeddingError
 
 logger = get_logger(__name__)
 
 
 @register_embedding_provider("bedrock")
 class BedrockMultiModalProvider(EmbeddingProvider):
-    """AWS Bedrock embedding provider for multi-modal content."""
+    """
+    AWS Bedrock embedding provider for multi-modal content.
+
+    Provides access to Amazon's managed embedding models including Titan Text,
+    Titan Multimodal, Cohere multilingual, and Nova Canvas for unified cross-modal embeddings.
+    """
 
     # Model registry with capabilities
     MODELS = {
@@ -168,6 +174,24 @@ class BedrockMultiModalProvider(EmbeddingProvider):
         """Get default model for a modality."""
         return self.DEFAULT_MODELS.get(modality)
 
+    def get_capabilities(self) -> ProviderCapabilities:
+        """Return Bedrock provider capabilities."""
+        return ProviderCapabilities(
+            supported_modalities=[
+                ModalityType.TEXT,
+                ModalityType.IMAGE,
+                ModalityType.AUDIO,
+                ModalityType.VIDEO,
+                ModalityType.MULTIMODAL
+            ],
+            max_batch_size=96,  # Cohere supports batch, others use concurrent
+            supports_configurable_dimensions=True,
+            available_dimensions=[3072, 1536, 1024, 512, 384, 256],
+            max_input_tokens=8192,
+            cost_per_1k_tokens=0.0001,
+            typical_latency_ms=50.0
+        )
+
     async def generate_embedding(self, request: EmbeddingRequest) -> EmbeddingResponse:
         """
         Generate embedding for a single input.
@@ -279,7 +303,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
         logger.info(f"Generated {len(all_responses)} embeddings in batch")
         return all_responses
 
-    def validate_connectivity(self) -> Dict[str, Any]:
+    async def validate_connectivity(self) -> Dict[str, Any]:
         """Validate connectivity to Bedrock."""
         try:
             # Test with a simple embedding call
@@ -290,14 +314,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
             )
 
             start_time = time.time()
-
-            # Run synchronously for connectivity check
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(self.generate_embedding(test_request))
-            finally:
-                loop.close()
+            await self.generate_embedding(test_request)
 
             response_time_ms = (time.time() - start_time) * 1000
 
@@ -305,6 +322,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
                 "accessible": True,
                 "models_available": list(self.MODELS.keys()),
                 "response_time_ms": response_time_ms,
+                "health_status": "healthy",
                 "region": self.region_name,
                 "error_message": None
             }
@@ -315,6 +333,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
                 "accessible": False,
                 "models_available": [],
                 "response_time_ms": 0,
+                "health_status": "unhealthy",
                 "region": self.region_name,
                 "error_message": str(e)
             }
