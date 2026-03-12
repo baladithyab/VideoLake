@@ -1,0 +1,1 @@
+{"type":"pattern","name":"mulch-config-domain-merge","description":"When merging branches with mulch.config.yaml domain conflicts, combine all domains from both branches rather than choosing one","classification":"tactical","recorded_at":"2026-03-12T18:46:59.585Z","outcomes":[{"status":"success","agent":"merge-builder"}],"id":"mx-05fbde"}
