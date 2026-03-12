@@ -1,0 +1,1 @@
+{"type":"convention","content":"Remove obsolete .gitignore entries when tools are deprecated, but preserve entries explicitly required by project coordinators","classification":"tactical","recorded_at":"2026-03-12T18:19:04.377Z","outcomes":[{"status":"success","agent":"cleanup-builder-2"}],"id":"mx-e3b0d2"}
