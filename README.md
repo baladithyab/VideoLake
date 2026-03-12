@@ -35,7 +35,7 @@ This platform provides a **practical, side-by-side comparison** of AWS vector st
 
 **Important**: All infrastructure changes now go through Terraform - use the Infrastructure Dashboard (`/infrastructure`) or Terraform CLI. The Resource Management page (`/resource-management`) is view-only with real-time health monitoring.
 
-📖 **[Read the complete refactoring documentation](docs/RESOURCE_MANAGEMENT_REFACTOR.md)**
+📖 **[Read the complete refactoring documentation](archive/reports/RESOURCE_MANAGEMENT_REFACTOR.md)**
 
 ## Project Structure
 
@@ -108,7 +108,7 @@ The vector storage system has been refactored using the **Facade Pattern** for i
 - **100% Backward Compatible**: All existing code continues to work without changes
 - **80%+ Test Coverage**: Comprehensive unit tests for all components (1,950 lines of tests)
 
-See [REFACTORING_ARCHITECTURE.md](docs/REFACTORING_ARCHITECTURE.md) for detailed architectural patterns and [REFACTORING_RESULTS.md](docs/REFACTORING_RESULTS.md) for complete metrics.
+See [REFACTORING_ARCHITECTURE.md](archive/reports/REFACTORING_ARCHITECTURE.md) for detailed architectural patterns and [REFACTORING_RESULTS.md](archive/reports/REFACTORING_RESULTS.md) for complete metrics.
 
 ## ✅ Platform Capabilities
 
@@ -238,7 +238,7 @@ The platform now features a **Dynamic Infrastructure Manager** in the UI:
 
 **Important**: The Resource Management page is **view-only**. All infrastructure changes must go through Terraform.
 
-📖 **[Full Infrastructure Guide](docs/RESOURCE_MANAGEMENT_REFACTOR.md)**
+📖 **[Full Infrastructure Guide](archive/reports/RESOURCE_MANAGEMENT_REFACTOR.md)**
 
 ### Running Demonstrations
 
@@ -470,10 +470,7 @@ Comprehensive implementation documentation is available in the `docs/` directory
 
 - **[Benchmark Results Report](docs/BENCHMARK_RESULTS_REPORT.md)** ⭐ - Multi-backend performance analysis
 - **[Performance Benchmarking Guide](docs/PERFORMANCE_BENCHMARKING.md)** - How to run benchmarks
-- **[Task 2 Implementation](docs/)**: S3 Vector storage infrastructure
-- **[Task 3 Implementation](docs/)**: Bedrock embedding services
-- **[Task 4 Implementation](docs/task_4_implementation_summary.md)**: Complete video processing pipeline
-- **[Final Architecture Report](docs/FINAL_ARCHITECTURE_REPORT.md)**: Summary of migration to ECS/Fargate and S3/CloudFront
+- **[Final Architecture Report](archive/reports/FINAL_ARCHITECTURE_REPORT.md)**: Summary of migration to ECS/Fargate and S3/CloudFront
 - **Architecture Decisions**: Technical choices and trade-offs explained
 - **Performance Analysis**: Benchmarks and optimization strategies
 
