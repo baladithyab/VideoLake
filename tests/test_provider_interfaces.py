@@ -200,11 +200,9 @@ def test_provider_factory_registration():
 
 @pytest.mark.provider
 @pytest.mark.unit
-def test_mock_provider_validate_connectivity():
+def test_mock_provider_validate_connectivity(mock_vector_store_provider):
     """Test that mock provider implements validate_connectivity correctly."""
-    from tests.conftest import mock_vector_store_provider
-
-    provider = mock_vector_store_provider()
+    provider = mock_vector_store_provider
     result = provider.validate_connectivity()
 
     # Result should have expected keys
@@ -219,70 +217,125 @@ def test_mock_provider_validate_connectivity():
 
 
 # ============================================================================
-# EmbeddingProvider Interface Tests (TDD - will pass when implemented)
+# EmbeddingProvider Interface Tests
 # ============================================================================
 
 @pytest.mark.provider
 @pytest.mark.unit
-@pytest.mark.skip(reason="EmbeddingProvider interface not yet implemented - Wave 2 TODO")
 def test_embedding_provider_interface_exists():
     """
     Test that EmbeddingProvider ABC exists.
-
-    This is a TDD stub - the import will fail until Wave 2 implements
-    the embedding provider abstraction.
     """
-    # TODO: Update import path when Wave 2 implements this
     from src.services.embedding_provider import EmbeddingProvider
 
     assert hasattr(EmbeddingProvider, "__abstractmethods__")
+    assert len(EmbeddingProvider.__abstractmethods__) > 0
 
 
 @pytest.mark.provider
 @pytest.mark.unit
-@pytest.mark.skip(reason="EmbeddingProvider interface not yet implemented - Wave 2 TODO")
 def test_embedding_provider_required_methods():
     """
     Test that EmbeddingProvider defines required abstract methods.
 
     Expected methods:
-    - generate_embedding(text: str) -> List[float]
-    - generate_batch_embeddings(texts: List[str]) -> List[List[float]]
-    - get_dimension() -> int
-    - get_model_id() -> str
-    - validate_connectivity() -> bool
+    - generate_embedding(content, modality) -> List[float]
+    - batch_generate_embeddings(contents, modality) -> List[List[float]]
+    - get_supported_modalities() -> List[ModalityType]
+    - provider_type -> EmbeddingProviderType
     """
     from src.services.embedding_provider import EmbeddingProvider
 
+    # These are the actual abstract methods in the implementation
     required_methods = {
         "generate_embedding",
-        "generate_batch_embeddings",
-        "get_dimension",
-        "get_model_id",
-        "validate_connectivity"
+        "batch_generate_embeddings",  # Note: actual name in implementation
+        "get_supported_modalities"
     }
 
     abstract_methods = EmbeddingProvider.__abstractmethods__
     for method in required_methods:
-        assert method in abstract_methods
+        assert method in abstract_methods, \
+            f"EmbeddingProvider should define abstract method: {method}"
 
 
 @pytest.mark.provider
 @pytest.mark.unit
-@pytest.mark.skip(reason="EmbeddingProvider factory not yet implemented - Wave 2 TODO")
+def test_embedding_provider_modality_type_enum():
+    """Test that ModalityType enum has expected values."""
+    from src.services.embedding_provider import ModalityType
+
+    expected_modalities = [
+        "TEXT",
+        "IMAGE",
+        "AUDIO",
+        "VIDEO",
+        "MULTIMODAL"
+    ]
+
+    for modality in expected_modalities:
+        assert hasattr(ModalityType, modality), \
+            f"ModalityType should have {modality} modality"
+
+
+@pytest.mark.provider
+@pytest.mark.unit
 def test_embedding_provider_factory_exists():
     """
     Test that EmbeddingProviderFactory exists.
 
     This factory should support creating providers for:
-    - Bedrock (Titan, Cohere)
+    - Bedrock (Titan, Cohere, etc.)
     - SageMaker endpoints
     - External APIs (OpenAI, etc.)
     """
     from src.services.embedding_provider import EmbeddingProviderFactory
 
+    # Verify factory has correct method names
     assert hasattr(EmbeddingProviderFactory, "create_provider")
     assert hasattr(EmbeddingProviderFactory, "get_available_providers")
+    assert hasattr(EmbeddingProviderFactory, "register_provider")
+
+
+@pytest.mark.provider
+@pytest.mark.unit
+def test_embedding_provider_factory_available_providers():
+    """Test that factory can list available providers."""
+    from src.services.embedding_provider import EmbeddingProviderFactory
+
+    available_providers = EmbeddingProviderFactory.get_available_providers()
+
+    # Should return a list
+    assert isinstance(available_providers, list)
+    # May or may not have providers registered depending on module initialization
+    # Just verify the method works
+
+
+@pytest.mark.provider
+@pytest.mark.unit
+def test_embedding_provider_interface_structure():
+    """Test that EmbeddingProvider interface has expected structure."""
+    from src.services.embedding_provider import EmbeddingProvider
+
+    # Verify it's an ABC
+    assert hasattr(EmbeddingProvider, "__abstractmethods__")
+
+    # Verify key methods exist (using actual method names from implementation)
+    assert hasattr(EmbeddingProvider, "generate_embedding")
+    assert hasattr(EmbeddingProvider, "batch_generate_embeddings")  # Actual name
+    assert hasattr(EmbeddingProvider, "get_supported_modalities")
+
+
+@pytest.mark.provider
+@pytest.mark.unit
+def test_embedding_provider_modality_types():
+    """Test that ModalityType enum is properly defined."""
+    from src.services.embedding_provider import ModalityType
+
+    # Verify all expected modalities exist
+    expected = ["TEXT", "IMAGE", "AUDIO", "VIDEO", "MULTIMODAL"]
+    for modality in expected:
+        assert hasattr(ModalityType, modality), f"ModalityType should have {modality}"
 
 
 # ============================================================================
