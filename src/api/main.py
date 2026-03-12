@@ -99,6 +99,7 @@ async def health_check():
     - AWS connectivity
     - External API availability
     """
+    import asyncio
     from datetime import datetime
     import os
     import requests
@@ -133,7 +134,8 @@ async def health_check():
     # Check AWS S3 connectivity
     try:
         if storage_manager:
-            storage_manager.s3_client.list_buckets()
+            # Run blocking boto3 call in thread pool
+            await asyncio.to_thread(storage_manager.s3_client.list_buckets)
             checks["aws_s3"] = {"status": "healthy"}
         else:
             checks["aws_s3"] = {"status": "unhealthy", "error": "Storage manager not initialized"}
@@ -146,7 +148,9 @@ async def health_check():
     try:
         api_key = os.getenv("TWELVE_LABS_API_KEY")
         if api_key:
-            response = requests.get(
+            # Run blocking requests call in thread pool
+            response = await asyncio.to_thread(
+                requests.get,
                 "https://api.twelvelabs.io/v1.2/engines",
                 headers={"x-api-key": api_key},
                 timeout=5
@@ -166,7 +170,10 @@ async def health_check():
         # Use the correct client for listing models (bedrock vs bedrock-runtime)
         from src.utils.aws_clients import aws_client_factory
         bedrock_client = aws_client_factory.get_bedrock_client()
-        response = bedrock_client.list_foundation_models()
+        # Run blocking boto3 call in thread pool
+        response = await asyncio.to_thread(
+            bedrock_client.list_foundation_models
+        )
         checks["aws_bedrock"] = {
             "status": "healthy",
             "models_available": len(response.get("modelSummaries", []))
