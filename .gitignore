@@ -75,9 +75,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
-# AI/Workflow tools
-.claude-flow/
-.swarm/
+# Kiro IDE
 .kiro/
 
 # Validation results and temporary output files
