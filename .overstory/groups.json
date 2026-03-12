@@ -48,5 +48,16 @@
 		"status": "active",
 		"createdAt": "2026-03-12T19:53:46.831Z",
 		"completedAt": null
+	},
+	{
+		"id": "group-09af3b20",
+		"name": "wave-2-parallel",
+		"memberIssueIds": [
+			"S3Vector-b3f9",
+			"S3Vector-d07b"
+		],
+		"status": "active",
+		"createdAt": "2026-03-12T20:46:02.392Z",
+		"completedAt": null
 	}
 ]
