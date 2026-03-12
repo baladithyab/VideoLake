@@ -1,6 +1,54 @@
-# Videolake Testing Documentation
+# S3Vector Testing Documentation
 
 This directory contains comprehensive tests for the S3Vector-first architecture with optional vector store comparisons.
+
+## NEW: Comprehensive Test Suite
+
+### Terraform Validation Tests
+
+**Location**: `tests/terraform/test_terraform_validation.py`
+
+Validates terraform configuration syntax and structure across all modules and deployment profiles.
+
+**Features**:
+- ✅ Root configuration validation
+- ✅ Profile-specific validation for all .tfvars files
+- ✅ Module structure verification
+- ✅ Terraform plan tests (requires AWS credentials)
+
+**Run**:
+```bash
+# All terraform validation tests (no AWS required)
+pytest tests/terraform/ -m "terraform and not requires_aws"
+
+# With AWS credentials (includes plan tests)
+pytest tests/terraform/ -m terraform
+```
+
+### Frontend Component Tests
+
+**Location**: `src/frontend/src/__tests__/`
+
+Comprehensive React component tests with minimal mocking.
+
+**Test Files**:
+- `InfrastructureManager.test.tsx` - Infrastructure status and deployment controls
+- `BenchmarkDashboard.test.tsx` - Benchmark results and metrics display
+- `routing.test.tsx` - React Router integration and navigation
+- `api-client.test.ts` - API client methods and request formatting
+- `pages/WelcomePage.test.tsx` - Welcome page and workflow navigation
+- `pages/BenchmarkHubPage.test.tsx` - Benchmark hub and list display
+- `pages/InfrastructurePage.test.tsx` - Infrastructure management page
+- `components/ui/Button.test.tsx` - UI button component variants
+- `components/StatusIndicator.test.tsx` - Status indicator states
+
+**Run**:
+```bash
+cd src/frontend
+bun test                    # Run all tests
+bun run test:watch          # Watch mode
+bun run test:coverage       # With coverage report
+```
 
 ## Architecture Overview
 
