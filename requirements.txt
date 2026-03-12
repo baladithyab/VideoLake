@@ -1,58 +1,58 @@
 # AWS SDK and core dependencies
-boto3>=1.34.0
-botocore>=1.34.0
+boto3==1.35.84
+botocore==1.35.84
 
 # Environment configuration
-python-dotenv>=1.0.0
+python-dotenv==1.0.1
 
 # Data processing and validation
-pydantic>=2.0.0
-dataclasses-json>=0.6.0
+pydantic==2.10.5
+pydantic-settings==2.7.1
+dataclasses-json==0.6.7
 
 # Async processing
-asyncio-throttle>=1.0.0
+asyncio-throttle==1.0.2
 
 # Testing dependencies
-pytest>=7.0.0
-pytest-asyncio>=0.21.0
-moto>=4.2.0
-pytest-mock>=3.10.0
+pytest==8.3.4
+pytest-asyncio==0.24.0
+moto==5.0.24
+pytest-mock==3.14.0
+pytest-cov==6.0.0
 
 # Development dependencies
-black>=23.0.0
-flake8>=6.0.0
-mypy>=1.0.0
-isort>=5.12.0
+black==24.10.0
+ruff==0.8.4
+flake8==7.1.1
+mypy==1.13.0
+isort==5.13.2
+types-requests==2.32.0.20241016
 
 # HTTP client for file downloads
-requests>=2.31.0
-requests-aws4auth>=1.3.1
+requests==2.32.3
+requests-aws4auth==1.3.1
 
 # Vector operations and numerical computing
-numpy>=1.24.0
-scikit-learn>=1.3.0
-umap-learn>=0.5.0
-pandas>=2.0.0
+numpy==1.26.4
+scikit-learn==1.6.1
+umap-learn==0.5.7
+pandas==2.2.3
 
 # Vector database providers
-lancedb>=0.3.0
-pyarrow>=14.0.0
-qdrant-client>=1.7.0
-opensearch-py>=2.3.0
+lancedb==0.18.0
+pyarrow==18.1.0
+qdrant-client==1.12.1
+opensearch-py==2.8.0
 
-# Removed Gradio (migrated to Streamlit)
-pillow>=10.0.0
+# Media processing
+pillow==11.0.0
+opencv-python==4.10.0.84
+ffmpeg-python==0.2.0
 
-# Data visualization for frontend
-plotly>=5.0.0
-
-# Media processing for frontend
-opencv-python>=4.12.0.88
-ffmpeg-python>=0.2.0
+# Data visualization
+plotly==5.24.1
 
 # FastAPI REST API for React frontend
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-python-multipart>=0.0.6
-
-# Streamlit removed - migrated to React frontend
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
