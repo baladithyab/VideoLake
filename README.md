@@ -78,9 +78,9 @@ This platform provides a **practical, side-by-side comparison** of AWS vector st
 │   ├── test_embedding_storage_integration.py   # ✅ Text integration tests
 │   ├── test_video_embedding_storage.py         # ✅ Video integration tests
 │   └── integration_test_end_to_end_text_processing.py  # ✅ End-to-end tests
-├── examples/                                     # Production demos
-│   ├── vector_operations_demo.py               # ✅ S3 Vector operations demo
-│   └── real_video_processing_demo.py           # ✅ Complete video pipeline demo
+├── archive/legacy-examples/                      # Archived demo scripts
+│   ├── vector_validation.py                    # Legacy validation demos
+│   └── real_video_processing_demo.py           # Legacy video pipeline demos
 ├── scripts/                                      # Utility scripts
 │   ├── cleanup_s3vectors_buckets.py            # Resource cleanup
 │   └── list_s3vectors.py                       # Resource listing

@@ -110,7 +110,6 @@ markers = [
     "provider: Provider interface tests",
     "frontend: Frontend component tests",
 ]
-timeout = 300
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
