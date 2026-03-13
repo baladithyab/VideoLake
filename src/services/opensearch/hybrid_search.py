@@ -139,7 +139,8 @@ class OpenSearchHybridSearch:
                 from requests_aws4auth import AWS4Auth
 
                 # Get AWS credentials for authentication
-                credentials = boto3.Session().get_credentials()
+                # Wrap blocking boto3 call with asyncio.to_thread()
+                credentials = await asyncio.to_thread(boto3.Session().get_credentials)
                 awsauth = AWS4Auth(
                     credentials.access_key,
                     credentials.secret_key,

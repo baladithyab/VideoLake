@@ -950,7 +950,68 @@ class EnhancedStorageIntegrationManager:
                 }
         
         return stats
-    
+
+    # ==================== Async Wrapper Methods ====================
+    # These methods wrap blocking I/O operations with asyncio.to_thread()
+    # to prevent blocking the event loop when called from async contexts.
+
+    async def async_upsert_media_embeddings(
+        self,
+        embeddings_by_type: Dict[str, List[Dict[str, Any]]],
+        media_metadata: MediaMetadata,
+        progress_callback: Optional[Callable[[UpsertionProgress], None]] = None
+    ) -> UpsertionResult:
+        """
+        Async wrapper for upsert_media_embeddings.
+        Wraps blocking I/O with asyncio.to_thread().
+
+        Args:
+            embeddings_by_type: Dictionary mapping vector types to embedding data
+            media_metadata: Comprehensive metadata for the media file
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            UpsertionResult with operation details and results
+        """
+        return await asyncio.to_thread(
+            self.upsert_media_embeddings,
+            embeddings_by_type,
+            media_metadata,
+            progress_callback
+        )
+
+    async def async_batch_upsert_media_embeddings(
+        self,
+        batch_data: List[Tuple[Dict[str, List[Dict[str, Any]]], MediaMetadata]],
+        progress_callback: Optional[Callable[[UpsertionProgress], None]] = None
+    ) -> List[UpsertionResult]:
+        """
+        Async wrapper for batch_upsert_media_embeddings.
+        Wraps blocking I/O with asyncio.to_thread().
+
+        Args:
+            batch_data: List of (embeddings_by_type, media_metadata) tuples
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            List of UpsertionResult objects
+        """
+        return await asyncio.to_thread(
+            self.batch_upsert_media_embeddings,
+            batch_data,
+            progress_callback
+        )
+
+    async def async_get_storage_statistics(self) -> Dict[str, Any]:
+        """
+        Async wrapper for get_storage_statistics.
+        Wraps blocking I/O with asyncio.to_thread().
+
+        Returns:
+            Dictionary with comprehensive storage statistics
+        """
+        return await asyncio.to_thread(self.get_storage_statistics)
+
     def validate_configuration(self) -> Dict[str, Any]:
         """Validate current storage configuration using resource registry."""
         validation_results = {
