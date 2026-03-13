@@ -1,6 +1,6 @@
-# 🚀 Videolake Deployment Guide
+# 🚀 S3Vector Deployment Guide
 
-Complete guide for deploying the Videolake AWS Vector Store Comparison Platform with Terraform-managed infrastructure.
+Complete guide for deploying the S3Vector AWS Multi-Modal Vector Platform with Terraform-managed infrastructure.
 
 ## 📋 Table of Contents
 
@@ -17,21 +17,102 @@ Complete guide for deploying the Videolake AWS Vector Store Comparison Platform 
 
 ---
 
+## 📋 Deployment Profiles
+
+The platform includes pre-configured Terraform profiles in `terraform/profiles/` for different deployment scenarios:
+
+### Fast Start (`fast-start.tfvars`)
+**Best for**: Quick testing, learning, demos
+
+```bash
+cd terraform
+terraform apply -var-file="profiles/fast-start.tfvars"
+```
+
+**Deploys:**
+- S3Vector only (serverless)
+- Shared S3 bucket for media storage
+- Basic IAM roles
+
+**Cost**: ~$0.50/month
+**Time**: <5 minutes
+
+### Comparison (`comparison.tfvars`)
+**Best for**: Single backend evaluation, comparing S3Vector with one other backend
+
+```bash
+terraform apply -var-file="profiles/comparison.tfvars"
+```
+
+**Deploys:**
+- S3Vector
+- One additional backend (OpenSearch by default)
+- Cost estimator module
+- Benchmark runner
+
+**Cost**: ~$10-50/month
+**Time**: 10-15 minutes
+
+### Production (`production.tfvars`)
+**Best for**: Production deployments with high availability
+
+```bash
+terraform apply -var-file="profiles/production.tfvars"
+```
+
+**Deploys:**
+- S3Vector with production settings
+- OpenSearch Serverless (production capacity)
+- Multi-AZ configuration
+- Enhanced monitoring and logging
+- Automated backups
+
+**Cost**: ~$50-100/month
+**Time**: 15-20 minutes
+
+### Full Multimodal (`full-multimodal.tfvars`)
+**Best for**: Complete platform evaluation with all features
+
+```bash
+terraform apply -var-file="profiles/full-multimodal.tfvars"
+```
+
+**Deploys:**
+- All 4 vector store backends (S3Vector, OpenSearch, Qdrant, LanceDB)
+- All embedding providers (Bedrock native, SageMaker, Marketplace)
+- Cost estimator module
+- Benchmark runner
+- Ingestion pipeline with Step Functions
+- Sample datasets
+
+**Cost**: ~$100-200/month
+**Time**: 20-25 minutes
+
+---
+
 ## 🎯 Overview
 
-The Videolake platform is a **multi-backend vector store comparison platform** supporting three deployment modes:
+The S3Vector platform is a **multi-backend, multi-modal vector platform** supporting three deployment modes:
 
-| Mode | Description | Time | Monthly Cost | Use Case |
-|------|-------------|------|--------------|----------|
-| **Mode 1** | AWS S3Vector only (Minimal) | <5 min | ~$0.50 | Quick testing, demos |
-| **Mode 2** | Add single backend (Standard) | 10-15 min | $10-50 | Single backend evaluation |
-| **Mode 3** | All backends (Full Comparison) | 15-20 min | $50-100 | Complete multi-backend comparison |
+| Mode | Profile | Description | Time | Monthly Cost | Use Case |
+|------|---------|-------------|------|--------------|----------|
+| **Mode 1** | `fast-start` | AWS S3Vector only (Minimal) | <5 min | ~$0.50 | Quick testing, demos |
+| **Mode 2** | `comparison` | Add single backend (Standard) | 10-15 min | $10-50 | Single backend evaluation |
+| **Mode 3** | `production` | Production-ready configuration | 15-20 min | $50-100 | Production deployments |
+| **Mode 4** | `full-multimodal` | All backends + embedding providers | 20-25 min | $100-200 | Complete platform with all features |
 
 **Supported Backends:** 7 vector store configurations across 4 technologies
 - S3Vector (AWS native)
 - OpenSearch Serverless
 - Qdrant on ECS
 - LanceDB on ECS (3 storage variants: S3, EFS, EBS)
+
+**Supported Modalities:** 5 content types with multi-modal embeddings
+- Text (documents, queries, articles)
+- Image (photos, diagrams, screenshots)
+- Audio (speech, music, sound effects)
+- Video (clips, recordings, streams)
+- Multimodal (cross-modal: text+image, video+audio)
 
 All modes use **Terraform-first** infrastructure deployment for reliability and reproducibility.
 
@@ -306,8 +387,8 @@ Mode 3: Full Comparison (All Backends)
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/Videolake.git
-cd Videolake
+git clone https://github.com/your-org/S3Vector.git
+cd S3Vector
 ```
 
 ### Step 2: Configure Terraform
@@ -374,7 +455,7 @@ shared_bucket = {
 }
 s3vector = {
   "deployed" = true
-  "bucket_name" = "my-videolake-vectors"
+  "bucket_name" = "my-s3vector-vectors"
   "index_name" = "embeddings"
   "dimension" = 1536
 }
@@ -400,7 +481,7 @@ nano .env
 ```bash
 # AWS Configuration
 AWS_REGION=us-east-1
-S3_VECTORS_BUCKET=my-videolake-vectors  # From terraform output
+S3_VECTORS_BUCKET=my-s3vector-vectors  # From terraform output
 
 # Bedrock Configuration
 BEDROCK_TEXT_MODEL=amazon.titan-embed-text-v2:0
@@ -648,7 +729,7 @@ cd terraform
 # Create comprehensive terraform.tfvars
 cat > terraform.tfvars << 'EOF'
 # Project Configuration
-project_name = "videolake-full"
+project_name = "s3vector-full"
 aws_region   = "us-east-1"
 environment  = "production"
 
@@ -754,7 +835,7 @@ Update `.env` with all backends:
 ```bash
 # AWS Configuration
 AWS_REGION=us-east-1
-S3_VECTORS_BUCKET=videolake-full-vectors
+S3_VECTORS_BUCKET=s3vector-full-vectors
 
 # OpenSearch
 OPENSEARCH_DOMAIN=search-s3vector-full-opensearch-xyz.us-east-1.es.amazonaws.com
@@ -864,11 +945,11 @@ curl http://localhost:8000/health
 **Expected display:**
 ```
 Shared Resources
-├─ videolake-full-shared-media [active] us-east-1
+├─ s3vector-full-shared-media [active] us-east-1
 
 Vector Store Backends
 ├─ S3 Vectors [healthy] 45ms
-│  ├─ videolake-full-vectors
+│  ├─ s3vector-full-vectors
 │  └─ embeddings [1536 dim, 0 vectors]
 ├─ OpenSearch [healthy] 120ms
 │  └─ search-s3vector-full-opensearch-xyz
@@ -1827,6 +1908,6 @@ Before deploying to production:
 
 ---
 
-**🚀 You're ready to deploy Videolake! Start with Mode 1 and scale up as needed.**
+**🚀 You're ready to deploy S3Vector! Start with Mode 1 and scale up as needed.**
 
 For questions or issues, refer to the [Troubleshooting](#troubleshooting) section or open a GitHub issue.

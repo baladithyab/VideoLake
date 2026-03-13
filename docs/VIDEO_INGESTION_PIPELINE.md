@@ -1,8 +1,10 @@
-# VideoLake Video Ingestion Pipeline
+# S3Vector Multi-Modal Ingestion Pipeline
+
+> **Note**: This document describes the video-specific ingestion pipeline. The platform now supports multi-modal ingestion (text, image, audio, video, multimodal). See [EMBEDDING_PROVIDERS.md](./EMBEDDING_PROVIDERS.md) for the complete multi-modal architecture.
 
 ## Overview
 
-The VideoLake video ingestion pipeline is an automated, serverless workflow that processes videos using AWS Step Functions, Lambda, and Bedrock Marengo to generate multimodal embeddings.
+The S3Vector ingestion pipeline is an automated, serverless workflow that processes multi-modal content using AWS Step Functions, Lambda, and Bedrock to generate embeddings. Originally designed for video, it now supports all modality types.
 
 ## Architecture
 
@@ -162,7 +164,7 @@ status = pipeline.get_status(result.job_id)
 module "ingestion_pipeline" {
   source = "./modules/ingestion_pipeline"
 
-  project_name                  = "videolake"
+  project_name                  = "s3vector"
   environment                   = "prod"
   ecs_cluster_arn              = module.ecs.cluster_arn
   ingestion_task_definition_arn = module.ecs.task_definition_arn
@@ -254,11 +256,11 @@ s3://{embeddings_bucket}/embeddings/{video_id}/embeddings.jsonl
 ### Notifications
 
 **Success Email:**
-- Subject: "VideoLake Ingestion Completed Successfully"
+- Subject: "S3Vector Ingestion Completed Successfully"
 - Contains: video_id, output_key, embeddings_count, backend results
 
 **Error Email:**
-- Subject: "VideoLake Ingestion Failed"
+- Subject: "S3Vector Ingestion Failed"
 - Contains: error details, video_path, execution_id
 
 ## Error Handling
@@ -276,15 +278,20 @@ The pipeline includes comprehensive error handling:
 - `.mp4`, `.mov`, `.avi`, `.mkv`, `.webm`, `.flv`, `.wmv`
 
 ### Supported Models
-- `marengo` - AWS Bedrock Marengo (default)
-- `bedrock` - Generic Bedrock models
-- `titan-multimodal` - Amazon Titan Multimodal
+- `amazon.titan-embed-text-v2:0` - Amazon Titan Text Embeddings (text)
+- `amazon.titan-embed-image-v1` - Amazon Titan Image Embeddings (image, multimodal)
+- `amazon.nova-canvas-v1:0` - Amazon Nova Canvas (multimodal)
+- Legacy: `marengo`, `bedrock`, `titan-multimodal` (deprecated)
+
+See [EMBEDDING_PROVIDERS.md](./EMBEDDING_PROVIDERS.md) for full model list.
 
 ### Supported Backends
-- `s3vector` - S3-based vector storage
-- `lancedb` - LanceDB vector database
-- `qdrant` - Qdrant vector search engine
-- `opensearch` - OpenSearch with KNN
+- `s3vector` - S3-based vector storage (AWS native)
+- `lancedb` - LanceDB vector database (ECS deployment)
+- `qdrant` - Qdrant vector search engine (ECS deployment)
+- `opensearch` - OpenSearch Serverless with KNN
+
+See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for backend deployment options.
 
 ### Limits
 - Maximum video size: 100 MB (configurable in Lambda)

@@ -1,5 +1,7 @@
 # OpenSearch Integration Guide
 
+> **Status**: This document is current and describes the two OpenSearch integration patterns for S3Vector.
+
 ## Table of Contents
 1. [Integration Overview](#integration-overview)
 2. [Export Pattern Implementation](#export-pattern-implementation)
