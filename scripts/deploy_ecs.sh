@@ -115,8 +115,8 @@ log "Starting Frontend Deployment..."
 # Build React App
 log "Building React application..."
 cd src/frontend
-npm install
-npm run build
+bun install
+bun run build
 cd ../..
 
 # Sync to S3

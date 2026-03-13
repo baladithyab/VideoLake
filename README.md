@@ -206,9 +206,9 @@ For a complete production-ready deployment to AWS ECS/Fargate and S3/CloudFront,
 
 **Fast Path - Local Development (AWS S3Vector Only):**
 ```bash
-# 1. Install dependencies
+# 1. Install dependencies (uv/bun recommended for speed)
 uv sync  # Install Python dependencies
-cd src/frontend && bun install  # Or: npm install
+cd src/frontend && bun install
 cd ../..
 
 # 2. Deploy infrastructure (< 5 min)

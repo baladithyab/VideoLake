@@ -7,7 +7,7 @@ Tailwind CSS has been properly configured for the S3Vector React frontend.
 ## What Was Installed
 
 ```bash
-npm install -D tailwindcss postcss autoprefixer
+bun install -D tailwindcss postcss autoprefixer
 ```
 
 ## Configuration Files
@@ -125,7 +125,7 @@ After starting the app with `./start.sh`, you should see:
    ```bash
    cd frontend
    rm -rf node_modules/.vite
-   npm run dev
+   bun run dev
    ```
 
 ### Build Issues
@@ -134,8 +134,8 @@ If you encounter build issues:
 ```bash
 cd frontend
 rm -rf node_modules package-lock.json
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 ### Tailwind Not Processing

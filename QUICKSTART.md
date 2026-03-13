@@ -54,9 +54,8 @@ cp .env.example .env
 # Navigate to frontend directory
 cd src/frontend
 
-# Install Node dependencies (use bun if available for 10x speedup)
+# Install Node dependencies (bun required)
 bun install
-# Or: npm install
 
 # Configure frontend environment
 cp .env.example .env
@@ -88,7 +87,7 @@ INFO:     Application startup complete.
 ```bash
 # From project root
 cd src/frontend
-bun run dev  # Or: npm run dev
+bun run dev
 ```
 
 You should see:
@@ -173,12 +172,12 @@ uv sync
 - Check VITE_API_URL in frontend/.env
 - Check browser console for CORS errors
 
-**Problem**: `npm install fails` or `bun install fails`
+**Problem**: `bun install fails`
 ```bash
 # Clear cache and reinstall
 cd src/frontend
-rm -rf node_modules package-lock.json bun.lockb
-bun install  # Or: npm install
+rm -rf node_modules bun.lockb
+bun install
 ```
 
 ### CORS Issues
@@ -212,11 +211,11 @@ uv run gunicorn src.api.main:app -w 4 -k uvicorn.workers.UvicornWorker
 ### Frontend
 ```bash
 cd frontend
-npm run build
+bun run build
 # Output in frontend/dist/
 
 # Preview production build
-npm run preview
+bun run preview
 ```
 
 ## Next Steps
@@ -241,12 +240,10 @@ uv sync                              # Install dependencies
 
 # Frontend
 cd src/frontend
-bun install                          # Install dependencies (fast)
-npm install                          # Install dependencies (standard)
-bun run dev                          # Start dev server (fast)
-npm run dev                          # Start dev server (standard)
+bun install                          # Install dependencies
+bun run dev                          # Start dev server
 bun run build                        # Build for production
-npm run preview                      # Preview production build
+bun run preview                      # Preview production build
 
 # Easy Start (both services)
 ./start.sh                           # Auto-detects uv/bun, starts backend + frontend

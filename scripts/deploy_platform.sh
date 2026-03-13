@@ -48,8 +48,8 @@ uv sync
 # 3. Frontend Setup
 echo "Building frontend..."
 cd frontend
-npm install
-npm run build
+bun install
+bun run build
 # Copy build artifacts to Nginx root (adjust path as needed)
 sudo cp -r dist/* /usr/share/nginx/html/
 
