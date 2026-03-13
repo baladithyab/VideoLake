@@ -204,6 +204,7 @@ from .routers import (
     analytics,
     infrastructure,
     benchmark,
+    benchmarks,  # New comprehensive benchmarks API
     ingestion
 )
 # Include routers
@@ -214,5 +215,6 @@ app.include_router(embeddings.router, prefix="/api/embeddings", tags=["embedding
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 app.include_router(infrastructure.router, prefix="/api", tags=["infrastructure"])
 app.include_router(benchmark.router, prefix="/api/benchmark", tags=["benchmark"])
+app.include_router(benchmarks.router, prefix="/api/benchmarks", tags=["Comprehensive Benchmarks"])
 app.include_router(ingestion.router, prefix="/api/ingestion", tags=["ingestion"])
 
