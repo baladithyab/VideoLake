@@ -8,6 +8,11 @@ terraform {
   }
 }
 
+# Data Sources
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
+
 data "aws_ami" "amazon_linux_2023" {
   most_recent = true
   owners      = ["amazon"]
@@ -87,7 +92,10 @@ resource "aws_iam_role_policy" "s3_access" {
           "s3:PutObject",
           "s3:DeleteObject"
         ]
-        Resource = "*"
+        Resource = [
+          "arn:aws:s3:::${var.s3_bucket_prefix}*",
+          "arn:aws:s3:::${var.s3_bucket_prefix}*/*"
+        ]
       }
     ]
   })

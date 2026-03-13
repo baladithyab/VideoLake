@@ -67,6 +67,12 @@ variable "s3_bucket_name" {
   type        = string
 }
 
+variable "domain_name" {
+  description = "Domain name for ACM certificate and HTTPS (optional)"
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)

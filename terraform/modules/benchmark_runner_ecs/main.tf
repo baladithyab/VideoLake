@@ -152,9 +152,14 @@ resource "aws_iam_role_policy" "task_role" {
       {
         Effect = "Allow"
         Action = [
-          "s3vectors:*"
+          "s3vectors:SearchIndex",
+          "s3vectors:GetIndex",
+          "s3vectors:ListIndexes",
+          "s3vectors:CreateIndex",
+          "s3vectors:DeleteIndex",
+          "s3vectors:UpdateIndex"
         ]
-        Resource = "*"
+        Resource = "arn:aws:s3vectors:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:index/*"
       },
       {
         Effect = "Allow"
@@ -177,7 +182,7 @@ resource "aws_iam_role_policy" "task_role" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "*"
+        Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/benchmark/${var.deployment_name}:*"
       }
     ]
   })
@@ -213,8 +218,8 @@ resource "aws_ecs_task_definition" "benchmark_runner" {
 
       environment = [
         { name = "AWS_DEFAULT_REGION", value = var.aws_region },
-        { name = "S3VECTOR_BUCKET",   value = var.vector_bucket_name },
-        { name = "S3_BUCKET",         value = var.results_bucket_name },
+        { name = "S3VECTOR_BUCKET", value = var.vector_bucket_name },
+        { name = "S3_BUCKET", value = var.results_bucket_name },
         { name = "S3_RESULTS_PREFIX", value = "benchmark-results" }
       ]
 
@@ -249,6 +254,11 @@ resource "aws_ecs_cluster" "benchmark" {
     ManagedBy = "Terraform"
   })
 }
+
+# Data Sources
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
 
 # Use default VPC and subnets (same pattern as Qdrant/LanceDB modules)
 data "aws_vpc" "default" {

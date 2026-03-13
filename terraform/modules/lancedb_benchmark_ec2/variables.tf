@@ -32,6 +32,12 @@ variable "allowed_cidr_blocks" {
   default     = ["0.0.0.0/0"]
 }
 
+variable "s3_bucket_prefix" {
+  description = "S3 bucket prefix for scoping permissions (e.g., 'videolake-' to allow 'videolake-*' buckets)"
+  type        = string
+  default     = "videolake-"
+}
+
 variable "tags" {
   description = "Additional tags"
   type        = map(string)
