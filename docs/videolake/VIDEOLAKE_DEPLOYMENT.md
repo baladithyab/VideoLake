@@ -179,7 +179,7 @@ pip install -r requirements.txt
 
 # Install frontend dependencies
 cd src/frontend
-npm install
+bun install
 cd ../..
 ```
 
@@ -201,7 +201,7 @@ python -m uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
 # Terminal 2: Frontend
 cd src/frontend
-npm run dev
+bun run dev
 ```
 
 ### Step 6: Access VideoLake
@@ -570,13 +570,13 @@ INFO:     Uvicorn running on http://0.0.0.0:8000
 cd src/frontend
 
 # 2. Install dependencies
-npm install
+bun install
 
 # 3. Configure environment
 echo "VITE_API_URL=http://localhost:8000" > .env.local
 
 # 4. Start development server
-npm run dev
+bun run dev
 ```
 
 **Frontend should start with:**
@@ -596,7 +596,7 @@ npm run dev
 # Backend: No build needed (Python)
 # Frontend: Build static assets
 cd src/frontend
-npm run build
+bun run build
 
 # Output: dist/ directory
 # Deploy to S3 + CloudFront (see terraform/modules/videolake_frontend_hosting/)
@@ -867,7 +867,7 @@ terraform apply
 ```bash
 # 1. Stop application
 pkill -f "uvicorn"
-pkill -f "npm"
+pkill -f "bun"
 
 # 2. Destroy infrastructure
 cd terraform

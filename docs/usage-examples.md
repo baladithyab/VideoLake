@@ -211,8 +211,8 @@ python -m uvicorn src.api.main:app --reload --port 8000
 
 # In another terminal, start the frontend
 cd frontend
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 Navigate to:
@@ -675,7 +675,7 @@ curl -X POST http://localhost:8000/api/search/query \
 #### Installation
 
 ```bash
-npm install axios
+bun install axios
 ```
 
 #### API Client Implementation

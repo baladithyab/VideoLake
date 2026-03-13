@@ -21,7 +21,7 @@ This guide covers the complete development environment setup for S3Vector, inclu
 
 ### Recommended Tools
 
-- **bun** - Fast JavaScript runtime and package manager (alternative to npm)
+- **bun** - Fast JavaScript runtime and package manager (recommended for frontend)
   ```bash
   curl -fsSL https://bun.sh/install | bash
   ```
@@ -72,11 +72,8 @@ Navigate to the frontend directory and install dependencies:
 ```bash
 cd src/frontend
 
-# Using bun (recommended - fast)
+# Using bun (required)
 bun install
-
-# Or using npm
-npm install
 ```
 
 ### 5. Initialize Terraform
@@ -113,9 +110,6 @@ cd src/frontend
 
 # Using bun
 bun run dev
-
-# Or using npm
-npm run dev
 ```
 
 The frontend will be available at http://localhost:5172

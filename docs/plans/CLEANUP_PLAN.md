@@ -524,7 +524,7 @@ bun run typecheck
 python3 run_api.py  # Should start without errors
 
 # Verify frontend connects
-cd frontend && npm run dev
+cd frontend && bun run dev
 ```
 
 ---

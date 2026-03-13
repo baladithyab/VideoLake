@@ -51,14 +51,12 @@ if [ "$NODE_VERSION" -lt 18 ]; then
 fi
 echo "✅ Node.js $(node -v) detected"
 
-# Detect package manager preference (bun > npm)
-if command -v bun &> /dev/null; then
-    JS_PKG_MANAGER="bun"
-    echo "✅ Using bun for JavaScript package management"
-else
-    JS_PKG_MANAGER="npm"
-    echo "ℹ️  Using npm (consider installing bun for faster installs: curl -fsSL https://bun.sh/install | bash)"
+# Check if bun is installed (required for JavaScript package management)
+if ! command -v bun &> /dev/null; then
+    echo "❌ bun is not installed. Please install bun: curl -fsSL https://bun.sh/install | bash"
+    exit 1
 fi
+echo "✅ bun $(bun -v) detected"
 
 # Check if .env exists
 if [ ! -f .env ]; then
@@ -129,18 +127,10 @@ cd src/frontend
 # Check if node_modules exists
 if [ ! -d "node_modules" ]; then
     echo -e "${YELLOW}📦 Installing frontend dependencies...${NC}"
-    if [ "$JS_PKG_MANAGER" = "bun" ]; then
-        bun install
-    else
-        npm install
-    fi
+    bun install
 fi
 
-if [ "$JS_PKG_MANAGER" = "bun" ]; then
-    bun run dev &
-else
-    npm run dev &
-fi
+bun run dev &
 FRONTEND_PID=$!
 cd ../..
 echo -e "${GREEN}✅ Frontend started (PID: $FRONTEND_PID)${NC}"
