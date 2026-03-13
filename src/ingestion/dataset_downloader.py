@@ -7,32 +7,30 @@ Downloads and prepares recommended datasets for large-scale ingestion:
 - Audio: LibriSpeech, Common Voice, VoxCeleb, AudioSet
 - Video: MSR-VTT, ActivityNet, Kinetics, YouTube-8M
 
-All datasets are staged to S3 for parallel processing.
+Provides downloaders with S3 staging, progress tracking, and metadata extraction.
 """
 
 import asyncio
 import gzip
-import json
-import os
 import tarfile
 import zipfile
-from typing import List, Dict, Any, Optional, AsyncIterator
+from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
+from datetime import datetime
 from enum import Enum
-import tempfile
+from pathlib import Path
+from typing import Any
 
 import boto3
-from botocore.exceptions import ClientError
+import requests
 
+from src.services.embedding_provider import ModalityType
 from src.utils.logging_config import get_logger
-from src.utils.aws_clients import aws_client_factory
-from src.exceptions import ProcessingError
 
 logger = get_logger(__name__)
 
 
-class DatasetType(Enum):
+class DatasetType(str, Enum):
     """Supported dataset types."""
     # Text
     MS_MARCO = "ms_marco"
@@ -60,154 +58,317 @@ class DatasetType(Enum):
 
 
 @dataclass
-class DatasetConfig:
-    """Configuration for dataset download."""
+class DatasetInfo:
+    """Information about a dataset."""
+    name: str
     dataset_type: DatasetType
-    max_items: int = 10000  # Maximum items to download
-    s3_bucket: str = "s3vector-datasets"
-    s3_prefix: str = "raw"
-    local_cache_dir: Optional[str] = None  # Local cache for downloads
+    modality: ModalityType
+    size_gb: float
+    num_items: int
+    download_url: str
+    description: str
+    license: str
+    homepage: str | None = None
+    citation: str | None = None
 
 
 @dataclass
-class DatasetItem:
-    """A single item from a dataset."""
-    item_id: str
-    content: Any  # Text, S3 URI, bytes, etc.
-    metadata: Dict[str, Any]
-    s3_uri: Optional[str] = None
+class DownloadProgress:
+    """Progress information for dataset download."""
+    dataset_name: str
+    total_bytes: int
+    downloaded_bytes: int
+    progress_percentage: float
+    download_speed_mbps: float
+    eta_seconds: float
+    started_at: datetime
+    status: str  # downloading, extracting, staging, completed, failed
+
+
+class DatasetRegistry:
+    """Registry of supported datasets with metadata."""
+
+    DATASETS: dict[DatasetType, DatasetInfo] = {
+        DatasetType.MS_MARCO: DatasetInfo(
+            name="MS MARCO Passages",
+            dataset_type=DatasetType.MS_MARCO,
+            modality=ModalityType.TEXT,
+            size_gb=3.5,
+            num_items=8841823,
+            download_url="https://msmarco.blob.core.windows.net/msmarcoranking/collection.tar.gz",
+            description="8.8M passages from Bing search results for document ranking",
+            license="Microsoft Research License Agreement",
+            homepage="https://microsoft.github.io/msmarco/",
+            citation="Nguyen et al. MS MARCO: A Human Generated MAchine Reading COmprehension Dataset"
+        ),
+        DatasetType.COCO: DatasetInfo(
+            name="COCO 2017 Train",
+            dataset_type=DatasetType.COCO,
+            modality=ModalityType.IMAGE,
+            size_gb=18.0,
+            num_items=118287,
+            download_url="http://images.cocodataset.org/zips/train2017.zip",
+            description="118K images with object detection and segmentation annotations",
+            license="CC BY 4.0",
+            homepage="https://cocodataset.org/",
+            citation="Lin et al. Microsoft COCO: Common Objects in Context"
+        ),
+        DatasetType.LIBRISPEECH: DatasetInfo(
+            name="LibriSpeech train-clean-360",
+            dataset_type=DatasetType.LIBRISPEECH,
+            modality=ModalityType.AUDIO,
+            size_gb=23.0,
+            num_items=104014,
+            download_url="https://www.openslr.org/resources/12/train-clean-360.tar.gz",
+            description="360 hours of clean English speech from audiobooks",
+            license="CC BY 4.0",
+            homepage="https://www.openslr.org/12/",
+            citation="Panayotov et al. Librispeech: An ASR corpus based on public domain audio books"
+        ),
+        DatasetType.MSR_VTT: DatasetInfo(
+            name="MSR-VTT",
+            dataset_type=DatasetType.MSR_VTT,
+            modality=ModalityType.VIDEO,
+            size_gb=32.0,
+            num_items=10000,
+            download_url="https://www.robots.ox.ac.uk/~maxbain/frozen-in-time/data/MSRVTT.zip",
+            description="10K videos with natural language descriptions",
+            license="Microsoft Research License",
+            homepage="https://www.microsoft.com/en-us/research/publication/msr-vtt-a-large-video-description-dataset-for-bridging-video-and-language/",
+            citation="Xu et al. MSR-VTT: A Large Video Description Dataset for Bridging Video and Language"
+        ),
+    }
+
+    @classmethod
+    def get_dataset_info(cls, dataset_type: DatasetType) -> DatasetInfo:
+        """Get dataset information."""
+        return cls.DATASETS[dataset_type]
+
+    @classmethod
+    def list_datasets(cls) -> list[dict[str, Any]]:
+        """List all available datasets."""
+        return [
+            {
+                "name": info.name,
+                "type": info.dataset_type.value,
+                "modality": info.modality.value,
+                "size_gb": info.size_gb,
+                "num_items": info.num_items,
+                "description": info.description,
+                "license": info.license,
+            }
+            for info in cls.DATASETS.values()
+        ]
 
 
 class DatasetDownloader:
     """
-    Downloads and stages datasets for large-scale ingestion.
+    Dataset downloader with S3 staging and progress tracking.
 
-    Handles:
-    - HTTP/S3 downloads
-    - Decompression (gzip, tar, zip)
-    - S3 staging for parallel processing
-    - Progress tracking
-    - Resume capability
+    Downloads recommended datasets, extracts contents, and stages
+    to S3 for large-scale ingestion processing.
 
     Example:
-        config = DatasetConfig(
-            dataset_type=DatasetType.MS_MARCO,
-            max_items=100000,
+        downloader = DatasetDownloader(
             s3_bucket="my-datasets",
-            s3_prefix="benchmarking/ms-marco"
+            s3_prefix="benchmarking/"
         )
-
-        downloader = DatasetDownloader(config)
 
         # Download and stage to S3
-        items_staged = await downloader.download_and_stage()
-        print(f"Staged {items_staged} items to S3")
-
-        # Stream items for processing
-        async for item in downloader.stream_items():
-            print(f"Processing {item.item_id}")
+        dataset_dir = await downloader.download_dataset(DatasetType.MS_MARCO)
+        s3_uri = await downloader.stage_to_s3(dataset_dir, DatasetType.MS_MARCO)
     """
 
-    def __init__(self, config: DatasetConfig):
+    def __init__(
+        self,
+        local_cache_dir: Path | None = None,
+        s3_bucket: str | None = None,
+        s3_prefix: str = "datasets/"
+    ):
         """
-        Initialize dataset downloader.
+        Initialize the dataset downloader.
 
         Args:
-            config: Dataset download configuration
+            local_cache_dir: Local directory for caching downloads
+            s3_bucket: S3 bucket for staging datasets
+            s3_prefix: S3 key prefix for datasets
         """
-        self.config = config
-        self.s3_client = aws_client_factory.get_s3_client()
+        self.local_cache_dir = local_cache_dir or Path.home() / ".s3vector" / "datasets"
+        self.local_cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # Setup local cache
-        if config.local_cache_dir:
-            self.cache_dir = Path(config.local_cache_dir)
+        self.s3_bucket = s3_bucket
+        self.s3_prefix = s3_prefix
+
+        if s3_bucket:
+            self.s3_client = boto3.client('s3')
         else:
-            self.cache_dir = Path(tempfile.gettempdir()) / "s3vector-datasets"
+            self.s3_client = None
 
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Initialized dataset downloader: cache={self.local_cache_dir}")
 
-        logger.info(
-            f"DatasetDownloader initialized: {config.dataset_type.value}, "
-            f"max_items={config.max_items}, cache={self.cache_dir}"
-        )
-
-    async def download_and_stage(self) -> int:
+    async def download_dataset(
+        self,
+        dataset_type: DatasetType,
+        max_items: int | None = None,
+        skip_cache: bool = False,
+        progress_callback: Callable[[DownloadProgress], None] | None = None
+    ) -> Path:
         """
-        Download dataset and stage to S3.
+        Download a dataset to local cache.
+
+        Args:
+            dataset_type: Type of dataset to download
+            max_items: Maximum items to download (None for all)
+            skip_cache: Skip cache and re-download
+            progress_callback: Optional callback for progress updates
 
         Returns:
-            Number of items staged
+            Path to downloaded and extracted dataset directory
         """
-        dataset_type = self.config.dataset_type
+        dataset_info = DatasetRegistry.get_dataset_info(dataset_type)
 
-        logger.info(f"Starting download: {dataset_type.value}")
+        # Check cache
+        dataset_dir = self.local_cache_dir / dataset_type.value
+        if dataset_dir.exists() and not skip_cache:
+            logger.info(f"Using cached dataset: {dataset_dir}")
+            return dataset_dir
 
-        # Route to specific downloader
+        logger.info(f"Downloading {dataset_info.name} ({dataset_info.size_gb} GB)...")
+
+        # Route to specific downloader for text datasets that need special parsing
         if dataset_type == DatasetType.MS_MARCO:
-            return await self._download_ms_marco()
+            return await self._download_ms_marco(dataset_dir, max_items, progress_callback)
         elif dataset_type == DatasetType.WIKIPEDIA:
-            return await self._download_wikipedia()
-        elif dataset_type == DatasetType.COCO:
-            return await self._download_coco()
-        elif dataset_type == DatasetType.LIBRISPEECH:
-            return await self._download_librispeech()
-        elif dataset_type == DatasetType.MSR_VTT:
-            return await self._download_msr_vtt()
-        else:
-            raise NotImplementedError(
-                f"Downloader not implemented for {dataset_type.value}. "
-                f"Please add implementation in dataset_downloader.py"
+            return await self._download_wikipedia(dataset_dir, max_items, progress_callback)
+
+        # Generic archive download for image/audio/video datasets
+        download_file = self.local_cache_dir / f"{dataset_type.value}.archive"
+
+        await self._download_file(
+            url=dataset_info.download_url,
+            output_path=download_file,
+            dataset_name=dataset_info.name,
+            progress_callback=progress_callback
+        )
+
+        # Extract
+        logger.info(f"Extracting {dataset_info.name}...")
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+
+        if progress_callback:
+            progress_callback(DownloadProgress(
+                dataset_name=dataset_info.name,
+                total_bytes=0,
+                downloaded_bytes=0,
+                progress_percentage=0.0,
+                download_speed_mbps=0.0,
+                eta_seconds=0.0,
+                started_at=datetime.utcnow(),
+                status="extracting"
+            ))
+
+        await self._extract_archive(download_file, dataset_dir)
+
+        # Clean up archive
+        download_file.unlink()
+
+        logger.info(f"Dataset ready: {dataset_dir}")
+        return dataset_dir
+
+    async def stage_to_s3(
+        self,
+        dataset_dir: Path,
+        dataset_type: DatasetType,
+        progress_callback: Callable[[DownloadProgress], None] | None = None
+    ) -> str:
+        """
+        Stage dataset to S3 for cloud processing.
+
+        Args:
+            dataset_dir: Local dataset directory
+            dataset_type: Dataset type
+            progress_callback: Optional progress callback
+
+        Returns:
+            S3 URI prefix for staged dataset
+        """
+        if not self.s3_client:
+            raise ValueError("S3 client not initialized (s3_bucket required)")
+
+        dataset_info = DatasetRegistry.get_dataset_info(dataset_type)
+
+        logger.info(f"Staging {dataset_info.name} to S3...")
+
+        s3_dataset_prefix = f"{self.s3_prefix}{dataset_type.value}/"
+
+        # Get all files
+        files = list(dataset_dir.rglob("*"))
+        files = [f for f in files if f.is_file()]
+
+        total_bytes = sum(f.stat().st_size for f in files)
+        uploaded_bytes = 0
+
+        if progress_callback:
+            progress_callback(DownloadProgress(
+                dataset_name=dataset_info.name,
+                total_bytes=total_bytes,
+                downloaded_bytes=0,
+                progress_percentage=0.0,
+                download_speed_mbps=0.0,
+                eta_seconds=0.0,
+                started_at=datetime.utcnow(),
+                status="staging"
+            ))
+
+        # Upload files
+        import time
+        start_time = time.time()
+
+        for file_path in files:
+            relative_path = file_path.relative_to(dataset_dir)
+            s3_key = f"{s3_dataset_prefix}{relative_path}"
+
+            # Upload to S3
+            await asyncio.to_thread(
+                self.s3_client.upload_file,
+                str(file_path),
+                self.s3_bucket,
+                s3_key
             )
 
-    async def stream_items(self) -> AsyncIterator[DatasetItem]:
-        """
-        Stream dataset items from S3.
+            uploaded_bytes += file_path.stat().st_size
 
-        Yields items one at a time for processing.
+            # Update progress
+            if progress_callback:
+                elapsed = time.time() - start_time
+                speed_mbps = (uploaded_bytes / elapsed / 1024 / 1024) if elapsed > 0 else 0
+                remaining_bytes = total_bytes - uploaded_bytes
+                eta_seconds = (remaining_bytes / (uploaded_bytes / elapsed)) if uploaded_bytes > 0 else 0
 
-        Yields:
-            DatasetItem objects
-        """
-        prefix = f"{self.config.s3_prefix}/{self.config.dataset_type.value}/"
+                progress_callback(DownloadProgress(
+                    dataset_name=dataset_info.name,
+                    total_bytes=total_bytes,
+                    downloaded_bytes=uploaded_bytes,
+                    progress_percentage=(uploaded_bytes / total_bytes * 100) if total_bytes > 0 else 0,
+                    download_speed_mbps=speed_mbps,
+                    eta_seconds=eta_seconds,
+                    started_at=datetime.utcfromtimestamp(start_time),
+                    status="staging"
+                ))
 
-        try:
-            # List objects in S3
-            paginator = self.s3_client.get_paginator('list_objects_v2')
-            page_iterator = paginator.paginate(
-                Bucket=self.config.s3_bucket,
-                Prefix=prefix
-            )
+        s3_uri = f"s3://{self.s3_bucket}/{s3_dataset_prefix}"
+        logger.info(f"Dataset staged to {s3_uri}")
 
-            item_count = 0
-
-            for page in page_iterator:
-                for obj in page.get('Contents', []):
-                    if item_count >= self.config.max_items:
-                        return
-
-                    s3_key = obj['Key']
-
-                    # Generate item from S3 object
-                    yield DatasetItem(
-                        item_id=Path(s3_key).stem,
-                        content=f"s3://{self.config.s3_bucket}/{s3_key}",
-                        metadata={
-                            'dataset': self.config.dataset_type.value,
-                            's3_key': s3_key,
-                            'size_bytes': obj['Size']
-                        },
-                        s3_uri=f"s3://{self.config.s3_bucket}/{s3_key}"
-                    )
-
-                    item_count += 1
-
-        except ClientError as e:
-            logger.error(f"Failed to stream items from S3: {e}")
-            raise ProcessingError(f"S3 streaming failed: {e}")
+        return s3_uri
 
     # ==================== Text Dataset Downloaders ====================
 
-    async def _download_ms_marco(self) -> int:
+    async def _download_ms_marco(
+        self,
+        dataset_dir: Path,
+        max_items: int | None = None,
+        progress_callback: Callable[[DownloadProgress], None] | None = None
+    ) -> Path:
         """
         Download MS MARCO dataset.
 
@@ -216,19 +377,20 @@ class DatasetDownloader:
         """
         logger.info("Downloading MS MARCO dataset...")
 
-        # MS MARCO documents URL
         docs_url = "https://msmarco.blob.core.windows.net/msmarcoranking/msmarco-docs.tsv.gz"
 
-        # Download documents
-        docs_file = self.cache_dir / "msmarco-docs.tsv.gz"
+        docs_file = self.local_cache_dir / "msmarco-docs.tsv.gz"
         if not docs_file.exists():
-            await self._download_file_http(docs_url, docs_file)
+            await self._download_file(docs_url, docs_file, "MS MARCO", progress_callback)
 
-        # Parse and stage documents
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+
         items_staged = 0
+        effective_max = max_items or 10000
+
         with gzip.open(docs_file, 'rt', encoding='utf-8') as f:
             for line in f:
-                if items_staged >= self.config.max_items:
+                if items_staged >= effective_max:
                     break
 
                 parts = line.strip().split('\t')
@@ -236,17 +398,11 @@ class DatasetDownloader:
                     continue
 
                 doc_id, url, title, body = parts[0], parts[1], parts[2], parts[3]
-
-                # Combine title and body
                 content = f"{title}\n\n{body}"
 
-                # Stage to S3
-                s3_key = f"{self.config.s3_prefix}/ms_marco/docs/{doc_id}.txt"
-                await self._upload_text_to_s3(
-                    content=content,
-                    s3_key=s3_key,
-                    metadata={'url': url, 'title': title}
-                )
+                doc_path = dataset_dir / "docs" / f"{doc_id}.txt"
+                doc_path.parent.mkdir(parents=True, exist_ok=True)
+                doc_path.write_text(content, encoding='utf-8')
 
                 items_staged += 1
 
@@ -254,9 +410,14 @@ class DatasetDownloader:
                     logger.info(f"Staged {items_staged} MS MARCO documents")
 
         logger.info(f"MS MARCO download complete: {items_staged} documents")
-        return items_staged
+        return dataset_dir
 
-    async def _download_wikipedia(self) -> int:
+    async def _download_wikipedia(
+        self,
+        dataset_dir: Path,
+        max_items: int | None = None,
+        progress_callback: Callable[[DownloadProgress], None] | None = None
+    ) -> Path:
         """
         Download Wikipedia dataset.
 
@@ -267,7 +428,6 @@ class DatasetDownloader:
         try:
             from datasets import load_dataset
 
-            # Load Wikipedia dataset (streaming mode)
             dataset = load_dataset(
                 "wikipedia",
                 "20220301.en",
@@ -275,26 +435,22 @@ class DatasetDownloader:
                 streaming=True
             )
 
+            dataset_dir.mkdir(parents=True, exist_ok=True)
             items_staged = 0
+            effective_max = max_items or 10000
 
             for item in dataset:
-                if items_staged >= self.config.max_items:
+                if items_staged >= effective_max:
                     break
 
                 doc_id = item.get('id', f"wiki_{items_staged}")
                 title = item.get('title', '')
                 text = item.get('text', '')
-
-                # Combine title and text
                 content = f"# {title}\n\n{text}"
 
-                # Stage to S3
-                s3_key = f"{self.config.s3_prefix}/wikipedia/articles/{doc_id}.txt"
-                await self._upload_text_to_s3(
-                    content=content,
-                    s3_key=s3_key,
-                    metadata={'title': title}
-                )
+                doc_path = dataset_dir / "articles" / f"{doc_id}.txt"
+                doc_path.parent.mkdir(parents=True, exist_ok=True)
+                doc_path.write_text(content, encoding='utf-8')
 
                 items_staged += 1
 
@@ -302,279 +458,103 @@ class DatasetDownloader:
                     logger.info(f"Staged {items_staged} Wikipedia articles")
 
             logger.info(f"Wikipedia download complete: {items_staged} articles")
-            return items_staged
+            return dataset_dir
 
         except ImportError:
             logger.error("datasets library not installed. Run: pip install datasets")
-            raise ProcessingError("Missing dependency: datasets")
-
-    # ==================== Image Dataset Downloaders ====================
-
-    async def _download_coco(self) -> int:
-        """
-        Download COCO dataset.
-
-        Downloads COCO 2017 validation set (5K images).
-        Reference: https://cocodataset.org/
-        """
-        logger.info("Downloading COCO dataset...")
-
-        # COCO 2017 validation images
-        images_url = "http://images.cocodataset.org/zips/val2017.zip"
-
-        # Download images
-        images_zip = self.cache_dir / "coco_val2017.zip"
-        if not images_zip.exists():
-            await self._download_file_http(images_url, images_zip)
-
-        # Extract and stage images
-        items_staged = 0
-
-        with zipfile.ZipFile(images_zip, 'r') as zip_ref:
-            image_files = [f for f in zip_ref.namelist() if f.endswith('.jpg')]
-
-            for image_file in image_files[:self.config.max_items]:
-                # Extract image
-                image_data = zip_ref.read(image_file)
-
-                # Get image ID
-                image_id = Path(image_file).stem
-
-                # Upload to S3
-                s3_key = f"{self.config.s3_prefix}/coco/images/{image_id}.jpg"
-                await self._upload_bytes_to_s3(
-                    data=image_data,
-                    s3_key=s3_key,
-                    content_type="image/jpeg",
-                    metadata={'dataset': 'coco', 'split': 'val2017'}
-                )
-
-                items_staged += 1
-
-                if items_staged % 100 == 0:
-                    logger.info(f"Staged {items_staged} COCO images")
-
-        logger.info(f"COCO download complete: {items_staged} images")
-        return items_staged
-
-    # ==================== Audio Dataset Downloaders ====================
-
-    async def _download_librispeech(self) -> int:
-        """
-        Download LibriSpeech dataset.
-
-        Downloads LibriSpeech test-clean subset (2.6K utterances).
-        Reference: https://www.openslr.org/12
-        """
-        logger.info("Downloading LibriSpeech dataset...")
-
-        # LibriSpeech test-clean subset
-        test_url = "https://www.openslr.org/resources/12/test-clean.tar.gz"
-
-        # Download tar file
-        tar_file = self.cache_dir / "librispeech-test-clean.tar.gz"
-        if not tar_file.exists():
-            await self._download_file_http(test_url, tar_file)
-
-        # Extract and stage audio files
-        items_staged = 0
-
-        with tarfile.open(tar_file, 'r:gz') as tar:
-            for member in tar.getmembers():
-                if items_staged >= self.config.max_items:
-                    break
-
-                if member.name.endswith('.flac'):
-                    # Extract audio file
-                    audio_file = tar.extractfile(member)
-                    if not audio_file:
-                        continue
-
-                    audio_data = audio_file.read()
-
-                    # Get utterance ID
-                    utterance_id = Path(member.name).stem
-
-                    # Upload to S3
-                    s3_key = f"{self.config.s3_prefix}/librispeech/audio/{utterance_id}.flac"
-                    await self._upload_bytes_to_s3(
-                        data=audio_data,
-                        s3_key=s3_key,
-                        content_type="audio/flac",
-                        metadata={'dataset': 'librispeech', 'split': 'test-clean'}
-                    )
-
-                    items_staged += 1
-
-                    if items_staged % 100 == 0:
-                        logger.info(f"Staged {items_staged} LibriSpeech audio files")
-
-        logger.info(f"LibriSpeech download complete: {items_staged} audio files")
-        return items_staged
-
-    # ==================== Video Dataset Downloaders ====================
-
-    async def _download_msr_vtt(self) -> int:
-        """
-        Download MSR-VTT dataset.
-
-        Note: MSR-VTT requires manual download. This implementation
-        assumes videos are already downloaded locally.
-        """
-        logger.info("MSR-VTT requires manual download.")
-        logger.info("Visit: http://ms-multimedia-challenge.com/2017/dataset")
-
-        # Check if videos exist locally
-        msr_vtt_dir = self.cache_dir / "msr-vtt"
-        if not msr_vtt_dir.exists():
-            raise ProcessingError(
-                f"MSR-VTT videos not found at {msr_vtt_dir}. "
-                f"Please download manually."
-            )
-
-        # Stage local videos to S3
-        items_staged = 0
-        video_files = list(msr_vtt_dir.glob("*.mp4"))
-
-        for video_file in video_files[:self.config.max_items]:
-            with open(video_file, 'rb') as f:
-                video_data = f.read()
-
-            video_id = video_file.stem
-
-            s3_key = f"{self.config.s3_prefix}/msr_vtt/videos/{video_id}.mp4"
-            await self._upload_bytes_to_s3(
-                data=video_data,
-                s3_key=s3_key,
-                content_type="video/mp4",
-                metadata={'dataset': 'msr-vtt', 'split': 'test'}
-            )
-
-            items_staged += 1
-
-            if items_staged % 10 == 0:
-                logger.info(f"Staged {items_staged} MSR-VTT videos")
-
-        logger.info(f"MSR-VTT staging complete: {items_staged} videos")
-        return items_staged
+            raise
 
     # ==================== Helper Methods ====================
 
-    async def _download_file_http(self, url: str, dest_path: Path):
-        """Download file from URL using Python requests (not shell commands)."""
-        logger.info(f"Downloading {url} to {dest_path}")
+    async def _download_file(
+        self,
+        url: str,
+        output_path: Path,
+        dataset_name: str,
+        progress_callback: Callable[[DownloadProgress], None] | None = None
+    ) -> None:
+        """Download a file with progress tracking."""
+        import time
 
-        try:
-            import requests
+        def _download():
             response = requests.get(url, stream=True, timeout=300)
             response.raise_for_status()
 
-            with open(dest_path, 'wb') as f:
+            total_bytes = int(response.headers.get('content-length', 0))
+            downloaded_bytes = 0
+            start_time = time.time()
+
+            with open(output_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_bytes += len(chunk)
 
-            logger.info(f"Download complete: {dest_path}")
+                        if progress_callback:
+                            elapsed = time.time() - start_time
+                            speed_mbps = (downloaded_bytes / elapsed / 1024 / 1024) if elapsed > 0 else 0
+                            remaining_bytes = total_bytes - downloaded_bytes
+                            eta_seconds = (remaining_bytes / (downloaded_bytes / elapsed)) if downloaded_bytes > 0 else 0
 
-        except Exception as e:
-            raise ProcessingError(f"Download failed: {e}")
+                            progress_callback(DownloadProgress(
+                                dataset_name=dataset_name,
+                                total_bytes=total_bytes,
+                                downloaded_bytes=downloaded_bytes,
+                                progress_percentage=(downloaded_bytes / total_bytes * 100) if total_bytes > 0 else 0,
+                                download_speed_mbps=speed_mbps,
+                                eta_seconds=eta_seconds,
+                                started_at=datetime.utcfromtimestamp(start_time),
+                                status="downloading"
+                            ))
 
-    async def _upload_text_to_s3(
-        self,
-        content: str,
-        s3_key: str,
-        metadata: Optional[Dict[str, str]] = None
-    ):
-        """Upload text content to S3."""
-        try:
-            await asyncio.to_thread(
-                self.s3_client.put_object,
-                Bucket=self.config.s3_bucket,
-                Key=s3_key,
-                Body=content.encode('utf-8'),
-                ContentType='text/plain',
-                Metadata=metadata or {}
-            )
-        except ClientError as e:
-            logger.error(f"Failed to upload to S3: {e}")
-            raise ProcessingError(f"S3 upload failed: {e}")
+        await asyncio.to_thread(_download)
 
-    async def _upload_bytes_to_s3(
-        self,
-        data: bytes,
-        s3_key: str,
-        content_type: str,
-        metadata: Optional[Dict[str, str]] = None
-    ):
-        """Upload binary data to S3."""
-        try:
-            await asyncio.to_thread(
-                self.s3_client.put_object,
-                Bucket=self.config.s3_bucket,
-                Key=s3_key,
-                Body=data,
-                ContentType=content_type,
-                Metadata=metadata or {}
-            )
-        except ClientError as e:
-            logger.error(f"Failed to upload to S3: {e}")
-            raise ProcessingError(f"S3 upload failed: {e}")
+    async def _extract_archive(self, archive_path: Path, extract_dir: Path) -> None:
+        """Extract an archive file."""
+        def _extract():
+            if archive_path.suffix == '.zip' or str(archive_path).endswith('.zip'):
+                with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                    zip_ref.extractall(extract_dir)
+            elif str(archive_path).endswith('.tar.gz') or str(archive_path).endswith('.tgz'):
+                with tarfile.open(archive_path, 'r:gz') as tar_ref:
+                    tar_ref.extractall(extract_dir)
+            else:
+                raise ValueError(f"Unsupported archive format: {archive_path}")
 
+        await asyncio.to_thread(_extract)
 
-# Dataset registry for easy access
-RECOMMENDED_DATASETS = {
-    "text": {
-        "ms_marco_10k": DatasetConfig(
-            dataset_type=DatasetType.MS_MARCO,
-            max_items=10000
-        ),
-        "ms_marco_100k": DatasetConfig(
-            dataset_type=DatasetType.MS_MARCO,
-            max_items=100000
-        ),
-        "wikipedia_10k": DatasetConfig(
-            dataset_type=DatasetType.WIKIPEDIA,
-            max_items=10000
-        ),
-    },
-    "image": {
-        "coco_5k": DatasetConfig(
-            dataset_type=DatasetType.COCO,
-            max_items=5000
-        ),
-    },
-    "audio": {
-        "librispeech_2k": DatasetConfig(
-            dataset_type=DatasetType.LIBRISPEECH,
-            max_items=2600
-        ),
-    },
-    "video": {
-        "msr_vtt_1k": DatasetConfig(
-            dataset_type=DatasetType.MSR_VTT,
-            max_items=1000
-        ),
-    }
-}
+    def get_dataset_manifest(self, dataset_dir: Path) -> dict[str, Any]:
+        """
+        Generate manifest for a dataset directory.
 
+        Args:
+            dataset_dir: Dataset directory
 
-def get_dataset_config(dataset_name: str) -> DatasetConfig:
-    """
-    Get dataset configuration by name.
+        Returns:
+            Manifest dictionary with file list and metadata
+        """
+        files = list(dataset_dir.rglob("*"))
+        files = [f for f in files if f.is_file()]
 
-    Args:
-        dataset_name: Name from RECOMMENDED_DATASETS
+        total_size_bytes = sum(f.stat().st_size for f in files)
 
-    Returns:
-        DatasetConfig
+        manifest = {
+            "dataset_dir": str(dataset_dir),
+            "total_files": len(files),
+            "total_size_bytes": total_size_bytes,
+            "total_size_gb": round(total_size_bytes / 1024 / 1024 / 1024, 2),
+            "files": [
+                {
+                    "path": str(f.relative_to(dataset_dir)),
+                    "size_bytes": f.stat().st_size
+                }
+                for f in files
+            ]
+        }
 
-    Example:
-        config = get_dataset_config("ms_marco_100k")
-    """
-    for modality, datasets in RECOMMENDED_DATASETS.items():
-        if dataset_name in datasets:
-            return datasets[dataset_name]
+        return manifest
 
-    raise ValueError(
-        f"Dataset not found: {dataset_name}. "
-        f"Available: {list(RECOMMENDED_DATASETS.keys())}"
-    )
+    @staticmethod
+    def list_available_datasets() -> list[dict[str, Any]]:
+        """List all available datasets."""
+        return DatasetRegistry.list_datasets()
