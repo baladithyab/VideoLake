@@ -19,9 +19,9 @@ This guide covers the complete development environment setup for S3Vector, inclu
   curl -LsSf https://astral.sh/uv/install.sh | sh
   ```
 
-### Recommended Tools
+### Required Tools
 
-- **bun** - Fast JavaScript runtime and package manager (recommended for frontend)
+- **bun** - Fast JavaScript runtime and package manager (required for frontend)
   ```bash
   curl -fsSL https://bun.sh/install | bash
   ```

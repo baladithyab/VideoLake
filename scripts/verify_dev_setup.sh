@@ -204,7 +204,7 @@ else
     echo "3. Install Terraform: https://www.terraform.io/downloads"
     echo "4. Install AWS CLI: https://aws.amazon.com/cli/"
     echo "5. Install uv (required): curl -LsSf https://astral.sh/uv/install.sh | sh"
-    echo "6. Install bun (recommended): curl -fsSL https://bun.sh/install | bash"
+    echo "6. Install bun (required): curl -fsSL https://bun.sh/install | bash"
     echo "7. Configure AWS credentials: aws configure"
     echo "8. Copy .env.example to .env and configure"
     echo "9. Install Python dependencies: uv sync"
