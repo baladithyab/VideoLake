@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
+import { Checkbox } from '../ui/checkbox';
 import { useBenchmark } from '../../contexts/BenchmarkContext';
 import { toast } from 'react-hot-toast';
 import type { BenchmarkResult } from '../../types/benchmark';
@@ -271,11 +272,10 @@ export const BenchmarkHistoryPage: React.FC = () => {
                     <div className="flex items-start gap-4">
                       {/* Selection Checkbox */}
                       <div className="pt-1">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={isSelected}
-                          onChange={() => toggleBenchmarkSelection(benchmark.id)}
-                          className="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
+                          onCheckedChange={() => toggleBenchmarkSelection(benchmark.id)}
+                          className="h-5 w-5 cursor-pointer"
                           onClick={(e) => e.stopPropagation()}
                         />
                       </div>

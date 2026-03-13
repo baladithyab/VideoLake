@@ -6,6 +6,7 @@ import { VideoPlayer } from '../VideoPlayer';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { Input } from '../ui/input';
 import { useSearch } from '../../contexts/SearchContext';
 import { toast } from 'react-hot-toast';
 import type { SearchQuery } from '../../types/search';
@@ -251,7 +252,7 @@ export const DemoSearchPage: React.FC = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Minimum Score: {scoreFilter[0]}%
                       </label>
-                      <input
+                      <Input
                         type="range"
                         min="0"
                         max="100"
