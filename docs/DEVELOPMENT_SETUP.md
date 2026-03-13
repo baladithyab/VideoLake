@@ -12,12 +12,14 @@ This guide covers the complete development environment setup for S3Vector, inclu
 - **AWS CLI v2** - AWS service interaction
 - **Git** - Version control
 
-### Recommended Tools
+### Required Package Managers
 
-- **uv** - Fast Python package installer (recommended over pip)
+- **uv** - Python package manager (required)
   ```bash
   curl -LsSf https://astral.sh/uv/install.sh | sh
   ```
+
+### Recommended Tools
 
 - **bun** - Fast JavaScript runtime and package manager (alternative to npm)
   ```bash
@@ -53,31 +55,14 @@ Required variables:
 
 ### 3. Install Python Dependencies
 
-#### Option A: Using uv (Recommended - Fast)
+Install all dependencies including development tools with uv:
 
 ```bash
-# Install from pyproject.toml
-uv pip install -e .
+# Install all dependencies (including dev extras)
+uv sync --all-extras
 
-# Or install from requirements.txt
-uv pip install -r requirements.txt
-```
-
-#### Option B: Using pip
-
-```bash
-pip install -e .
-# Or: pip install -r requirements.txt
-```
-
-#### Development Dependencies
-
-```bash
-# With uv
-uv pip install -e ".[dev]"
-
-# With pip
-pip install -e ".[dev]"
+# Or install only production dependencies
+uv sync
 ```
 
 ### 4. Install Frontend Dependencies
@@ -302,23 +287,18 @@ The project uses `pyproject.toml` for dependency specification and `requirements
    ]
    ```
 
-2. Update pinned requirements:
+2. Update lockfile and install:
    ```bash
-   uv pip compile pyproject.toml -o requirements.txt
-   # Or manually update requirements.txt
-   ```
-
-3. Install:
-   ```bash
-   uv pip install -r requirements.txt
+   uv lock
+   uv sync
    ```
 
 #### Updating Dependencies
 
 ```bash
 # Update all packages to latest compatible versions
-uv pip compile --upgrade pyproject.toml -o requirements.txt
-uv pip install -r requirements.txt
+uv lock --upgrade
+uv sync
 ```
 
 ### Frontend Dependencies
@@ -417,7 +397,8 @@ S3Vector/
 ├── scripts/              # Utility scripts
 ├── docs/                 # Documentation
 ├── pyproject.toml        # Python project config
-├── requirements.txt      # Pinned Python dependencies
+├── uv.lock               # Locked Python dependencies
+├── .python-version       # Python version specification
 └── run_api.py           # API server entry point
 ```
 

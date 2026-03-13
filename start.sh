@@ -30,14 +30,13 @@ if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" 
 fi
 echo "✅ Python $PYTHON_VERSION detected"
 
-# Detect package manager preference (uv > pip)
-if command -v uv &> /dev/null; then
-    PYTHON_PKG_MANAGER="uv"
-    echo "✅ Using uv for Python package management"
-else
-    PYTHON_PKG_MANAGER="pip"
-    echo "ℹ️  Using pip (consider installing uv for faster installs: curl -LsSf https://astral.sh/uv/install.sh | sh)"
+# Check for uv (required)
+if ! command -v uv &> /dev/null; then
+    echo "❌ uv is not installed. Please install uv:"
+    echo "   curl -LsSf https://astral.sh/uv/install.sh | sh"
+    exit 1
 fi
+echo "✅ Using uv for Python package management"
 
 # Check if Node.js is installed
 if ! command -v node &> /dev/null; then

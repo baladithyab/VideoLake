@@ -27,14 +27,8 @@
 git clone <repository-url>
 cd S3Vector
 
-# Create development virtual environment
-python -m venv venv-dev
-source venv-dev/bin/activate  # Linux/macOS
-# venv-dev\Scripts\activate     # Windows
-
-# Install development dependencies
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
+# Install all dependencies (including dev) with uv
+uv sync --all-extras
 ```
 
 ### Development Dependencies
@@ -406,18 +400,18 @@ git commit -m "feat: add support for new embedding model"
 
 ```bash
 # Run specific test categories
-pytest tests/test_s3_vector_storage.py -v              # Unit tests
-pytest tests/integration/ -v                          # Integration tests
-pytest tests/test_end_to_end.py -v                   # End-to-end tests
+uv run pytest tests/test_s3_vector_storage.py -v              # Unit tests
+uv run pytest tests/integration/ -v                          # Integration tests
+uv run pytest tests/test_end_to_end.py -v                   # End-to-end tests
 
 # Run with coverage
-pytest --cov=src --cov-report=html tests/
+uv run pytest --cov=src --cov-report=html tests/
 
 # Run specific test with debugging
-pytest tests/test_specific.py::test_function -v -s --pdb
+uv run pytest tests/test_specific.py::test_function -v -s --pdb
 
 # Performance testing
-pytest tests/performance/ -v --benchmark-only
+uv run pytest tests/performance/ -v --benchmark-only
 ```
 
 ### 3. Local Development with Mocks

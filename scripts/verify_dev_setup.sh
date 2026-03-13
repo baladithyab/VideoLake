@@ -61,8 +61,7 @@ check_python_package() {
 
 echo -e "${BLUE}System Tools:${NC}"
 check_command "python3" "true"
-check_command "uv" "false"
-check_command "pip" "true"
+check_command "uv" "true"
 check_command "node" "true"
 check_command "bun" "false"
 check_command "npm" "false"
@@ -129,10 +128,10 @@ else
     ((ERRORS++))
 fi
 
-if [ -f "requirements.txt" ]; then
-    echo -e "${GREEN}✓${NC} requirements.txt exists"
+if [ -f "uv.lock" ]; then
+    echo -e "${GREEN}✓${NC} uv.lock exists"
 else
-    echo -e "${RED}✗${NC} requirements.txt not found"
+    echo -e "${RED}✗${NC} uv.lock not found"
     ((ERRORS++))
 fi
 
@@ -205,11 +204,11 @@ else
     echo "2. Install Node.js 18+: https://nodejs.org/"
     echo "3. Install Terraform: https://www.terraform.io/downloads"
     echo "4. Install AWS CLI: https://aws.amazon.com/cli/"
-    echo "5. Install uv (recommended): curl -LsSf https://astral.sh/uv/install.sh | sh"
+    echo "5. Install uv (required): curl -LsSf https://astral.sh/uv/install.sh | sh"
     echo "6. Install bun (optional): curl -fsSL https://bun.sh/install | bash"
     echo "7. Configure AWS credentials: aws configure"
     echo "8. Copy .env.example to .env and configure"
-    echo "9. Install Python dependencies: uv pip install -r requirements.txt"
+    echo "9. Install Python dependencies: uv sync"
     echo "10. Install frontend dependencies: cd src/frontend && bun install"
     exit 1
 fi

@@ -206,8 +206,8 @@ For a complete production-ready deployment to AWS ECS/Fargate and S3/CloudFront,
 
 **Fast Path - Local Development (AWS S3Vector Only):**
 ```bash
-# 1. Install dependencies (uv/bun recommended for speed)
-uv pip install -e .  # Or: pip install -e .
+# 1. Install dependencies
+uv sync  # Install Python dependencies
 cd src/frontend && bun install  # Or: npm install
 cd ../..
 
@@ -338,17 +338,17 @@ This platform implements several cost optimization strategies with **proven resu
 ## Requirements
 
 ### **Environment**
-- Python 3.11+ (with uv recommended for fast package management)
+- Python 3.10+
+- **uv** (required for Python package management)
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
 - Node.js 18+ (with bun recommended for fast package management)
 - AWS CLI configured with appropriate permissions
 - Access to AWS Bedrock models (Titan Text V2, TwelveLabs Marengo)
 - S3 Vector service access in supported regions
 
-**Modern Tooling:**
-- **uv**: Fast Python package installer (10-100x faster than pip)
-  ```bash
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  ```
+**Recommended Tooling:**
 - **bun**: Fast JavaScript runtime and package manager (10x faster than npm)
   ```bash
   curl -fsSL https://bun.sh/install | bash
@@ -371,12 +371,12 @@ The project includes comprehensive test coverage:
 
 ```bash
 # Run all tests
-python -m pytest tests/ -v
+uv run pytest tests/ -v
 
 # Run specific test categories
-python -m pytest tests/test_s3_vector_storage.py -v           # S3 Vector tests
-python -m pytest tests/test_video_embedding_storage.py -v    # Video integration tests
-python -m pytest tests/integration_test_end_to_end_text_processing.py -v  # End-to-end tests
+uv run pytest tests/test_s3_vector_storage.py -v           # S3 Vector tests
+uv run pytest tests/test_video_embedding_storage.py -v    # Video integration tests
+uv run pytest tests/integration_test_end_to_end_text_processing.py -v  # End-to-end tests
 ```
 
 ### **Test Coverage**

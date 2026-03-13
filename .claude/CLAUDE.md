@@ -151,12 +151,12 @@ bun run typecheck  # No TypeScript errors
 
 ## Your Assignment
 
-- **Agent Name:** bench-storage-builder
-- **Task ID:** S3Vector-2eaf
+- **Agent Name:** uv-config-scripts
+- **Task ID:** S3Vector-2fae
 - **Spec:** No spec file provided
-- **Branch:** overstory/bench-storage-builder/S3Vector-2eaf
-- **Worktree:** /home/ubuntu/S3Vector/.overstory/worktrees/bench-storage-builder
-- **Parent:** benchmark-lead
+- **Branch:** overstory/uv-config-scripts/S3Vector-2fae
+- **Worktree:** /home/ubuntu/S3Vector/.overstory/worktrees/uv-config-scripts
+- **Parent:** uv-migrate
 - **Depth:** 2
 
 No task spec was provided. Check your mail or ask your parent agent for details.
@@ -167,16 +167,16 @@ No task spec was provided. Check your mail or ask your parent agent for details.
 
 ## Working Directory
 
-Your worktree root is: `/home/ubuntu/S3Vector/.overstory/worktrees/bench-storage-builder`
+Your worktree root is: `/home/ubuntu/S3Vector/.overstory/worktrees/uv-config-scripts`
 
 **CRITICAL**: All file operations MUST use paths within this directory.
-- Use paths relative to your worktree root, or absolute paths starting with `/home/ubuntu/S3Vector/.overstory/worktrees/bench-storage-builder`
+- Use paths relative to your worktree root, or absolute paths starting with `/home/ubuntu/S3Vector/.overstory/worktrees/uv-config-scripts`
 - Writing to the canonical repo root instead of your worktree is a critical error (PATH_BOUNDARY_VIOLATION)
 - You may READ files from the canonical repo for context, but all WRITES go to your worktree
 
 ## File Scope (exclusive ownership)
 
-These paths are relative to your worktree root: `/home/ubuntu/S3Vector/.overstory/worktrees/bench-storage-builder`
+These paths are relative to your worktree root: `/home/ubuntu/S3Vector/.overstory/worktrees/uv-config-scripts`
 
 You may ONLY modify the files listed below within your worktree. Do not touch any other files.
 If you need changes outside your scope, send mail to your parent agent
@@ -194,26 +194,26 @@ No specific expertise domains configured
 
 ## Communication
 
-Use `ov mail` for all communication. Your address is **bench-storage-builder**.
+Use `ov mail` for all communication. Your address is **uv-config-scripts**.
 
 ```bash
 # Check your inbox (do this regularly)
-ov mail check --agent bench-storage-builder
+ov mail check --agent uv-config-scripts
 
 # Send a status update to your parent
-ov mail send --to benchmark-lead --subject "status" \
-  --body "Progress update here" --type status --agent bench-storage-builder
+ov mail send --to uv-migrate --subject "status" \
+  --body "Progress update here" --type status --agent uv-config-scripts
 
 # Ask a question
-ov mail send --to benchmark-lead --subject "question" \
-  --body "Your question here" --type question --priority high --agent bench-storage-builder
+ov mail send --to uv-migrate --subject "question" \
+  --body "Your question here" --type question --priority high --agent uv-config-scripts
 
 # Report completion
-ov mail send --to benchmark-lead --subject "done" \
-  --body "Summary of what was done" --type result --agent bench-storage-builder
+ov mail send --to uv-migrate --subject "done" \
+  --body "Summary of what was done" --type result --agent uv-config-scripts
 
 # Reply to a message
-ov mail reply <message-id> --body "Your reply" --agent bench-storage-builder
+ov mail reply <message-id> --body "Your reply" --agent uv-config-scripts
 ```
 
 ## Spawning Sub-Workers
@@ -227,20 +227,20 @@ Before reporting completion, you MUST pass all quality gates:
 1. **Tests:** `bun test` — all tests must pass
 2. **Lint:** `bun run lint` — zero errors
 3. **Typecheck:** `bun run typecheck` — no TypeScript errors
-4. **Commit:** all changes committed to your branch (overstory/bench-storage-builder/S3Vector-2eaf)
-5. **Record mulch learnings:** `ml record <domain> --type <convention|pattern|failure|decision> --description "..." --outcome-status success --outcome-agent bench-storage-builder` — capture insights from your work
-6. **Signal completion:** send `worker_done` mail to benchmark-lead: `ov mail send --to benchmark-lead --subject "Worker done: S3Vector-2eaf" --body "Quality gates passed." --type worker_done --agent bench-storage-builder`
-7. **Close issue:** `sd close S3Vector-2eaf --reason "summary of changes"`
+4. **Commit:** all changes committed to your branch (overstory/uv-config-scripts/S3Vector-2fae)
+5. **Record mulch learnings:** `ml record <domain> --type <convention|pattern|failure|decision> --description "..." --outcome-status success --outcome-agent uv-config-scripts` — capture insights from your work
+6. **Signal completion:** send `worker_done` mail to uv-migrate: `ov mail send --to uv-migrate --subject "Worker done: S3Vector-2fae" --body "Quality gates passed." --type worker_done --agent uv-config-scripts`
+7. **Close issue:** `sd close S3Vector-2fae --reason "summary of changes"`
 
 Do NOT push to the canonical branch. Your work will be merged by the
 coordinator via `ov merge`.
 
 ## Constraints
 
-- **WORKTREE ISOLATION**: All writes MUST target files within your worktree at `/home/ubuntu/S3Vector/.overstory/worktrees/bench-storage-builder`
+- **WORKTREE ISOLATION**: All writes MUST target files within your worktree at `/home/ubuntu/S3Vector/.overstory/worktrees/uv-config-scripts`
 - NEVER write to the canonical repo root — all writes go to your worktree copy
 - Only modify files in your File Scope
-- Commit only to your branch: overstory/bench-storage-builder/S3Vector-2eaf
+- Commit only to your branch: overstory/uv-config-scripts/S3Vector-2fae
 - Never push to the canonical branch
 - Report completion via `sd close` AND `ov mail send --type result`
 - If you encounter a blocking issue, send mail with `--priority urgent --type error`
