@@ -10,8 +10,12 @@ terraform {
 # -----------------------------------------------------------------------------
 # Data Sources
 # -----------------------------------------------------------------------------
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
+
 data "aws_vpc" "selected" {
-  count = var.vpc_id == null ? 1 : 0
+  count   = var.vpc_id == null ? 1 : 0
   default = true
 }
 
@@ -127,14 +131,35 @@ resource "aws_iam_role_policy" "task_policy" {
       {
         Effect = "Allow"
         Action = [
-          "s3:*",
-          "bedrock:InvokeModel",
-          "sagemaker:InvokeEndpoint",
+          "s3:*"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.s3_bucket_name}",
+          "arn:aws:s3:::${var.s3_bucket_name}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel"
+        ]
+        Resource = "arn:aws:bedrock:${data.aws_region.current.name}::foundation-model/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sagemaker:InvokeEndpoint"
+        ]
+        Resource = "arn:aws:sagemaker:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:endpoint/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "elasticfilesystem:ClientMount",
           "elasticfilesystem:ClientWrite",
           "elasticfilesystem:DescribeMountTargets"
         ]
-        Resource = "*"
+        Resource = var.efs_id != "" ? "arn:aws:elasticfilesystem:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:file-system/${var.efs_id}" : "*"
       }
     ]
   })
@@ -226,14 +251,51 @@ resource "aws_lb_target_group" "main" {
   tags = var.tags
 }
 
+# ACM Certificate (if domain_name provided and no certificate ARN)
+resource "aws_acm_certificate" "main" {
+  count             = var.domain_name != null && var.acm_certificate_arn == null ? 1 : 0
+  domain_name       = var.domain_name
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = var.tags
+}
+
+resource "aws_lb_listener" "https" {
+  count             = var.acm_certificate_arn != null || var.domain_name != null ? 1 : 0
+  load_balancer_arn = aws_lb.main.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = var.acm_certificate_arn != null ? var.acm_certificate_arn : aws_acm_certificate.main[0].arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.main.arn
+  }
+}
+
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
   protocol          = "HTTP"
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.main.arn
+    type = var.acm_certificate_arn != null || var.domain_name != null ? "redirect" : "forward"
+
+    dynamic "redirect" {
+      for_each = var.acm_certificate_arn != null || var.domain_name != null ? [1] : []
+      content {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+
+    target_group_arn = var.acm_certificate_arn == null && var.domain_name == null ? aws_lb_target_group.main.arn : null
   }
 }
 
