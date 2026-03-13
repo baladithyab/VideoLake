@@ -16,7 +16,8 @@ from src.services.vector_store_provider import (
     VectorStoreState,
     VectorStoreConfig,
     VectorStoreStatus,
-    VectorStoreProviderFactory
+    VectorStoreProviderFactory,
+    VectorStoreCapabilities
 )
 from src.services.opensearch_integration import OpenSearchIntegrationManager
 from src.utils.aws_clients import aws_client_factory
@@ -44,6 +45,27 @@ class OpenSearchProvider(VectorStoreProvider):
         config_manager = get_unified_config_manager()
         self.region = config_manager.config.aws.region
     
+    def _parse_domain_index(self, name: str) -> tuple:
+        """
+        Parse name parameter to extract domain and index names.
+
+        Args:
+            name: Either domain name or "domain/index" format
+
+        Returns:
+            Tuple of (domain_name, index_name)
+        """
+        if "/" in name:
+            parts = name.split("/", 1)
+            domain_name = parts[0]
+            index_name = parts[1]
+        else:
+            # Default to domain name with "vectors" index
+            domain_name = name
+            index_name = "vectors"
+
+        return domain_name, index_name
+
     @property
     def store_type(self) -> VectorStoreType:
         """Return OPENSEARCH as the store type."""
@@ -261,22 +283,80 @@ class OpenSearchProvider(VectorStoreProvider):
     def upsert_vectors(self, name: str, vectors: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Insert or update vectors in an OpenSearch index.
-        
+
         Args:
-            name: Name of the domain
-            vectors: List of vector objects
-            
+            name: Name of the domain (will use default index) or "domain/index" format
+            vectors: List of vector objects with 'id', 'values', and optional 'metadata'
+
         Returns:
             Result dictionary with upsert statistics
         """
         try:
-            # This would require OpenSearch client connection and index operations
-            logger.warning("upsert_vectors requires OpenSearch client - use opensearch_manager directly")
+            from opensearchpy import OpenSearch, RequestsHttpConnection
+            from opensearchpy.helpers import bulk
+            from requests_aws4auth import AWS4Auth
+            import boto3
+
+            # Parse domain and index name
+            domain_name, index_name = self._parse_domain_index(name)
+
+            # Get domain endpoint
+            domain_status = self.get_status(domain_name)
+            if domain_status.state != VectorStoreState.AVAILABLE:
+                raise Exception(f"Domain {domain_name} is not available: {domain_status.state}")
+
+            endpoint = domain_status.endpoint
+            if not endpoint:
+                raise Exception(f"Domain {domain_name} has no endpoint")
+
+            # Setup AWS authentication
+            credentials = boto3.Session().get_credentials()
+            awsauth = AWS4Auth(
+                credentials.access_key,
+                credentials.secret_key,
+                self.region,
+                'es',
+                session_token=credentials.token
+            )
+
+            # Create OpenSearch client
+            os_client = OpenSearch(
+                hosts=[{'host': endpoint, 'port': 443}],
+                http_auth=awsauth,
+                use_ssl=True,
+                verify_certs=True,
+                connection_class=RequestsHttpConnection,
+                timeout=30
+            )
+
+            # Prepare bulk actions
+            actions = []
+            for vector in vectors:
+                doc = {
+                    "_index": index_name,
+                    "_id": vector.get("id", vector.get("vectorId")),
+                    "_source": {
+                        "embedding": vector.get("values", vector.get("vector")),
+                        "metadata": vector.get("metadata", {})
+                    }
+                }
+                actions.append(doc)
+
+            # Execute bulk upsert
+            success_count, errors = bulk(os_client, actions, raise_on_error=False)
+
+            return {
+                "success": len(errors) == 0,
+                "upserted_count": success_count,
+                "errors": errors if errors else []
+            }
+
+        except ImportError as e:
+            logger.error(f"Missing required libraries: {e}")
             return {
                 "success": False,
-                "message": "Use OpenSearchIntegrationManager for vector operations"
+                "error": f"Missing opensearchpy or requests_aws4auth library: {str(e)}"
             }
-            
         except Exception as e:
             logger.error(f"Failed to upsert vectors: {e}")
             return {
@@ -288,25 +368,120 @@ class OpenSearchProvider(VectorStoreProvider):
              filter_metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Query an OpenSearch index for similar vectors.
-        
+
         Args:
-            name: Name of the domain
+            name: Name of the domain or "domain/index" format
             query_vector: Query vector
             top_k: Number of results
-            filter_metadata: Optional filters
-            
+            filter_metadata: Optional metadata filters
+
         Returns:
             List of similar vectors with scores
         """
         try:
-            # This would require OpenSearch client connection and query operations
-            logger.warning("query requires OpenSearch client - use opensearch_manager directly")
+            from opensearchpy import OpenSearch, RequestsHttpConnection
+            from requests_aws4auth import AWS4Auth
+            import boto3
+
+            # Parse domain and index name
+            domain_name, index_name = self._parse_domain_index(name)
+
+            # Get domain endpoint
+            domain_status = self.get_status(domain_name)
+            if domain_status.state != VectorStoreState.AVAILABLE:
+                raise Exception(f"Domain {domain_name} is not available: {domain_status.state}")
+
+            endpoint = domain_status.endpoint
+            if not endpoint:
+                raise Exception(f"Domain {domain_name} has no endpoint")
+
+            # Setup AWS authentication
+            credentials = boto3.Session().get_credentials()
+            awsauth = AWS4Auth(
+                credentials.access_key,
+                credentials.secret_key,
+                self.region,
+                'es',
+                session_token=credentials.token
+            )
+
+            # Create OpenSearch client
+            os_client = OpenSearch(
+                hosts=[{'host': endpoint, 'port': 443}],
+                http_auth=awsauth,
+                use_ssl=True,
+                verify_certs=True,
+                connection_class=RequestsHttpConnection,
+                timeout=30
+            )
+
+            # Build knn query
+            query_body = {
+                "size": top_k,
+                "query": {
+                    "knn": {
+                        "embedding": {
+                            "vector": query_vector,
+                            "k": top_k
+                        }
+                    }
+                }
+            }
+
+            # Add metadata filters if provided
+            if filter_metadata:
+                query_body["query"] = {
+                    "bool": {
+                        "must": [query_body["query"]],
+                        "filter": [
+                            {"term": {f"metadata.{key}": value}}
+                            for key, value in filter_metadata.items()
+                        ]
+                    }
+                }
+
+            # Execute search
+            response = os_client.search(index=index_name, body=query_body)
+
+            # Transform results to standard format
+            results = []
+            for hit in response.get("hits", {}).get("hits", []):
+                results.append({
+                    "id": hit["_id"],
+                    "score": hit["_score"],
+                    "values": hit["_source"].get("embedding"),
+                    "metadata": hit["_source"].get("metadata", {})
+                })
+
+            return results
+
+        except ImportError as e:
+            logger.error(f"Missing required libraries: {e}")
             return []
-            
         except Exception as e:
             logger.error(f"Failed to query vectors: {e}")
             return []
     
+    def get_capabilities(self) -> VectorStoreCapabilities:
+        """
+        Return OpenSearch provider capabilities.
+
+        Returns:
+            VectorStoreCapabilities with OpenSearch specifications
+        """
+        return VectorStoreCapabilities(
+            max_dimension=16000,  # OpenSearch supports very large dimensions
+            max_vectors=None,  # Unlimited (depends on cluster size)
+            supports_metadata_filtering=True,
+            supports_hybrid_search=True,  # OpenSearch supports hybrid search
+            supports_batch_upsert=True,
+            estimated_cost_per_million_vectors=50.0,  # OpenSearch domain costs
+            typical_query_latency_ms=100.0,
+            supports_sparse_vectors=True,
+            supports_multi_vector=True,
+            max_batch_size=5000
+        )
+
     def validate_connectivity(self) -> Dict[str, Any]:
         """
         Validate connectivity to Amazon OpenSearch service.
