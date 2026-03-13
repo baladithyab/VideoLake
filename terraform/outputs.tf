@@ -483,6 +483,36 @@ output "multimodal_platform_summary" {
     support_services = {
       sample_datasets = var.deploy_sample_datasets
       cost_estimator  = var.deploy_cost_estimator
+      monitoring      = var.deploy_monitoring
     }
   }
+}
+
+# =============================================================================
+# MONITORING OUTPUTS
+# =============================================================================
+
+output "monitoring_enabled" {
+  description = "Whether CloudWatch monitoring is deployed"
+  value       = var.deploy_monitoring
+}
+
+output "monitoring_alarms_topic_arn" {
+  description = "SNS topic ARN for monitoring alarms"
+  value       = var.deploy_monitoring ? module.monitoring[0].alarms_topic_arn : ""
+}
+
+output "monitoring_dashboard_name" {
+  description = "CloudWatch dashboard name"
+  value       = var.deploy_monitoring ? module.monitoring[0].dashboard_name : null
+}
+
+output "monitoring_dashboard_url" {
+  description = "URL to CloudWatch dashboard"
+  value       = var.deploy_monitoring ? module.monitoring[0].dashboard_url : null
+}
+
+output "monitoring_application_log_group" {
+  description = "CloudWatch log group for application logs"
+  value       = var.deploy_monitoring ? module.monitoring[0].application_log_group_name : ""
 }

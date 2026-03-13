@@ -614,3 +614,38 @@ module "cost_estimator" {
     Purpose   = "Infrastructure-Planning"
   }
 }
+
+# =============================================================================
+# MONITORING (Operations)
+# =============================================================================
+# Comprehensive CloudWatch monitoring for cost, health, and security.
+#
+# Features:
+# - Cost budget alarms
+# - Service health metrics (ECS, Lambda, OpenSearch)
+# - Security event tracking (unauthorized access)
+# - Unified CloudWatch dashboard
+#
+# DEFAULT: true (deployed)
+# Estimated cost: ~$3/month (dashboard) + $0.30/alarm/month
+# =============================================================================
+module "monitoring" {
+  count  = var.deploy_monitoring ? 1 : 0
+  source = "./modules/monitoring"
+
+  project_name           = var.project_name
+  alarm_email_endpoints  = var.monitoring_alarm_emails
+  enable_cost_alarms     = var.monitoring_enable_cost_alarms
+  monthly_cost_budget    = var.monitoring_monthly_budget
+  ecs_cluster_name       = var.deploy_videolake_platform ? module.videolake_backend.ecs_cluster_name : ""
+  s3_bucket_names        = concat([module.shared_bucket.bucket_name], var.deploy_s3vector ? [module.s3vector[0].vector_bucket_name] : [])
+  opensearch_domain_name = var.deploy_opensearch ? var.opensearch_domain_name : ""
+  lambda_function_names  = var.monitoring_lambda_functions
+  enable_dashboard       = var.monitoring_enable_dashboard
+  log_retention_days     = var.environment == "prod" ? 90 : 30
+
+  tags = {
+    Component = "Monitoring"
+    Purpose   = "Operations"
+  }
+}
