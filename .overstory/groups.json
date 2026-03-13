@@ -143,5 +143,17 @@
 		"status": "active",
 		"createdAt": "2026-03-13T06:01:15.449Z",
 		"completedAt": null
+	},
+	{
+		"id": "group-3d638e80",
+		"name": "cleanup-wave",
+		"memberIssueIds": [
+			"S3Vector-35ee",
+			"S3Vector-fb40",
+			"S3Vector-83b6"
+		],
+		"status": "active",
+		"createdAt": "2026-03-13T06:19:24.743Z",
+		"completedAt": null
 	}
 ]
