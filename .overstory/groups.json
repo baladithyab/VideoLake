@@ -105,5 +105,33 @@
 		"status": "active",
 		"createdAt": "2026-03-13T00:03:04.389Z",
 		"completedAt": null
+	},
+	{
+		"id": "group-f1fc2019",
+		"name": "architecture-review",
+		"memberIssueIds": [
+			"S3Vector-a548",
+			"S3Vector-d568",
+			"S3Vector-26f9",
+			"S3Vector-bff2"
+		],
+		"status": "active",
+		"createdAt": "2026-03-13T00:33:59.390Z",
+		"completedAt": null
+	},
+	{
+		"id": "group-7917e08a",
+		"name": "fix-wave",
+		"memberIssueIds": [
+			"S3Vector-eec4",
+			"S3Vector-98e7",
+			"S3Vector-c9d7",
+			"S3Vector-d504",
+			"S3Vector-bd2b",
+			"S3Vector-0f8c"
+		],
+		"status": "active",
+		"createdAt": "2026-03-13T00:55:26.006Z",
+		"completedAt": null
 	}
 ]
