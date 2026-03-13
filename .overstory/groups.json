@@ -169,5 +169,18 @@
 		"status": "active",
 		"createdAt": "2026-03-13T16:26:17.530Z",
 		"completedAt": null
+	},
+	{
+		"id": "group-2bd55006",
+		"name": "critical-fixes",
+		"memberIssueIds": [
+			"S3Vector-b663",
+			"S3Vector-bbb2",
+			"S3Vector-36b0",
+			"S3Vector-fc46"
+		],
+		"status": "active",
+		"createdAt": "2026-03-13T17:06:32.686Z",
+		"completedAt": null
 	}
 ]
