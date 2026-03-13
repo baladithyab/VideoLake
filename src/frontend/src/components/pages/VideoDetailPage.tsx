@@ -32,22 +32,20 @@ export const VideoDetailPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // In a real implementation, fetch video details from API
-    // For now, using mock data based on the video ID
     const fetchVideoDetails = async () => {
       setIsLoading(true);
       try {
-        // Mock data - in production, replace with actual API call
-        // const response = await api.getVideoDetails(id);
+        // TODO: Replace with actual API call - api.getVideoDetails(id)
+        // This endpoint should return: { id, title, s3Uri, duration, matches[], thumbnailUrl }
+        // Each match should include: { startTime, endTime, score, query, transcript }
 
-        // Simulating API call
+        // Temporary mock data for development
         await new Promise(resolve => setTimeout(resolve, 500));
-
         const mockDetails: VideoDetails = {
           id: id || 'unknown',
           title: `Video ${id}`,
           s3Uri: `s3://video-bucket/videos/${id}.mp4`,
-          duration: 204, // 3:24 in seconds
+          duration: 204,
           matches: [
             {
               startTime: 45,
@@ -68,7 +66,6 @@ export const VideoDetailPage: React.FC = () => {
         };
 
         setVideoDetails(mockDetails);
-        // Auto-select the first match
         if (mockDetails.matches.length > 0) {
           setCurrentMatch(mockDetails.matches[0]);
         }
@@ -113,7 +110,7 @@ export const VideoDetailPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>
     );
@@ -121,24 +118,22 @@ export const VideoDetailPage: React.FC = () => {
 
   if (!videoDetails) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-gray-500">Video not found</p>
-              <Button onClick={handleBack} className="mt-4">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Search
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-gray-500">Video not found</p>
+            <Button onClick={handleBack} className="mt-4">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Search
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div>
       {/* Header */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">

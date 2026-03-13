@@ -61,10 +61,13 @@ export const InfrastructurePage: React.FC = () => {
       deployed: deployment.status === 'deployed',
       endpoint: deployment.endpoint || null,
       status: deployment.status,
-      estimated_cost_monthly: deployment.status === 'deployed' ? 50 : null, // Mock cost
-      queries_24h: Math.floor(Math.random() * 5000), // Mock data
-      avg_latency_ms: Math.floor(Math.random() * 200) + 20, // Mock data
-      uptime_percent: 99.5 + Math.random() * 0.5 // Mock data
+      // TODO: Replace with actual cost data from API - api.getInfrastructureCosts()
+      estimated_cost_monthly: deployment.status === 'deployed' ? 50 : null,
+      // TODO: Replace with actual metrics from API - api.getStoreMetrics(name)
+      // Expected metrics: queries_24h, avg_latency_ms, uptime_percent
+      queries_24h: Math.floor(Math.random() * 5000),
+      avg_latency_ms: Math.floor(Math.random() * 200) + 20,
+      uptime_percent: 99.5 + Math.random() * 0.5
     }));
 
     const total_deployed = deployed_stores.filter(s => s.deployed).length;
@@ -72,14 +75,15 @@ export const InfrastructurePage: React.FC = () => {
     return {
       deployed_stores,
       total_deployed,
-      total_cost_monthly: total_deployed * 50, // Mock calculation
+      total_cost_monthly: total_deployed * 50,
       overall_status: total_deployed > 0 ? 'healthy' : 'down',
       uptime_percent: 99.8
     };
   }, [deployments]);
 
   useEffect(() => {
-    // Mock activity logs
+    // TODO: Replace with actual activity logs from API - api.getActivityLogs()
+    // Expected format: { id, timestamp, message, type: 'info' | 'warning' | 'success' }
     const mockLogs: ActivityLog[] = [
       {
         id: '1',
@@ -150,25 +154,23 @@ export const InfrastructurePage: React.FC = () => {
 
   if (operationId) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Card className="w-full">
-            <CardContent className="p-0">
-              <TerraformLogViewer
-                operationId={operationId}
-                vectorStore={activeStore}
-                operationType={operationType}
-                onClose={handleOperationClose}
-              />
-            </CardContent>
-          </Card>
-        </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Card className="w-full">
+          <CardContent className="p-0">
+            <TerraformLogViewer
+              operationId={operationId}
+              vectorStore={activeStore}
+              operationType={operationType}
+              onClose={handleOperationClose}
+            />
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div>
       {/* Header */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
