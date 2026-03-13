@@ -151,12 +151,12 @@ bun run typecheck  # No TypeScript errors
 
 ## Your Assignment
 
-- **Agent Name:** cleanup-root-dx
-- **Task ID:** S3Vector-6cb0
+- **Agent Name:** fix-overlap
+- **Task ID:** S3Vector-a12f
 - **Spec:** No spec file provided
-- **Branch:** overstory/cleanup-root-dx/S3Vector-6cb0
-- **Worktree:** /home/ubuntu/S3Vector/.overstory/worktrees/cleanup-root-dx
-- **Parent:** root-cleanup
+- **Branch:** overstory/fix-overlap/S3Vector-a12f
+- **Worktree:** /home/ubuntu/S3Vector/.overstory/worktrees/fix-overlap
+- **Parent:** test-rebase
 - **Depth:** 2
 
 No task spec was provided. Check your mail or ask your parent agent for details.
@@ -167,16 +167,16 @@ No task spec was provided. Check your mail or ask your parent agent for details.
 
 ## Working Directory
 
-Your worktree root is: `/home/ubuntu/S3Vector/.overstory/worktrees/cleanup-root-dx`
+Your worktree root is: `/home/ubuntu/S3Vector/.overstory/worktrees/fix-overlap`
 
 **CRITICAL**: All file operations MUST use paths within this directory.
-- Use paths relative to your worktree root, or absolute paths starting with `/home/ubuntu/S3Vector/.overstory/worktrees/cleanup-root-dx`
+- Use paths relative to your worktree root, or absolute paths starting with `/home/ubuntu/S3Vector/.overstory/worktrees/fix-overlap`
 - Writing to the canonical repo root instead of your worktree is a critical error (PATH_BOUNDARY_VIOLATION)
 - You may READ files from the canonical repo for context, but all WRITES go to your worktree
 
 ## File Scope (exclusive ownership)
 
-These paths are relative to your worktree root: `/home/ubuntu/S3Vector/.overstory/worktrees/cleanup-root-dx`
+These paths are relative to your worktree root: `/home/ubuntu/S3Vector/.overstory/worktrees/fix-overlap`
 
 You may ONLY modify the files listed below within your worktree. Do not touch any other files.
 If you need changes outside your scope, send mail to your parent agent
@@ -194,26 +194,26 @@ No specific expertise domains configured
 
 ## Communication
 
-Use `ov mail` for all communication. Your address is **cleanup-root-dx**.
+Use `ov mail` for all communication. Your address is **fix-overlap**.
 
 ```bash
 # Check your inbox (do this regularly)
-ov mail check --agent cleanup-root-dx
+ov mail check --agent fix-overlap
 
 # Send a status update to your parent
-ov mail send --to root-cleanup --subject "status" \
-  --body "Progress update here" --type status --agent cleanup-root-dx
+ov mail send --to test-rebase --subject "status" \
+  --body "Progress update here" --type status --agent fix-overlap
 
 # Ask a question
-ov mail send --to root-cleanup --subject "question" \
-  --body "Your question here" --type question --priority high --agent cleanup-root-dx
+ov mail send --to test-rebase --subject "question" \
+  --body "Your question here" --type question --priority high --agent fix-overlap
 
 # Report completion
-ov mail send --to root-cleanup --subject "done" \
-  --body "Summary of what was done" --type result --agent cleanup-root-dx
+ov mail send --to test-rebase --subject "done" \
+  --body "Summary of what was done" --type result --agent fix-overlap
 
 # Reply to a message
-ov mail reply <message-id> --body "Your reply" --agent cleanup-root-dx
+ov mail reply <message-id> --body "Your reply" --agent fix-overlap
 ```
 
 ## Spawning Sub-Workers
@@ -227,20 +227,20 @@ Before reporting completion, you MUST pass all quality gates:
 1. **Tests:** `bun test` — all tests must pass
 2. **Lint:** `bun run lint` — zero errors
 3. **Typecheck:** `bun run typecheck` — no TypeScript errors
-4. **Commit:** all changes committed to your branch (overstory/cleanup-root-dx/S3Vector-6cb0)
-5. **Record mulch learnings:** `ml record <domain> --type <convention|pattern|failure|decision> --description "..." --outcome-status success --outcome-agent cleanup-root-dx` — capture insights from your work
-6. **Signal completion:** send `worker_done` mail to root-cleanup: `ov mail send --to root-cleanup --subject "Worker done: S3Vector-6cb0" --body "Quality gates passed." --type worker_done --agent cleanup-root-dx`
-7. **Close issue:** `sd close S3Vector-6cb0 --reason "summary of changes"`
+4. **Commit:** all changes committed to your branch (overstory/fix-overlap/S3Vector-a12f)
+5. **Record mulch learnings:** `ml record <domain> --type <convention|pattern|failure|decision> --description "..." --outcome-status success --outcome-agent fix-overlap` — capture insights from your work
+6. **Signal completion:** send `worker_done` mail to test-rebase: `ov mail send --to test-rebase --subject "Worker done: S3Vector-a12f" --body "Quality gates passed." --type worker_done --agent fix-overlap`
+7. **Close issue:** `sd close S3Vector-a12f --reason "summary of changes"`
 
 Do NOT push to the canonical branch. Your work will be merged by the
 coordinator via `ov merge`.
 
 ## Constraints
 
-- **WORKTREE ISOLATION**: All writes MUST target files within your worktree at `/home/ubuntu/S3Vector/.overstory/worktrees/cleanup-root-dx`
+- **WORKTREE ISOLATION**: All writes MUST target files within your worktree at `/home/ubuntu/S3Vector/.overstory/worktrees/fix-overlap`
 - NEVER write to the canonical repo root — all writes go to your worktree copy
 - Only modify files in your File Scope
-- Commit only to your branch: overstory/cleanup-root-dx/S3Vector-6cb0
+- Commit only to your branch: overstory/fix-overlap/S3Vector-a12f
 - Never push to the canonical branch
 - Report completion via `sd close` AND `ov mail send --type result`
 - If you encounter a blocking issue, send mail with `--priority urgent --type error`
