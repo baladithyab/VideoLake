@@ -288,12 +288,23 @@ class LanceDBProvider(VectorStoreProvider):
 
             # Apply filters if provided
             if filter_metadata:
-                # LanceDB supports SQL-like filtering
-                filter_expr = " AND ".join([
-                    f"metadata.{key} = '{value}'"
-                    for key, value in filter_metadata.items()
-                ])
-                results = results.where(filter_expr)
+                # LanceDB supports SQL-like filtering with proper escaping
+                # Build filter expression with sanitized values
+                filter_conditions = []
+                for key, value in filter_metadata.items():
+                    # Sanitize key (only allow alphanumeric and underscore)
+                    if not key.replace('_', '').isalnum():
+                        logger.warning(f"Skipping invalid metadata key: {key}")
+                        continue
+
+                    # Escape value to prevent SQL injection
+                    # Convert to string and escape single quotes
+                    safe_value = str(value).replace("'", "''")
+                    filter_conditions.append(f"metadata.{key} = '{safe_value}'")
+
+                if filter_conditions:
+                    filter_expr = " AND ".join(filter_conditions)
+                    results = results.where(filter_expr)
 
             # Execute and convert to list
             results_list = results.to_list()

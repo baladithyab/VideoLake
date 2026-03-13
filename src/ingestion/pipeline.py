@@ -6,16 +6,16 @@ This module orchestrates the video ingestion process:
 2. Triggers AWS Step Functions to process video and upsert embeddings.
 """
 
-import logging
-import uuid
 import json
-import boto3
 import os
-from typing import List, Dict, Any, Optional
+import uuid
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
-from src.utils.logging_config import get_logger
+import boto3
+
 from src.config.unified_config_manager import get_config
+from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -55,13 +55,9 @@ class VideoIngestionPipeline:
             IngestionResult containing the execution ARN.
         """
         if not self.state_machine_arn:
-            logger.warning("INGESTION_STATE_MACHINE_ARN not set. Running in mock mode.")
-            # Fallback for local dev/testing without deployed infra
-            return IngestionResult(
-                job_id=f"mock-{uuid.uuid4()}",
-                status="mock_success",
-                message="Step Function ARN not configured. Mock success."
-            )
+            error_msg = "INGESTION_STATE_MACHINE_ARN environment variable is not set. Cannot process video ingestion without Step Functions infrastructure."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
         if not backend_types:
             backend_types = ["s3vector"]
@@ -78,10 +74,10 @@ class VideoIngestionPipeline:
                 name=f"ingest-{uuid.uuid4().hex[:8]}",
                 input=json.dumps(input_payload)
             )
-            
+
             execution_arn = response['executionArn']
             logger.info(f"Started Step Function execution: {execution_arn}")
-            
+
             return IngestionResult(
                 job_id=execution_arn,
                 status="RUNNING",

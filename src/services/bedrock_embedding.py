@@ -8,6 +8,7 @@ error handling, and batch processing capabilities.
 
 import json
 import logging
+import random
 import time
 from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass
@@ -171,10 +172,7 @@ class BedrockEmbeddingService:
         
         if model_id is None:
             model_id = self.config.get('bedrock_model_id', 'amazon.titan-embed-text-v2:0')
-        
-        # Validate model access
-        self.validate_model_access(model_id)
-        
+
         # Validate input length
         model_info = self.SUPPORTED_MODELS[model_id]
         if len(text) > model_info.max_input_tokens * 4:  # Rough token estimation
@@ -243,9 +241,7 @@ class BedrockEmbeddingService:
         
         if model_id is None:
             model_id = self.config.get('bedrock_model_id', 'amazon.titan-embed-text-v2:0')
-        
-        # Validate model access
-        self.validate_model_access(model_id)
+
         model_info = self.SUPPORTED_MODELS[model_id]
         
         # Validate all inputs
