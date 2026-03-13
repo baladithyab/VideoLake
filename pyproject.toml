@@ -117,6 +117,8 @@ markers = [
     "multi_region: Multi-region deployment tests",
     "security: Security and authorization tests",
     "combination: Combined/composite feature tests",
+    "requires_milvus: Tests requiring Milvus/Zilliz connection",
+    "requires_faiss: Tests requiring FAISS library",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

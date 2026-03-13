@@ -26,11 +26,12 @@ class VectorStoreType(str, Enum):
     OPENSEARCH = "opensearch"
     LANCEDB = "lancedb"
     QDRANT = "qdrant"
+    MILVUS = "milvus"
+    FAISS = "faiss"
 
     # Extensible for future implementations
     PINECONE = "pinecone"
     WEAVIATE = "weaviate"
-    MILVUS = "milvus"
     CHROMA = "chroma"
 
 
@@ -60,6 +61,8 @@ class VectorStoreConfig:
     opensearch_config: Optional[Dict[str, Any]] = None
     lancedb_config: Optional[Dict[str, Any]] = None
     qdrant_config: Optional[Dict[str, Any]] = None
+    milvus_config: Optional[Dict[str, Any]] = None
+    faiss_config: Optional[Dict[str, Any]] = None
     pinecone_config: Optional[Dict[str, Any]] = None
     weaviate_config: Optional[Dict[str, Any]] = None
 
