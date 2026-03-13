@@ -172,20 +172,20 @@ src/
 
 ### 3. Frontend Application Layer
 
-**Location**: [`/frontend/`](../frontend/)
+**Location**: [`/src/frontend/`](../src/frontend/)
 
 **Purpose**: User interface for search, visualization, resource management
 
 **Technology**: React 19 + TypeScript + Vite + Tailwind CSS
 
 **Pages** (7):
-1. [`ResourceManagement.tsx`](../frontend/src/pages/ResourceManagement.tsx) - Infrastructure overview (read-only)
-2. [`MediaProcessing.tsx`](../frontend/src/pages/MediaProcessing.tsx) - Video upload & processing
-3. [`QuerySearch.tsx`](../frontend/src/pages/QuerySearch.tsx) - Vector search interface
-4. [`ResultsPlayback.tsx`](../frontend/src/pages/ResultsPlayback.tsx) - Search results with video playback
-5. [`EmbeddingVisualization.tsx`](../frontend/src/pages/EmbeddingVisualization.tsx) - Vector space visualization
-6. [`Analytics.tsx`](../frontend/src/pages/Analytics.tsx) - Performance metrics
-7. [`Infrastructure.tsx`](../frontend/src/pages/Infrastructure.tsx) - Deployed resources tree
+1. [`ResourceManagement.tsx`](../src/frontend/src/pages/ResourceManagement.tsx) - Infrastructure overview (read-only)
+2. [`MediaProcessing.tsx`](../src/frontend/src/pages/MediaProcessing.tsx) - Video upload & processing
+3. [`QuerySearch.tsx`](../src/frontend/src/pages/QuerySearch.tsx) - Vector search interface
+4. [`ResultsPlayback.tsx`](../src/frontend/src/pages/ResultsPlayback.tsx) - Search results with video playback
+5. [`EmbeddingVisualization.tsx`](../src/frontend/src/pages/EmbeddingVisualization.tsx) - Vector space visualization
+6. [`Analytics.tsx`](../src/frontend/src/pages/Analytics.tsx) - Performance metrics
+7. [`Infrastructure.tsx`](../src/frontend/src/pages/Infrastructure.tsx) - Deployed resources tree
 
 **State Management**: React Hooks + TanStack Query (React Query)
 
