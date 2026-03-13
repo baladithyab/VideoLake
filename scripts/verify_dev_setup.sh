@@ -64,8 +64,7 @@ check_command "python3" "true"
 check_command "uv" "false"
 check_command "pip" "true"
 check_command "node" "true"
-check_command "bun" "false"
-check_command "npm" "false"
+check_command "bun" "true"
 check_command "terraform" "true"
 check_command "git" "true"
 check_command "aws" "true"
@@ -149,7 +148,7 @@ if [ -f "src/frontend/package.json" ]; then
     if [ -d "src/frontend/node_modules" ]; then
         echo -e "${GREEN}✓${NC} node_modules exists (dependencies installed)"
     else
-        echo -e "${YELLOW}⚠${NC} node_modules not found. Run 'cd src/frontend && bun install' or 'npm install'"
+        echo -e "${YELLOW}⚠${NC} node_modules not found. Run 'cd src/frontend && bun install'"
         ((WARNINGS++))
     fi
 else
@@ -206,7 +205,7 @@ else
     echo "3. Install Terraform: https://www.terraform.io/downloads"
     echo "4. Install AWS CLI: https://aws.amazon.com/cli/"
     echo "5. Install uv (recommended): curl -LsSf https://astral.sh/uv/install.sh | sh"
-    echo "6. Install bun (optional): curl -fsSL https://bun.sh/install | bash"
+    echo "6. Install bun (required): curl -fsSL https://bun.sh/install | bash"
     echo "7. Configure AWS credentials: aws configure"
     echo "8. Copy .env.example to .env and configure"
     echo "9. Install Python dependencies: uv pip install -r requirements.txt"

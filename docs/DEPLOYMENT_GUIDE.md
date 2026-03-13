@@ -154,7 +154,7 @@ sudo ./aws/install
 aws --version
 ```
 
-#### 3. Node.js and npm
+#### 3. Node.js and bun
 ```bash
 # Install Node.js >= 18.x
 # macOS
@@ -166,7 +166,7 @@ sudo apt-get install -y nodejs
 
 # Verify installation
 node --version  # Should be >= 18.x
-npm --version
+bun --version
 ```
 
 #### 4. Python
@@ -502,8 +502,8 @@ python run_api.py &
 
 # Start frontend
 cd frontend
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 **Access points:**
@@ -1123,18 +1123,18 @@ pip install -r requirements.txt --upgrade
 
 # Update frontend dependencies
 cd frontend
-npm install
-npm update
+bun install
+bun update
 
 # Rebuild frontend
-npm run build
+bun run build
 
 # Restart services
 # Terminal 1
 python run_api.py
 
 # Terminal 2
-cd frontend && npm run dev
+cd frontend && bun run dev
 ```
 
 ### State Management Best Practices

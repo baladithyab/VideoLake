@@ -151,12 +151,12 @@ bun run typecheck  # No TypeScript errors
 
 ## Your Assignment
 
-- **Agent Name:** bench-storage-builder
-- **Task ID:** S3Vector-2eaf
+- **Agent Name:** bun-builder
+- **Task ID:** S3Vector-cd31
 - **Spec:** No spec file provided
-- **Branch:** overstory/bench-storage-builder/S3Vector-2eaf
-- **Worktree:** /home/ubuntu/S3Vector/.overstory/worktrees/bench-storage-builder
-- **Parent:** benchmark-lead
+- **Branch:** overstory/bun-builder/S3Vector-cd31
+- **Worktree:** /home/ubuntu/S3Vector/.overstory/worktrees/bun-builder
+- **Parent:** bun-cleanup
 - **Depth:** 2
 
 No task spec was provided. Check your mail or ask your parent agent for details.
@@ -167,53 +167,68 @@ No task spec was provided. Check your mail or ask your parent agent for details.
 
 ## Working Directory
 
-Your worktree root is: `/home/ubuntu/S3Vector/.overstory/worktrees/bench-storage-builder`
+Your worktree root is: `/home/ubuntu/S3Vector/.overstory/worktrees/bun-builder`
 
 **CRITICAL**: All file operations MUST use paths within this directory.
-- Use paths relative to your worktree root, or absolute paths starting with `/home/ubuntu/S3Vector/.overstory/worktrees/bench-storage-builder`
+- Use paths relative to your worktree root, or absolute paths starting with `/home/ubuntu/S3Vector/.overstory/worktrees/bun-builder`
 - Writing to the canonical repo root instead of your worktree is a critical error (PATH_BOUNDARY_VIOLATION)
 - You may READ files from the canonical repo for context, but all WRITES go to your worktree
 
 ## File Scope (exclusive ownership)
 
-These paths are relative to your worktree root: `/home/ubuntu/S3Vector/.overstory/worktrees/bench-storage-builder`
+These paths are relative to your worktree root: `/home/ubuntu/S3Vector/.overstory/worktrees/bun-builder`
 
 You may ONLY modify the files listed below within your worktree. Do not touch any other files.
 If you need changes outside your scope, send mail to your parent agent
 requesting the modification.
 
-No file scope restrictions
+- `src/frontend/package-lock.json`
+- `start.sh`
+- `scripts/deploy_platform.sh`
+- `scripts/deploy_ecs.sh`
+- `scripts/verify_dev_setup.sh`
+- `README.md`
+- `CONTRIBUTING.md`
+- `QUICKSTART.md`
+- `docs/DEVELOPMENT_SETUP.md`
+- `docs/usage-examples.md`
+- `docs/DEPLOYMENT_GUIDE.md`
+- `docs/videolake/VIDEOLAKE_DEPLOYMENT.md`
+- `docs/plans/CLEANUP_PLAN.md`
+- `src/frontend/TAILWIND_SETUP.md`
 
 ## Expertise
 
 Prime relevant domain knowledge before starting work:
 
-No specific expertise domains configured
+```bash
+ml prime typescript
+```
 
 
 
 ## Communication
 
-Use `ov mail` for all communication. Your address is **bench-storage-builder**.
+Use `ov mail` for all communication. Your address is **bun-builder**.
 
 ```bash
 # Check your inbox (do this regularly)
-ov mail check --agent bench-storage-builder
+ov mail check --agent bun-builder
 
 # Send a status update to your parent
-ov mail send --to benchmark-lead --subject "status" \
-  --body "Progress update here" --type status --agent bench-storage-builder
+ov mail send --to bun-cleanup --subject "status" \
+  --body "Progress update here" --type status --agent bun-builder
 
 # Ask a question
-ov mail send --to benchmark-lead --subject "question" \
-  --body "Your question here" --type question --priority high --agent bench-storage-builder
+ov mail send --to bun-cleanup --subject "question" \
+  --body "Your question here" --type question --priority high --agent bun-builder
 
 # Report completion
-ov mail send --to benchmark-lead --subject "done" \
-  --body "Summary of what was done" --type result --agent bench-storage-builder
+ov mail send --to bun-cleanup --subject "done" \
+  --body "Summary of what was done" --type result --agent bun-builder
 
 # Reply to a message
-ov mail reply <message-id> --body "Your reply" --agent bench-storage-builder
+ov mail reply <message-id> --body "Your reply" --agent bun-builder
 ```
 
 ## Spawning Sub-Workers
@@ -227,20 +242,20 @@ Before reporting completion, you MUST pass all quality gates:
 1. **Tests:** `bun test` — all tests must pass
 2. **Lint:** `bun run lint` — zero errors
 3. **Typecheck:** `bun run typecheck` — no TypeScript errors
-4. **Commit:** all changes committed to your branch (overstory/bench-storage-builder/S3Vector-2eaf)
-5. **Record mulch learnings:** `ml record <domain> --type <convention|pattern|failure|decision> --description "..." --outcome-status success --outcome-agent bench-storage-builder` — capture insights from your work
-6. **Signal completion:** send `worker_done` mail to benchmark-lead: `ov mail send --to benchmark-lead --subject "Worker done: S3Vector-2eaf" --body "Quality gates passed." --type worker_done --agent bench-storage-builder`
-7. **Close issue:** `sd close S3Vector-2eaf --reason "summary of changes"`
+4. **Commit:** all changes committed to your branch (overstory/bun-builder/S3Vector-cd31)
+5. **Record mulch learnings:** `ml record <domain> --type <convention|pattern|failure|decision> --description "..." --outcome-status success --outcome-agent bun-builder` — capture insights from your work
+6. **Signal completion:** send `worker_done` mail to bun-cleanup: `ov mail send --to bun-cleanup --subject "Worker done: S3Vector-cd31" --body "Quality gates passed." --type worker_done --agent bun-builder`
+7. **Close issue:** `sd close S3Vector-cd31 --reason "summary of changes"`
 
 Do NOT push to the canonical branch. Your work will be merged by the
 coordinator via `ov merge`.
 
 ## Constraints
 
-- **WORKTREE ISOLATION**: All writes MUST target files within your worktree at `/home/ubuntu/S3Vector/.overstory/worktrees/bench-storage-builder`
+- **WORKTREE ISOLATION**: All writes MUST target files within your worktree at `/home/ubuntu/S3Vector/.overstory/worktrees/bun-builder`
 - NEVER write to the canonical repo root — all writes go to your worktree copy
 - Only modify files in your File Scope
-- Commit only to your branch: overstory/bench-storage-builder/S3Vector-2eaf
+- Commit only to your branch: overstory/bun-builder/S3Vector-cd31
 - Never push to the canonical branch
 - Report completion via `sd close` AND `ov mail send --type result`
 - If you encounter a blocking issue, send mail with `--priority urgent --type error`

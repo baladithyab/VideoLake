@@ -208,7 +208,7 @@ For a complete production-ready deployment to AWS ECS/Fargate and S3/CloudFront,
 ```bash
 # 1. Install dependencies (uv/bun recommended for speed)
 uv pip install -e .  # Or: pip install -e .
-cd src/frontend && bun install  # Or: npm install
+cd src/frontend && bun install
 cd ../..
 
 # 2. Deploy infrastructure (< 5 min)

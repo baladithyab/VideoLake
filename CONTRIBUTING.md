@@ -69,7 +69,7 @@ pip install -r requirements-dev.txt  # If exists
 
 # Install frontend dependencies
 cd frontend
-npm install
+bun install
 cd ..
 
 # Configure environment
@@ -476,11 +476,11 @@ pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
    black src/ tests/
    
    # Format TypeScript code
-   cd frontend && npm run format
-   
+   cd frontend && bun run format
+
    # Lint code
    pylint src/
-   cd frontend && npm run lint
+   cd frontend && bun run lint
    
    # Format Terraform
    cd terraform && terraform fmt -recursive
@@ -751,11 +751,11 @@ def test_real_s3vector_workflow():
 ```bash
 # Format code
 black src/ tests/
-cd frontend && npm run format
+cd frontend && bun run format
 
 # Lint
 pylint src/ tests/
-cd frontend && npm run lint
+cd frontend && bun run lint
 
 # Type check
 mypy src/
