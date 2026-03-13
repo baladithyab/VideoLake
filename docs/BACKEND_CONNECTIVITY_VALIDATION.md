@@ -1,6 +1,8 @@
 # Backend Connectivity Validation
 
-Comprehensive guide to the backend connectivity validation feature for vector store providers.
+> **Status**: This document is current and reflects the latest connectivity validation architecture.
+
+Comprehensive guide to the backend connectivity validation feature for vector store providers in the S3Vector platform.
 
 ## Overview
 

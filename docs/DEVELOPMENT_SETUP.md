@@ -1,6 +1,6 @@
-# VideoLake Development Setup Guide
+# S3Vector Development Setup Guide
 
-This guide covers the complete development environment setup for VideoLake, including Python backend, React frontend, and Terraform infrastructure.
+This guide covers the complete development environment setup for S3Vector, including Python backend, React frontend, and Terraform infrastructure.
 
 ## Prerequisites
 
@@ -399,15 +399,20 @@ terraform force-unlock LOCK_ID
 
 ## Project Structure
 
+See [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) for complete directory layout and organization.
+
+**Quick Overview:**
 ```
-videolake/
+S3Vector/
 ├── src/
-│   ├── api/              # FastAPI backend
-│   ├── embedding/        # Embedding generation
-│   ├── vector_stores/    # Vector database adapters
-│   └── frontend/         # React frontend
-├── tests/                # Python tests
-├── terraform/            # Infrastructure code
+│   ├── api/              # FastAPI backend with REST endpoints
+│   ├── services/         # Embedding and vector store providers
+│   ├── frontend/         # React frontend (TypeScript + Tailwind)
+│   ├── ingestion/        # Multi-modal ingestion pipeline
+│   └── utils/            # Shared utilities
+├── tests/                # Comprehensive test suite (unit, integration, e2e)
+├── terraform/            # Infrastructure as Code
+│   ├── profiles/         # Deployment profiles (fast-start, comparison, production, full-multimodal)
 │   └── modules/          # Terraform modules
 ├── scripts/              # Utility scripts
 ├── docs/                 # Documentation
@@ -425,6 +430,6 @@ videolake/
 
 ## Getting Help
 
-- Check existing issues: https://github.com/your-org/videolake/issues
+- Check existing issues: https://github.com/your-org/s3vector/issues
 - Read the documentation in `docs/`
 - Run `./scripts/verify_dev_setup.sh` to diagnose environment issues
