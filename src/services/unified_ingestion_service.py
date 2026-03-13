@@ -199,7 +199,8 @@ class UnifiedIngestionService:
                 request.vector_store_type
             )
 
-            storage_result = vector_store_provider.upsert_vectors(
+            storage_result = await asyncio.to_thread(
+                vector_store_provider.upsert_vectors,
                 request.vector_store_name,
                 vectors_data
             )
