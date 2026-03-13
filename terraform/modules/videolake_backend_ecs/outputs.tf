@@ -42,3 +42,18 @@ output "shared_media_bucket_name" {
   description = "Name of the shared media bucket"
   value       = var.s3_bucket_name
 }
+
+output "alb_arn" {
+  description = "ARN of the Application Load Balancer"
+  value       = aws_lb.main.arn
+}
+
+output "target_group_arn" {
+  description = "ARN of the ALB target group"
+  value       = aws_lb_target_group.main.arn
+}
+
+output "s3_bucket_name" {
+  description = "Name of the S3 bucket for shared media"
+  value       = var.s3_bucket_name
+}
