@@ -13,7 +13,7 @@ This document outlines a comprehensive architecture redesign for the S3Vector pl
 
 ### Core Problems Addressed
 
-1. **Dual FastAPI Layers**: `src/api/main.py` (active, 204 lines) vs `src/backend/main.py` (dead code, 112 lines)
+1. **Dual FastAPI Layers**: ✅ RESOLVED - `src/backend/main.py` removed, single entrypoint at `src/api/main.py`
 2. **Video-Only Focus**: Current embedding pipeline hardcoded for video (Marengo/Nova only)
 3. **Implicit Provider Pattern**: Vector store abstraction exists but lacks plugin discoverability
 4. **Fragmented API Design**: Split across `routers/` and `routes/` with unclear boundaries
@@ -22,7 +22,7 @@ This document outlines a comprehensive architecture redesign for the S3Vector pl
 
 ### Success Metrics
 
-- **Single FastAPI Entrypoint**: Eliminate `src/backend/main.py`, consolidate to `src/api/main.py`
+- **Single FastAPI Entrypoint**: ✅ COMPLETED - `src/backend/main.py` removed, consolidated to `src/api/main.py`
 - **4+ Modality Support**: Text, image, audio, video embeddings through unified API
 - **Plugin Discovery**: Auto-register embedding models and vector stores via factory pattern
 - **Sub-2s Deployment**: One-click backend deployment from UI (Terraform backend)
@@ -30,22 +30,25 @@ This document outlines a comprehensive architecture redesign for the S3Vector pl
 
 ---
 
-## Phase 1: FastAPI Layer Consolidation
+## Phase 1: FastAPI Layer Consolidation ✅ COMPLETED
 
 **Timeline**: Week 1
 **Priority**: CRITICAL
 **Risk**: Low (mostly deletion + routing cleanup)
+**Status**: ✅ COMPLETED
 
 ### Problem Statement
 
-The codebase contains two FastAPI applications:
+The codebase contained two FastAPI applications:
 
 ```
 src/api/main.py       (204 lines) ✓ ACTIVE - Used by run_api.py
-src/backend/main.py   (112 lines) ✗ DEAD CODE - Never imported
+src/backend/main.py   (112 lines) ✗ DEAD CODE - Never imported (REMOVED)
 ```
 
-This creates confusion about which endpoints are canonical and wastes developer time maintaining unused code.
+### Resolution
+
+**Status:** ✅ The `src/backend/` directory has been removed. Only `src/api/main.py` remains as the single FastAPI entrypoint.
 
 ### Technical Approach
 
