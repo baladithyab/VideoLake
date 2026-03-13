@@ -217,5 +217,18 @@
 		"status": "active",
 		"createdAt": "2026-03-13T19:26:14.171Z",
 		"completedAt": null
+	},
+	{
+		"id": "group-fde37c58",
+		"name": "tooling-wave",
+		"memberIssueIds": [
+			"S3Vector-c1fc",
+			"S3Vector-2fae",
+			"S3Vector-cd31",
+			"S3Vector-3270"
+		],
+		"status": "active",
+		"createdAt": "2026-03-13T19:54:33.307Z",
+		"completedAt": null
 	}
 ]
