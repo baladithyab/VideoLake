@@ -73,6 +73,7 @@ export function MainLayout() {
             <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden p-2 text-gray-500 hover:text-gray-700"
+              aria-label="Close sidebar"
             >
               <X className="w-5 h-5" />
             </button>
@@ -117,7 +118,7 @@ export function MainLayout() {
           </nav>
 
           {/* Infrastructure status */}
-          <div className="px-4 py-4 border-t border-gray-200">
+          <div className="px-4 py-4 border-t border-gray-200" aria-live="polite" aria-atomic="true">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Infrastructure
@@ -164,6 +165,7 @@ export function MainLayout() {
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 text-gray-500 hover:text-gray-700 lg:hidden"
+              aria-label="Open sidebar"
             >
               <Menu className="w-6 h-6" />
             </button>
@@ -177,7 +179,7 @@ export function MainLayout() {
             <div className="flex items-center gap-4">
               {/* Status badge */}
               {deployedCount > 0 && (
-                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg" aria-live="polite">
                   <StatusDot status="success" size="sm" />
                   <span className="text-sm font-medium text-green-700">
                     {deployedCount} {deployedCount === 1 ? 'Store' : 'Stores'} Active

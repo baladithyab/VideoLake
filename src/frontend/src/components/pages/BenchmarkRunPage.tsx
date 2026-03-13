@@ -36,7 +36,6 @@ export const BenchmarkRunPage: React.FC = () => {
         const result = await getBenchmark(id);
         setStartTime(new Date(result.started_at));
       } catch (error) {
-        console.error('Failed to load benchmark:', error);
         toast.error('Failed to load benchmark');
         navigate('/benchmark');
       } finally {
@@ -149,6 +148,7 @@ export const BenchmarkRunPage: React.FC = () => {
               variant="ghost"
               size="sm"
               onClick={() => navigate('/benchmark')}
+              aria-label="Back to benchmark hub"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Hub
@@ -180,7 +180,7 @@ export const BenchmarkRunPage: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-8 text-sm">
+            <div className="flex items-center gap-8 text-sm" aria-live="polite" aria-atomic="true">
               <div>
                 <span className="text-gray-600">Elapsed:</span>{' '}
                 <span className="font-semibold">{getElapsedTime()}</span>
@@ -202,7 +202,7 @@ export const BenchmarkRunPage: React.FC = () => {
               <CardTitle>Overall Progress</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
+              <div role="status" aria-live="polite">
                 <div className="flex justify-between mb-2">
                   <span className="text-sm font-medium text-gray-700">
                     {progress.message || 'Running benchmark...'}
@@ -211,7 +211,7 @@ export const BenchmarkRunPage: React.FC = () => {
                     {progress.progress_percentage.toFixed(0)}%
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-4">
+                <div className="w-full bg-gray-200 rounded-full h-4" role="progressbar" aria-valuenow={progress.progress_percentage} aria-valuemin={0} aria-valuemax={100}>
                   <div
                     className="bg-gradient-to-r from-indigo-600 to-purple-600 h-4 rounded-full transition-all duration-300"
                     style={{ width: `${progress.progress_percentage}%` }}
@@ -232,7 +232,7 @@ export const BenchmarkRunPage: React.FC = () => {
               <CardTitle>Backend Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-4" role="status" aria-live="polite">
                 {benchmark.metrics.map((metric) => {
                   const completedQueries = metric.total_queries - metric.failed_queries;
                   const progressPercent = (completedQueries / (progress?.total_queries || benchmark.config.num_queries)) * 100;
@@ -251,7 +251,7 @@ export const BenchmarkRunPage: React.FC = () => {
                           {progressPercent.toFixed(0)}%
                         </span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="w-full bg-gray-200 rounded-full h-2" role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100} aria-label={`${metric.backend} progress`}>
                         <div
                           className={`h-2 rounded-full transition-all duration-300 ${
                             isLeader ? 'bg-yellow-500' : 'bg-indigo-600'
