@@ -270,7 +270,7 @@ class VectorStoreProvider(ABC):
         start_time = time.time()
 
         while time.time() - start_time < timeout:
-            status = self.get_status(name)
+            status = await asyncio.to_thread(self.get_status, name)
 
             # Check if terminal state reached
             if status.state in [VectorStoreState.ACTIVE, VectorStoreState.AVAILABLE,
@@ -285,7 +285,7 @@ class VectorStoreProvider(ABC):
             await asyncio.sleep(poll_interval)
 
         # Timeout reached
-        status = self.get_status(name)
+        status = await asyncio.to_thread(self.get_status, name)
         if status.state not in [VectorStoreState.ACTIVE, VectorStoreState.AVAILABLE]:
             status.error_message = f"Operation timed out after {timeout} seconds"
 
