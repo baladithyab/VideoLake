@@ -134,7 +134,7 @@ export default function DeploymentProgressPage() {
           }
         }
       } catch (error) {
-        console.error('Failed to poll infrastructure status:', error);
+        // Silently handle polling errors - status will retry on next interval
       }
     };
 
@@ -300,7 +300,7 @@ export default function DeploymentProgressPage() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Deploying Infrastructure...</h1>
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground" aria-live="polite" aria-atomic="true">
           <span>Elapsed: {formatTime(elapsedTime)}</span>
           <span>•</span>
           <span>Est. remaining: {estimatedRemaining()}</span>
@@ -310,7 +310,7 @@ export default function DeploymentProgressPage() {
       {/* Progress Steps */}
       <Card className="mb-6">
         <CardContent className="py-6">
-          <div className="space-y-4">
+          <div className="space-y-4" role="status" aria-live="polite">
             {steps.map((step, index) => (
               <div key={step.id} className="flex items-start gap-4">
                 <div className="flex-shrink-0 mt-0.5">
@@ -364,6 +364,8 @@ export default function DeploymentProgressPage() {
               variant="ghost"
               size="sm"
               onClick={() => setShowLogs(!showLogs)}
+              aria-label={showLogs ? 'Collapse Terraform logs' : 'Expand Terraform logs'}
+              aria-expanded={showLogs}
             >
               {showLogs ? 'Collapse' : 'Expand'}
             </Button>
