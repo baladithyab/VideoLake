@@ -6,6 +6,7 @@ enabling the platform to leverage AWS's native vector storage capabilities as on
 of its supported vector store backends.
 """
 
+import time
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 
@@ -39,10 +40,10 @@ class S3VectorProvider(VectorStoreProvider):
         """Initialize the S3Vector provider."""
         self.storage_manager = S3VectorStorageManager()
         self.s3vectors_client = aws_client_factory.get_s3vectors_client()
-        
+
         config_manager = get_unified_config_manager()
         self.region = config_manager.config.aws.region
-    
+
     def _parse_name_to_arn(self, name: str) -> str:
         """
         Parse name parameter to construct or validate index ARN.
@@ -258,12 +259,16 @@ class S3VectorProvider(VectorStoreProvider):
             # Parse name to get index ARN
             index_arn = self._parse_name_to_arn(name)
 
-            # Transform vectors to S3Vectors format if needed
+            # Transform vectors from generic format to S3Vector format
+            # Generic format: {"id": "...", "values": [...], "metadata": {...}}
+            # S3Vector format: {"key": "...", "data": {"float32": [...]}, "metadata": {...}}
             vectors_data = []
             for vector in vectors:
                 vector_obj = {
-                    "vectorId": vector.get("id", vector.get("vectorId")),
-                    "vector": vector.get("values", vector.get("vector")),
+                    "key": vector.get("id", vector.get("key")),
+                    "data": {
+                        "float32": vector.get("values", vector.get("data", {}).get("float32", []))
+                    }
                 }
                 if "metadata" in vector:
                     vector_obj["metadata"] = vector["metadata"]
@@ -317,13 +322,15 @@ class S3VectorProvider(VectorStoreProvider):
             # Extract vectors from result
             vectors = result.get("vectors", [])
 
-            # Transform to standard format
+            # Transform from S3Vector format to generic format
+            # S3Vector format: {"key": "...", "dist": ..., "data": {"float32": [...]}, "metadata": {...}}
+            # Generic format: {"id": "...", "score": ..., "values": [...], "metadata": {...}}
             results = []
             for vector_result in vectors:
                 results.append({
-                    "id": vector_result.get("vectorId"),
-                    "score": vector_result.get("similarity", vector_result.get("score", 0.0)),
-                    "values": vector_result.get("vector"),
+                    "id": vector_result.get("key"),
+                    "score": vector_result.get("dist", 0.0),
+                    "values": vector_result.get("data", {}).get("float32", []),
                     "metadata": vector_result.get("metadata", {})
                 })
 
@@ -332,7 +339,7 @@ class S3VectorProvider(VectorStoreProvider):
         except Exception as e:
             logger.error(f"Failed to query vectors: {e}")
             return []
-    
+
     def get_capabilities(self) -> VectorStoreCapabilities:
         """
         Return S3 Vector provider capabilities.
@@ -356,17 +363,15 @@ class S3VectorProvider(VectorStoreProvider):
     def validate_connectivity(self) -> Dict[str, Any]:
         """
         Validate connectivity to AWS S3 Vectors service.
-        
+
         Tests the Videolake platform's connection to AWS S3 Vectors backend:
         - S3 bucket listing functionality
         - S3Vectors client accessibility
         - Response time measurement
-        
+
         Returns:
             Connectivity validation result
         """
-        import time
-        
         start_time = time.time()
         
         try:
@@ -417,4 +422,3 @@ class S3VectorProvider(VectorStoreProvider):
                     "service": "S3 Vectors"
                 }
             }
-
