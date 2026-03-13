@@ -16,6 +16,14 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
 import { useInfrastructure } from '../../contexts/InfrastructureContext';
 import TerraformLogViewer from '../TerraformLogsViewer';
 import { toast } from 'react-hot-toast';
@@ -53,6 +61,8 @@ export const InfrastructurePage: React.FC = () => {
   const [operationType, setOperationType] = useState<'deploy' | 'destroy'>('deploy');
   const [activeStore, setActiveStore] = useState<string>('');
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [destroyDialogOpen, setDestroyDialogOpen] = useState(false);
+  const [storeToDestroy, setStoreToDestroy] = useState<string>('');
 
   // Transform context deployments to page format
   const status: InfrastructureStatus | null = React.useMemo(() => {
@@ -65,9 +75,9 @@ export const InfrastructurePage: React.FC = () => {
       estimated_cost_monthly: deployment.status === 'deployed' ? 50 : null,
       // TODO: Replace with actual metrics from API - api.getStoreMetrics(name)
       // Expected metrics: queries_24h, avg_latency_ms, uptime_percent
-      queries_24h: Math.floor(Math.random() * 5000),
-      avg_latency_ms: Math.floor(Math.random() * 200) + 20,
-      uptime_percent: 99.5 + Math.random() * 0.5
+      queries_24h: undefined,
+      avg_latency_ms: undefined,
+      uptime_percent: undefined
     }));
 
     const total_deployed = deployed_stores.filter(s => s.deployed).length;
@@ -119,19 +129,22 @@ export const InfrastructurePage: React.FC = () => {
     }
   };
 
-  const handleDestroy = async (storeName: string) => {
-    if (!confirm(`Are you sure you want to destroy ${storeName}? This action cannot be undone.`)) {
-      return;
-    }
+  const handleDestroy = (storeName: string) => {
+    setStoreToDestroy(storeName);
+    setDestroyDialogOpen(true);
+  };
 
+  const confirmDestroy = async () => {
     try {
-      await destroyStore(storeName as VectorStoreType);
+      await destroyStore(storeToDestroy as VectorStoreType);
       setOperationType('destroy');
-      setActiveStore(storeName);
-      toast.success(`Destruction started for ${storeName}`);
+      setActiveStore(storeToDestroy);
+      setDestroyDialogOpen(false);
+      toast.success(`Destruction started for ${storeToDestroy}`);
     } catch (error) {
       console.error('Destruction failed:', error);
-      toast.error(`Failed to start destruction for ${storeName}`);
+      toast.error(`Failed to start destruction for ${storeToDestroy}`);
+      setDestroyDialogOpen(false);
     }
   };
 
@@ -473,6 +486,34 @@ export const InfrastructurePage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Destroy Confirmation Dialog */}
+      <Dialog open={destroyDialogOpen} onOpenChange={setDestroyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Destruction</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to destroy <strong className="text-foreground">{storeToDestroy}</strong>?
+              This action cannot be undone and will permanently remove all infrastructure and data.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDestroyDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDestroy}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Destroy
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
