@@ -59,13 +59,8 @@ Before contributing, ensure you have:
 git clone https://github.com/your-org/S3Vector.git
 cd S3Vector
 
-# Create Python virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-pip install -r requirements-dev.txt  # If exists
+# Install Python dependencies with uv (creates and manages virtual environment automatically)
+uv sync --all-extras  # Installs all dependencies including dev extras
 
 # Install frontend dependencies
 cd frontend
@@ -83,7 +78,7 @@ terraform apply
 cd ..
 
 # Run tests to verify setup
-pytest tests/test_e2e_vector_store_workflows.py -v
+uv run pytest tests/test_e2e_vector_store_workflows.py -v
 ```
 
 ---
@@ -429,11 +424,11 @@ Common issues with solutions.
 
 ```bash
 # Core S3Vector tests (required for all PRs)
-pytest tests/test_e2e_vector_store_workflows.py -v
+uv run pytest tests/test_e2e_vector_store_workflows.py -v
 
 # Optional backend tests (if infrastructure changes)
 # Requires: terraform apply first
-pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
+uv run pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
 ```
 
 ### Test Guidelines
@@ -489,8 +484,8 @@ pytest tests/test_real_aws_e2e_workflows.py -v --real-aws -m "not expensive"
 2. **Run Tests**:
    ```bash
    # Core tests (required)
-   pytest tests/test_e2e_vector_store_workflows.py -v --cov=src
-   
+   uv run pytest tests/test_e2e_vector_store_workflows.py -v --cov=src
+
    # Terraform validation
    cd terraform && terraform validate
    ```
@@ -761,10 +756,10 @@ cd frontend && bun run lint
 mypy src/
 
 # Run all core tests
-pytest tests/test_e2e_vector_store_workflows.py -v --cov=src
+uv run pytest tests/test_e2e_vector_store_workflows.py -v --cov=src
 
 # Run specific tests if needed
-pytest tests/ -v -k "s3vector"
+uv run pytest tests/ -v -k "s3vector"
 
 # All tests should pass before submitting PR
 ```
@@ -840,7 +835,7 @@ git rebase origin/main
 
 ```bash
 # Run all relevant tests
-pytest tests/ -v
+uv run pytest tests/ -v
 
 # Add new tests for feature
 # Ensure >80% coverage
