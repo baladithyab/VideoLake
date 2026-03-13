@@ -1,3 +1,5 @@
+
+
 variable "aws_region" {
   description = "AWS region to deploy resources"
   type        = string
@@ -74,7 +76,7 @@ variable "acm_certificate_arn" {
 }
 
 variable "domain_name" {
-  description = "Domain name for ACM certificate (required if acm_certificate_arn not provided)"
+  description = "Domain name for ACM certificate and HTTPS (optional)"
   type        = string
   default     = null
 }

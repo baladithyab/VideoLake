@@ -10,6 +10,11 @@ terraform {
   }
 }
 
+# Data Sources
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
+
 # ECR Repository for benchmark runner image
 resource "aws_ecr_repository" "benchmark_runner" {
   name                 = "s3vector-benchmark-runner"
@@ -35,9 +40,9 @@ resource "aws_ecr_lifecycle_policy" "benchmark_runner" {
       rulePriority = 1
       description  = "Keep last 5 images"
       selection = {
-        tagStatus     = "any"
-        countType     = "imageCountMoreThan"
-        countNumber   = 5
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 5
       }
       action = {
         type = "expire"
@@ -107,7 +112,13 @@ resource "aws_iam_role_policy" "benchmark_task" {
         Action = [
           "s3vectors:SearchIndex",
           "s3vectors:GetIndex",
-          "s3vectors:ListIndexes",
+          "s3vectors:ListIndexes"
+        ]
+        Resource = "arn:aws:s3vectors:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:index/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "s3vectors:ListVectorBuckets"
         ]
         Resource = "*"

@@ -15,6 +15,11 @@ terraform {
   }
 }
 
+# Data Sources
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
+
 # Latest Amazon Linux 2023 AMI
 data "aws_ami" "amazon_linux_2023" {
   most_recent = true
@@ -135,10 +140,39 @@ resource "aws_iam_role_policy" "platform_s3_access" {
       {
         Effect = "Allow"
         Action = [
-          "s3:*",
-          "s3vectors:*",
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Resource = var.s3_bucket != "" ? [
+          "arn:aws:s3:::${var.s3_bucket}",
+          "arn:aws:s3:::${var.s3_bucket}/*"
+        ] : ["arn:aws:s3:::*"]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3vectors:SearchIndex",
+          "s3vectors:GetIndex",
+          "s3vectors:ListIndexes",
+          "s3vectors:CreateIndex",
+          "s3vectors:DeleteIndex",
+          "s3vectors:UpdateIndex"
+        ]
+        Resource = "arn:aws:s3vectors:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:index/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "elasticfilesystem:DescribeMountTargets",
-          "ec2:DescribeAvailabilityZones",
+          "ec2:DescribeAvailabilityZones"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "bedrock:InvokeModel",
           "sagemaker:InvokeEndpoint"
         ]

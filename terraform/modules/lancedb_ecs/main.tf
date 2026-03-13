@@ -36,11 +36,11 @@ resource "aws_ecs_cluster" "lancedb" {
 # For EBS-like performance: EFS with provisioned throughput
 
 resource "aws_efs_file_system" "lancedb" {
-  count            = var.backend_type != "s3" ? 1 : 0
-  performance_mode = var.backend_type == "ebs" ? "maxIO" : "generalPurpose"
-  throughput_mode  = var.backend_type == "ebs" ? "provisioned" : "bursting"
+  count                           = var.backend_type != "s3" ? 1 : 0
+  performance_mode                = var.backend_type == "ebs" ? "maxIO" : "generalPurpose"
+  throughput_mode                 = var.backend_type == "ebs" ? "provisioned" : "bursting"
   provisioned_throughput_in_mibps = var.backend_type == "ebs" ? 100 : null
-  encrypted        = true
+  encrypted                       = true
 
   tags = merge(var.tags, {
     Name      = "${var.deployment_name}-efs"
@@ -72,7 +72,8 @@ resource "aws_security_group" "efs" {
     from_port   = 2049
     to_port     = 2049
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Allow access from benchmark instance (which might be in a different subnet/SG)
+    cidr_blocks = [data.aws_vpc.default.cidr_block]
+    description = "NFS access from VPC only"
   }
 
   egress {
@@ -107,6 +108,18 @@ resource "aws_s3_bucket" "lancedb" {
     Backend   = "S3"
     ManagedBy = "Terraform"
   })
+}
+
+# S3 Bucket Encryption
+resource "aws_s3_bucket_server_side_encryption_configuration" "lancedb" {
+  count  = var.backend_type == "s3" ? 1 : 0
+  bucket = aws_s3_bucket.lancedb[0].id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
 }
 
 # Security group for LanceDB service
@@ -220,7 +233,7 @@ resource "aws_iam_role_policy" "s3_access" {
 # Note: This uses a custom container image that wraps LanceDB with FastAPI
 # See: docker/lancedb-api/Dockerfile
 resource "aws_ecs_task_definition" "lancedb" {
-  family                   = "${var.deployment_name}"
+  family                   = var.deployment_name
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = var.task_cpu
@@ -230,7 +243,7 @@ resource "aws_ecs_task_definition" "lancedb" {
 
   container_definitions = jsonencode([{
     name  = "lancedb-api"
-    image = var.lancedb_api_image  # Custom image with LanceDB + FastAPI
+    image = var.lancedb_api_image # Custom image with LanceDB + FastAPI
 
     portMappings = [{
       containerPort = 8000
