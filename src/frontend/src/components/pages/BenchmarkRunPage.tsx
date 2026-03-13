@@ -6,9 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Alert, AlertDescription } from '../ui/alert';
-import { api } from '../../api/client';
+import { useBenchmark } from '../../contexts/BenchmarkContext';
 import { toast } from 'react-hot-toast';
-import type { BenchmarkResult, BenchmarkProgress } from '../../types/benchmark';
+import type { BenchmarkResult } from '../../types/benchmark';
 
 interface LiveMetricData {
   queryNumber: number;
@@ -18,11 +18,12 @@ interface LiveMetricData {
 export const BenchmarkRunPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [benchmark, setBenchmark] = useState<BenchmarkResult | null>(null);
-  const [progress, setProgress] = useState<BenchmarkProgress | null>(null);
+  const { getBenchmark, currentBenchmark, progress, isLoading: contextLoading } = useBenchmark();
   const [liveChartData, setLiveChartData] = useState<LiveMetricData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [startTime, setStartTime] = useState<Date>(new Date());
+
+  const benchmark = currentBenchmark;
 
   useEffect(() => {
     if (!id) {
@@ -30,61 +31,43 @@ export const BenchmarkRunPage: React.FC = () => {
       return;
     }
 
+    const loadBenchmark = async () => {
+      try {
+        const result = await getBenchmark(id);
+        setStartTime(new Date(result.started_at));
+      } catch (error) {
+        console.error('Failed to load benchmark:', error);
+        toast.error('Failed to load benchmark');
+        navigate('/benchmark');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     loadBenchmark();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Update live chart data when benchmark updates
   useEffect(() => {
-    if (!benchmark || benchmark.status === 'completed' || benchmark.status === 'failed') {
-      return;
+    if (benchmark?.metrics && benchmark.metrics.length > 0) {
+      updateLiveChartData(benchmark);
     }
-
-    const interval = setInterval(async () => {
-      try {
-        // Fetch progress
-        const progressResponse = await api.getBenchmarkProgress(id!);
-        setProgress(progressResponse.data);
-
-        // Fetch full results
-        const resultsResponse = await api.getBenchmarkResults(id!);
-        setBenchmark(resultsResponse.data);
-
-        // Update live chart data
-        if (resultsResponse.data.metrics && resultsResponse.data.metrics.length > 0) {
-          updateLiveChartData(resultsResponse.data);
-        }
-
-        // Check if completed
-        if (resultsResponse.data.status === 'completed') {
-          toast.success('Benchmark completed!');
-          setTimeout(() => {
-            navigate(`/benchmark/results/${id}`);
-          }, 2000);
-        } else if (resultsResponse.data.status === 'failed') {
-          toast.error('Benchmark failed');
-        }
-      } catch (error) {
-        console.error('Failed to fetch progress:', error);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [benchmark, id, navigate]);
+  }, [benchmark]);
 
-  const loadBenchmark = async () => {
-    try {
-      const response = await api.getBenchmarkResults(id!);
-      setBenchmark(response.data);
-      setStartTime(new Date(response.data.started_at));
-    } catch (error) {
-      console.error('Failed to load benchmark:', error);
-      toast.error('Failed to load benchmark');
-      navigate('/benchmark');
-    } finally {
-      setIsLoading(false);
+  // Handle completion/failure
+  useEffect(() => {
+    if (benchmark?.status === 'completed') {
+      toast.success('Benchmark completed!');
+      setTimeout(() => {
+        navigate(`/benchmark/results/${id}`);
+      }, 2000);
+    } else if (benchmark?.status === 'failed') {
+      toast.error('Benchmark failed');
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [benchmark?.status]);
 
   const updateLiveChartData = (benchmarkData: BenchmarkResult) => {
     // Simulate live chart updates based on completed queries

@@ -9,13 +9,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { api } from '../../api/client';
+import { useBenchmark } from '../../contexts/BenchmarkContext';
 import { toast } from 'react-hot-toast';
 import type { BenchmarkResult } from '../../types/benchmark';
 
 export const BenchmarkResultsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { getBenchmark } = useBenchmark();
   const [benchmark, setBenchmark] = useState<BenchmarkResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -25,27 +26,27 @@ export const BenchmarkResultsPage: React.FC = () => {
       return;
     }
 
+    const loadBenchmark = async () => {
+      try {
+        const result = await getBenchmark(id);
+        setBenchmark(result);
+
+        if (result.status !== 'completed') {
+          // Redirect to run page if still running
+          navigate(`/benchmark/run/${id}`);
+        }
+      } catch (error) {
+        console.error('Failed to load benchmark:', error);
+        toast.error('Failed to load benchmark results');
+        navigate('/benchmark');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     loadBenchmark();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-
-  const loadBenchmark = async () => {
-    try {
-      const response = await api.getBenchmarkResults(id!);
-      setBenchmark(response.data);
-
-      if (response.data.status !== 'completed') {
-        // Redirect to run page if still running
-        navigate(`/benchmark/run/${id}`);
-      }
-    } catch (error) {
-      console.error('Failed to load benchmark:', error);
-      toast.error('Failed to load benchmark results');
-      navigate('/benchmark');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const getWinner = () => {
     if (!benchmark?.metrics || benchmark.metrics.length === 0) return null;

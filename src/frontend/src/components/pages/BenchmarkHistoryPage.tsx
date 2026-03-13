@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Trophy, Clock, CheckSquare, Square } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
-import { api } from '../../api/client';
+import { useBenchmark } from '../../contexts/BenchmarkContext';
 import { toast } from 'react-hot-toast';
 import type { BenchmarkResult } from '../../types/benchmark';
 
@@ -14,37 +14,19 @@ type SortOrder = 'asc' | 'desc';
 
 export const BenchmarkHistoryPage: React.FC = () => {
   const navigate = useNavigate();
-  const [benchmarks, setBenchmarks] = useState<BenchmarkResult[]>([]);
-  const [filteredBenchmarks, setFilteredBenchmarks] = useState<BenchmarkResult[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { benchmarks: allBenchmarks, isLoading } = useBenchmark();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [selectedBenchmarks, setSelectedBenchmarks] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    loadBenchmarks();
-  }, []);
+  // Filter to completed benchmarks only
+  const benchmarks = useMemo(() => {
+    return allBenchmarks.filter(b => b.status === 'completed');
+  }, [allBenchmarks]);
 
-  useEffect(() => {
-    applyFiltersAndSort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [benchmarks, searchQuery, sortField, sortOrder]);
-
-  const loadBenchmarks = async () => {
-    try {
-      const response = await api.listBenchmarks();
-      const completed = response.data.filter(b => b.status === 'completed');
-      setBenchmarks(completed);
-    } catch (error) {
-      console.error('Failed to load benchmarks:', error);
-      toast.error('Failed to load benchmark history');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const applyFiltersAndSort = () => {
+  // Apply filters and sorting
+  const filteredBenchmarks = useMemo(() => {
     let filtered = [...benchmarks];
 
     // Apply search filter
@@ -75,8 +57,8 @@ export const BenchmarkHistoryPage: React.FC = () => {
       return sortOrder === 'asc' ? comparison : -comparison;
     });
 
-    setFilteredBenchmarks(filtered);
-  };
+    return filtered;
+  }, [benchmarks, searchQuery, sortField, sortOrder]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
