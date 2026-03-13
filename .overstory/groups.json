@@ -230,5 +230,15 @@
 		"status": "active",
 		"createdAt": "2026-03-13T19:54:33.307Z",
 		"completedAt": null
+	},
+	{
+		"id": "group-56494c78",
+		"name": "tooling-final",
+		"memberIssueIds": [
+			"S3Vector-e2fa"
+		],
+		"status": "active",
+		"createdAt": "2026-03-13T20:26:50.912Z",
+		"completedAt": null
 	}
 ]
