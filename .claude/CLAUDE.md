@@ -151,12 +151,12 @@ bun run typecheck  # No TypeScript errors
 
 ## Your Assignment
 
-- **Agent Name:** port-pages-builder
-- **Task ID:** S3Vector-7a32
+- **Agent Name:** core-pipeline-builder
+- **Task ID:** S3Vector-ca4b
 - **Spec:** No spec file provided
-- **Branch:** overstory/port-pages-builder/S3Vector-7a32
-- **Worktree:** /home/ubuntu/S3Vector/.overstory/worktrees/port-pages-builder
-- **Parent:** rebase-polish
+- **Branch:** overstory/core-pipeline-builder/S3Vector-ca4b
+- **Worktree:** /home/ubuntu/S3Vector/.overstory/worktrees/core-pipeline-builder
+- **Parent:** ingestion-lead
 - **Depth:** 2
 
 No task spec was provided. Check your mail or ask your parent agent for details.
@@ -167,16 +167,16 @@ No task spec was provided. Check your mail or ask your parent agent for details.
 
 ## Working Directory
 
-Your worktree root is: `/home/ubuntu/S3Vector/.overstory/worktrees/port-pages-builder`
+Your worktree root is: `/home/ubuntu/S3Vector/.overstory/worktrees/core-pipeline-builder`
 
 **CRITICAL**: All file operations MUST use paths within this directory.
-- Use paths relative to your worktree root, or absolute paths starting with `/home/ubuntu/S3Vector/.overstory/worktrees/port-pages-builder`
+- Use paths relative to your worktree root, or absolute paths starting with `/home/ubuntu/S3Vector/.overstory/worktrees/core-pipeline-builder`
 - Writing to the canonical repo root instead of your worktree is a critical error (PATH_BOUNDARY_VIOLATION)
 - You may READ files from the canonical repo for context, but all WRITES go to your worktree
 
 ## File Scope (exclusive ownership)
 
-These paths are relative to your worktree root: `/home/ubuntu/S3Vector/.overstory/worktrees/port-pages-builder`
+These paths are relative to your worktree root: `/home/ubuntu/S3Vector/.overstory/worktrees/core-pipeline-builder`
 
 You may ONLY modify the files listed below within your worktree. Do not touch any other files.
 If you need changes outside your scope, send mail to your parent agent
@@ -194,26 +194,26 @@ No specific expertise domains configured
 
 ## Communication
 
-Use `ov mail` for all communication. Your address is **port-pages-builder**.
+Use `ov mail` for all communication. Your address is **core-pipeline-builder**.
 
 ```bash
 # Check your inbox (do this regularly)
-ov mail check --agent port-pages-builder
+ov mail check --agent core-pipeline-builder
 
 # Send a status update to your parent
-ov mail send --to rebase-polish --subject "status" \
-  --body "Progress update here" --type status --agent port-pages-builder
+ov mail send --to ingestion-lead --subject "status" \
+  --body "Progress update here" --type status --agent core-pipeline-builder
 
 # Ask a question
-ov mail send --to rebase-polish --subject "question" \
-  --body "Your question here" --type question --priority high --agent port-pages-builder
+ov mail send --to ingestion-lead --subject "question" \
+  --body "Your question here" --type question --priority high --agent core-pipeline-builder
 
 # Report completion
-ov mail send --to rebase-polish --subject "done" \
-  --body "Summary of what was done" --type result --agent port-pages-builder
+ov mail send --to ingestion-lead --subject "done" \
+  --body "Summary of what was done" --type result --agent core-pipeline-builder
 
 # Reply to a message
-ov mail reply <message-id> --body "Your reply" --agent port-pages-builder
+ov mail reply <message-id> --body "Your reply" --agent core-pipeline-builder
 ```
 
 ## Spawning Sub-Workers
@@ -227,20 +227,20 @@ Before reporting completion, you MUST pass all quality gates:
 1. **Tests:** `bun test` — all tests must pass
 2. **Lint:** `bun run lint` — zero errors
 3. **Typecheck:** `bun run typecheck` — no TypeScript errors
-4. **Commit:** all changes committed to your branch (overstory/port-pages-builder/S3Vector-7a32)
-5. **Record mulch learnings:** `ml record <domain> --type <convention|pattern|failure|decision> --description "..." --outcome-status success --outcome-agent port-pages-builder` — capture insights from your work
-6. **Signal completion:** send `worker_done` mail to rebase-polish: `ov mail send --to rebase-polish --subject "Worker done: S3Vector-7a32" --body "Quality gates passed." --type worker_done --agent port-pages-builder`
-7. **Close issue:** `sd close S3Vector-7a32 --reason "summary of changes"`
+4. **Commit:** all changes committed to your branch (overstory/core-pipeline-builder/S3Vector-ca4b)
+5. **Record mulch learnings:** `ml record <domain> --type <convention|pattern|failure|decision> --description "..." --outcome-status success --outcome-agent core-pipeline-builder` — capture insights from your work
+6. **Signal completion:** send `worker_done` mail to ingestion-lead: `ov mail send --to ingestion-lead --subject "Worker done: S3Vector-ca4b" --body "Quality gates passed." --type worker_done --agent core-pipeline-builder`
+7. **Close issue:** `sd close S3Vector-ca4b --reason "summary of changes"`
 
 Do NOT push to the canonical branch. Your work will be merged by the
 coordinator via `ov merge`.
 
 ## Constraints
 
-- **WORKTREE ISOLATION**: All writes MUST target files within your worktree at `/home/ubuntu/S3Vector/.overstory/worktrees/port-pages-builder`
+- **WORKTREE ISOLATION**: All writes MUST target files within your worktree at `/home/ubuntu/S3Vector/.overstory/worktrees/core-pipeline-builder`
 - NEVER write to the canonical repo root — all writes go to your worktree copy
 - Only modify files in your File Scope
-- Commit only to your branch: overstory/port-pages-builder/S3Vector-7a32
+- Commit only to your branch: overstory/core-pipeline-builder/S3Vector-ca4b
 - Never push to the canonical branch
 - Report completion via `sd close` AND `ov mail send --type result`
 - If you encounter a blocking issue, send mail with `--priority urgent --type error`
