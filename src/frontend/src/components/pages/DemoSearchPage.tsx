@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Filter, Image as ImageIcon, Mic, Video } from 'lucide-react';
 import { SearchInterface } from '../SearchInterface';
 import { ResultsGrid, type SearchResult } from '../ResultsGrid';
@@ -6,77 +6,59 @@ import { VideoPlayer } from '../VideoPlayer';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { api } from '../../api/client';
+import { useSearch } from '../../contexts/SearchContext';
 import { toast } from 'react-hot-toast';
+import type { SearchQuery } from '../../types/search';
 
 type SearchMode = 'text' | 'image' | 'audio';
 
 export const DemoSearchPage: React.FC = () => {
+  const { results, isLoading, executeSearch, backend, setBackend, selectedResult, selectResult } = useSearch();
   const [searchMode, setSearchMode] = useState<SearchMode>('text');
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
-  const [selectedBackend, setSelectedBackend] = useState('s3_vector');
   const [searchQuery, setSearchQuery] = useState('');
   const [scoreFilter, setScoreFilter] = useState<[number, number]>([0, 100]);
   const [showFilters, setShowFilters] = useState(false);
 
   const availableBackends = [
-    { value: 's3_vector', label: 'S3 Vector', deployed: true },
+    { value: 's3vector', label: 'S3 Vector', deployed: true },
     { value: 'lancedb', label: 'LanceDB', deployed: false },
     { value: 'qdrant', label: 'Qdrant', deployed: false },
     { value: 'opensearch', label: 'OpenSearch', deployed: false }
   ];
 
-  const handleSearch = async (query: string, type: 'text' | 'image', backend: string) => {
-    setIsLoading(true);
+  const handleSearch = async (query: string, type: 'text' | 'image', backendParam: string) => {
     setSearchQuery(query);
 
+    const searchQuery: SearchQuery = {
+      text: query,
+      modality: type,
+    };
+
     try {
-      const response = await api.searchQuery({
-        query_text: query,
-        backend: backend,
-        top_k: 50
-      });
-
-      // Transform API response to SearchResult format
-      const transformedResults: SearchResult[] = response.data.results?.map((result: { id?: string; score?: number; metadata?: Record<string, unknown> }, index: number) => ({
-        id: result.id || `result-${index}`,
-        score: result.score || 0,
-        metadata: {
-          s3_uri: result.metadata?.s3_uri,
-          start_time: result.metadata?.start_time,
-          end_time: result.metadata?.end_time,
-          thumbnail_url: result.metadata?.thumbnail_url,
-          text: result.metadata?.text,
-          ...result.metadata
-        }
-      })) || [];
-
-      setResults(transformedResults);
-
-      if (transformedResults.length === 0) {
-        toast.success('Search completed - no results found');
-      } else {
-        toast.success(`Found ${transformedResults.length} results`);
-      }
+      await executeSearch(searchQuery, backendParam);
     } catch (error) {
       console.error('Search failed:', error);
       toast.error('Search failed. Please try again.');
-      setResults([]);
-    } finally {
-      setIsLoading(false);
     }
   };
 
+  // Toast notifications based on results from context
+  useEffect(() => {
+    if (!isLoading && results.length > 0) {
+      toast.success(`Found ${results.length} results`);
+    } else if (!isLoading && searchQuery && results.length === 0) {
+      toast.success('Search completed - no results found');
+    }
+  }, [results, isLoading, searchQuery]);
+
   const handlePlaySegment = (result: SearchResult) => {
-    setSelectedResult(result);
+    selectResult(result);
     // Scroll to player
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleClosePlayer = () => {
-    setSelectedResult(null);
+    selectResult(null);
   };
 
   const filteredResults = results.filter(result => {
@@ -194,8 +176,8 @@ export const DemoSearchPage: React.FC = () => {
               onSearch={handleSearch}
               isLoading={isLoading}
               availableBackends={availableBackends}
-              selectedBackend={selectedBackend}
-              onBackendChange={setSelectedBackend}
+              selectedBackend={backend}
+              onBackendChange={setBackend}
             />
 
             {/* Example Queries */}
@@ -208,7 +190,7 @@ export const DemoSearchPage: React.FC = () => {
                       key={query}
                       variant="outline"
                       size="sm"
-                      onClick={() => handleSearch(query, 'text', selectedBackend)}
+                      onClick={() => handleSearch(query, 'text', backend)}
                       className="text-xs"
                     >
                       "{query}"
@@ -242,7 +224,7 @@ export const DemoSearchPage: React.FC = () => {
                 </h2>
                 {!isLoading && (
                   <Badge variant="secondary" className="text-xs">
-                    Backend: {availableBackends.find(b => b.value === selectedBackend)?.label}
+                    Backend: {availableBackends.find(b => b.value === backend)?.label}
                   </Badge>
                 )}
               </div>

@@ -2,7 +2,7 @@
  * Infrastructure Context - Manages deployment state and operations
  */
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
@@ -73,6 +73,15 @@ export function InfrastructureProvider({ children }: InfrastructureProviderProps
     }
   );
 
+  // Clear operation state when polling completes
+  useEffect(() => {
+    if (currentOperationId && !pollState.isPolling && pollState.data) {
+      // Polling has completed, clear operation state
+      setOperationInProgress(false);
+      setCurrentOperationId(null);
+    }
+  }, [currentOperationId, pollState.isPolling, pollState.data]);
+
   // Parse deployments from API response
   const deployments = React.useMemo<Record<string, VectorStoreDeployment>>(() => {
     if (!statusData?.deployed_stores) {
@@ -114,12 +123,7 @@ export function InfrastructureProvider({ children }: InfrastructureProviderProps
     onError: (error) => {
       console.error('Deploy failed:', error);
       setOperationInProgress(false);
-    },
-    onSettled: () => {
-      setTimeout(() => {
-        setOperationInProgress(false);
-        setCurrentOperationId(null);
-      }, 2000);
+      setCurrentOperationId(null);
     },
   });
 
@@ -141,12 +145,7 @@ export function InfrastructureProvider({ children }: InfrastructureProviderProps
     onError: (error) => {
       console.error('Destroy failed:', error);
       setOperationInProgress(false);
-    },
-    onSettled: () => {
-      setTimeout(() => {
-        setOperationInProgress(false);
-        setCurrentOperationId(null);
-      }, 2000);
+      setCurrentOperationId(null);
     },
   });
 
@@ -171,12 +170,7 @@ export function InfrastructureProvider({ children }: InfrastructureProviderProps
     onError: (error) => {
       console.error('Deploy multiple failed:', error);
       setOperationInProgress(false);
-    },
-    onSettled: () => {
-      setTimeout(() => {
-        setOperationInProgress(false);
-        setCurrentOperationId(null);
-      }, 5000);
+      setCurrentOperationId(null);
     },
   });
 

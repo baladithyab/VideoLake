@@ -62,7 +62,7 @@ export default function DeploymentProgressPage() {
 
   // Poll infrastructure status
   useEffect(() => {
-    const updateStepsFromStatus = (status: InfrastructureStatus) => {
+    const updateStepsFromStatus = (status: InfrastructureStatus, currentElapsedTime: number) => {
     // Simulate step progression based on overall status
     // In a real implementation, this would be based on actual Terraform events
 
@@ -89,7 +89,7 @@ export default function DeploymentProgressPage() {
       } else {
         // Progress through steps
         const completedCount = Math.min(
-          Math.floor(elapsedTime / 120), // ~2 minutes per step
+          Math.floor(currentElapsedTime / 120), // ~2 minutes per step
           newSteps.length - 1
         );
 
@@ -113,8 +113,12 @@ export default function DeploymentProgressPage() {
         const status = response.data as InfrastructureStatus;
         setInfrastructureStatus(status);
 
+        // Calculate current elapsed time for step progression
+        const now = new Date();
+        const currentElapsedTime = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+
         // Update steps based on infrastructure status
-        updateStepsFromStatus(status);
+        updateStepsFromStatus(status, currentElapsedTime);
 
         // Check if deployment is complete
         if (status.overall_status === 'healthy') {
@@ -145,7 +149,7 @@ export default function DeploymentProgressPage() {
         clearInterval(pollingIntervalRef.current);
       }
     };
-  }, [elapsedTime]);
+  }, [startTime]);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
