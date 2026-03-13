@@ -347,22 +347,20 @@ class SageMakerEmbeddingProvider(EmbeddingProvider):
 
         for model_id, endpoint_name in self.endpoint_mapping.items():
             try:
-                # Test with a simple request
-                test_request = EmbeddingRequest(
-                    modality=ModalityType.TEXT,
-                    content="test",
-                    model_id=model_id
-                )
-
                 start_time = time.time()
 
-                # Run synchronously for connectivity check
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    loop.run_until_complete(self.generate_embedding(test_request))
-                finally:
-                    loop.close()
+                # Test with a simple synchronous request directly to SageMaker
+                # Avoid creating event loops - use direct boto3 call
+                test_payload = {"text": "test"}
+
+                response = self.runtime.invoke_endpoint(
+                    EndpointName=endpoint_name,
+                    ContentType="application/json",
+                    Body=json.dumps(test_payload)
+                )
+
+                # Read response to ensure endpoint is working
+                _ = json.loads(response["Body"].read().decode())
 
                 response_time = (time.time() - start_time) * 1000
                 total_response_time += response_time

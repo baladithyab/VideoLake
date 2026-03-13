@@ -48,7 +48,7 @@ async def start_benchmark(request: BenchmarkRequest):
 @router.get("/status/{job_id}")
 async def get_benchmark_status(job_id: str):
     """Get the status of a benchmark job."""
-    status = benchmark_service.get_status(job_id)
+    status = await benchmark_service.get_status(job_id)
     if status["status"] == "not_found":
         raise HTTPException(status_code=404, detail="Job not found")
     return status

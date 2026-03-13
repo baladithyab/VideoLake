@@ -9,7 +9,8 @@ from typing import List, Dict, Any, Optional
 import json
 import boto3
 
-# Add project root to path to allow importing scripts
+# TODO: Remove sys.path manipulation - use proper package imports instead
+# This is a code smell that can cause import conflicts
 project_root = str(Path(__file__).parent.parent.parent)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
@@ -24,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 class BenchmarkService:
     def __init__(self):
+        # TODO: Replace in-memory storage with persistent storage (Redis/DynamoDB)
+        # Current implementation loses all job state on service restart
         self.jobs = {}
         # Use a thread pool to run blocking benchmark operations
         self.executor = ThreadPoolExecutor(max_workers=1)
@@ -250,7 +253,7 @@ class BenchmarkService:
 
         return results
 
-    def get_status(self, job_id: str) -> Dict[str, Any]:
+    async def get_status(self, job_id: str) -> Dict[str, Any]:
         job = self.jobs.get(job_id)
         if not job:
             return {"status": "not_found"}
@@ -260,7 +263,8 @@ class BenchmarkService:
             try:
                 task_arn = job.get("task_arn")
                 if task_arn:
-                    response = self.ecs_client.describe_tasks(
+                    response = await asyncio.to_thread(
+                        self.ecs_client.describe_tasks,
                         cluster=self.ecs_cluster,
                         tasks=[task_arn]
                     )

@@ -146,7 +146,7 @@ class EmbeddingModelSelector:
         else:
             raise ValueError(f"Unsupported model: {model}")
 
-    def process_video(
+    async def process_video(
         self,
         video_uri: str,
         vector_types: Optional[List[str]] = None,  # For Marengo
@@ -173,7 +173,7 @@ class EmbeddingModelSelector:
             return self._process_with_marengo(video_uri, vector_types, **kwargs)
 
         elif self.model == EmbeddingModel.NOVA:
-            return self._process_with_nova(video_uri, embedding_mode, **kwargs)
+            return await self._process_with_nova(video_uri, embedding_mode, **kwargs)
 
         else:
             raise ValidationError(f"Unknown model: {self.model}")
@@ -226,7 +226,7 @@ class EmbeddingModelSelector:
             embedding_mode=None
         )
 
-    def _process_with_nova(
+    async def _process_with_nova(
         self,
         video_uri: str,
         embedding_mode: Optional[str],
@@ -248,7 +248,7 @@ class EmbeddingModelSelector:
         )
 
         # Call Nova service (generates single unified embedding)
-        result: NovaEmbeddingResult = self.service.generate_video_embedding(
+        result: NovaEmbeddingResult = await self.service.generate_video_embedding(
             video_uri=video_uri,
             embedding_mode=embedding_mode,
             **kwargs
