@@ -417,7 +417,3 @@ class OpenSearchProvider(VectorStoreProvider):
                 }
             }
 
-
-# Register the OpenSearch provider
-VectorStoreProviderFactory.register_provider(VectorStoreType.OPENSEARCH, OpenSearchProvider)
-

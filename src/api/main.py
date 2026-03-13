@@ -18,6 +18,7 @@ from src.api.exception_handlers import register_exception_handlers
 from src.api.middleware.observability import ObservabilityMiddleware, PerformanceLoggingMiddleware
 from src.api.middleware.auth import APIKeyMiddleware
 from src.core.dependencies import initialize_services, cleanup_services
+from src.config.unified_config_manager import get_config
 
 logger = get_logger(__name__)
 
@@ -63,17 +64,22 @@ register_exception_handlers(app)
 app.add_middleware(ObservabilityMiddleware)
 app.add_middleware(PerformanceLoggingMiddleware, slow_request_threshold_ms=2000.0)
 
-# Configure CORS - Allow requests from React frontend
-# Allow all localhost ports for development (Vite can use any available port)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=3600,  # Cache preflight requests for 1 hour
-)
+# Configure CORS - Allow requests from React frontend if enabled
+config = get_config()
+if config.security.enable_cors:
+    # Allow all localhost ports for development (Vite can use any available port)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+        max_age=3600,  # Cache preflight requests for 1 hour
+    )
+    logger.info("CORS middleware enabled")
+else:
+    logger.info("CORS middleware disabled (production mode)")
 
 # Add API key authentication (dev mode if API_KEY not set)
 app.add_middleware(APIKeyMiddleware)
@@ -197,10 +203,9 @@ from .routers import (
     embeddings,
     analytics,
     infrastructure,
-    benchmark
+    benchmark,
+    ingestion
 )
-from src.api.routes import ingestion as ingestion_routes
-
 # Include routers
 app.include_router(resources.router, prefix="/api/resources", tags=["resources"])
 app.include_router(processing.router, prefix="/api/processing", tags=["processing"])
@@ -209,5 +214,5 @@ app.include_router(embeddings.router, prefix="/api/embeddings", tags=["embedding
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 app.include_router(infrastructure.router, prefix="/api", tags=["infrastructure"])
 app.include_router(benchmark.router, prefix="/api/benchmark", tags=["benchmark"])
-app.include_router(ingestion_routes.router, prefix="/api/ingestion", tags=["ingestion"])
+app.include_router(ingestion.router, prefix="/api/ingestion", tags=["ingestion"])
 

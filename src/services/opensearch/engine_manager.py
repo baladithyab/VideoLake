@@ -214,7 +214,7 @@ class OpenSearchEngineManager:
         finally:
             operation.finish()
 
-    def create_s3_vector_index(
+    async def create_s3_vector_index(
         self,
         opensearch_endpoint: str,
         index_name: str,
@@ -244,6 +244,7 @@ class OpenSearchEngineManager:
             import requests
             from requests_aws4auth import AWS4Auth
             import boto3
+            import asyncio
 
             # Build index mapping with PROPER S3 vector engine configuration
             mapping = {
@@ -282,7 +283,8 @@ class OpenSearchEngineManager:
                     session_token=credentials.token
                 )
 
-                response = requests.put(
+                response = await asyncio.to_thread(
+                    requests.put,
                     url,
                     json=mapping,
                     auth=awsauth,
@@ -297,7 +299,8 @@ class OpenSearchEngineManager:
                     level="WARNING"
                 )
 
-                response = requests.put(
+                response = await asyncio.to_thread(
+                    requests.put,
                     url,
                     json=mapping,
                     headers={"Content-Type": "application/json"},

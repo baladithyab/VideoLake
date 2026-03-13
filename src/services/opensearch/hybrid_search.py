@@ -57,7 +57,7 @@ class OpenSearchHybridSearch:
         self.timing_tracker = TimingTracker("opensearch_hybrid_search")
         self._cost_tracker = cost_tracker or {'queries': []}
 
-    def perform_hybrid_search(
+    async def perform_hybrid_search(
         self,
         opensearch_endpoint: str,
         index_name: str,
@@ -98,6 +98,7 @@ class OpenSearchHybridSearch:
         operation = self.timing_tracker.start_operation("perform_hybrid_search")
         try:
             import requests
+            import asyncio
 
             if not query_text and not query_vector:
                 raise ValueError("Either query_text or query_vector must be provided")
@@ -148,7 +149,8 @@ class OpenSearchHybridSearch:
                 )
 
                 url = f"https://{opensearch_endpoint}/{index_name}/_search"
-                response = requests.post(
+                response = await asyncio.to_thread(
+                    requests.post,
                     url,
                     json=search_body,
                     auth=awsauth,
@@ -164,7 +166,8 @@ class OpenSearchHybridSearch:
                 )
 
                 url = f"https://{opensearch_endpoint}/{index_name}/_search"
-                response = requests.post(
+                response = await asyncio.to_thread(
+                    requests.post,
                     url,
                     json=search_body,
                     headers={"Content-Type": "application/json"},
