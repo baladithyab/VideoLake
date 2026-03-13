@@ -11,6 +11,7 @@ import { SearchProvider } from '@/contexts/SearchContext';
 import { MainLayout } from '@/components/templates/MainLayout';
 import { WelcomePage } from '@/components/pages/WelcomePage';
 import { NotFoundPage } from '@/components/pages/NotFoundPage';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // Deployment wizard pages (default exports)
 import DeploymentConfigurePage from '@/components/pages/DeploymentConfigurePage';
@@ -43,14 +44,15 @@ function SettingsPage() {
 function App() {
   return (
     <BrowserRouter>
-      <UIProvider>
-        <InfrastructureProvider>
-          <BenchmarkProvider>
-            <SearchProvider>
-              <Routes>
-                {/* Routes with MainLayout */}
-                <Route element={<MainLayout />}>
-                  <Route path="/" element={<WelcomePage />} />
+      <ErrorBoundary>
+        <UIProvider>
+          <InfrastructureProvider>
+            <BenchmarkProvider>
+              <SearchProvider>
+                <Routes>
+                  {/* Routes with MainLayout */}
+                  <Route element={<MainLayout />}>
+                    <Route path="/" element={<WelcomePage />} />
 
                   {/* Deployment wizard routes */}
                   <Route path="/deployment" element={<Navigate to="/deployment/configure" replace />} />
@@ -77,13 +79,14 @@ function App() {
                   <Route path="/settings" element={<SettingsPage />} />
                 </Route>
 
-                {/* 404 page (no layout) */}
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-            </SearchProvider>
-          </BenchmarkProvider>
-        </InfrastructureProvider>
-      </UIProvider>
+                  {/* 404 page (no layout) */}
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </SearchProvider>
+            </BenchmarkProvider>
+          </InfrastructureProvider>
+        </UIProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

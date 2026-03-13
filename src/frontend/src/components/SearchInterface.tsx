@@ -1,6 +1,14 @@
 import React, { useState } from 'react';
 import { Search, Image as ImageIcon, Database } from 'lucide-react';
 import { Badge } from './ui/badge';
+import { Input } from './ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 
 interface BackendOption {
   value: string;
@@ -32,8 +40,7 @@ export const SearchInterface: React.FC<SearchInterfaceProps> = ({
   const [query, setQuery] = useState('');
   const [localBackend, setLocalBackend] = useState(selectedBackend);
 
-  const handleBackendChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newBackend = e.target.value;
+  const handleBackendChange = (newBackend: string) => {
     setLocalBackend(newBackend);
     if (onBackendChange) {
       onBackendChange(newBackend);
@@ -54,25 +61,28 @@ export const SearchInterface: React.FC<SearchInterfaceProps> = ({
       {/* Backend Selector */}
       <div className="flex items-center justify-center space-x-3">
         <Database className="h-5 w-5 text-gray-500" />
-        <label htmlFor="backend-select" className="text-sm font-medium text-gray-700">
+        <label className="text-sm font-medium text-gray-700">
           Vector Store:
         </label>
-        <select
-          id="backend-select"
+        <Select
           value={localBackend}
-          onChange={handleBackendChange}
-          className="block w-48 pl-3 pr-10 py-2 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
+          onValueChange={handleBackendChange}
         >
-          {availableBackends.map((backend) => (
-            <option
-              key={backend.value}
-              value={backend.value}
-              disabled={backend.disabled}
-            >
-              {backend.label} {backend.deployed ? '✓' : '(not deployed)'}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Select vector store" />
+          </SelectTrigger>
+          <SelectContent>
+            {availableBackends.map((backend) => (
+              <SelectItem
+                key={backend.value}
+                value={backend.value}
+                disabled={backend.disabled}
+              >
+                {backend.label} {backend.deployed ? '✓' : '(not deployed)'}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {currentBackend?.deployed && (
           <Badge variant="default" className="bg-green-500">
             Active
@@ -88,12 +98,12 @@ export const SearchInterface: React.FC<SearchInterfaceProps> = ({
       {/* Search Form */}
       <form onSubmit={handleSubmit} className="relative flex items-center">
         <div className="relative flex-grow">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
             <Search className="h-5 w-5 text-gray-400" />
           </div>
-          <input
+          <Input
             type="text"
-            className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-l-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            className="pl-10 pr-3 py-3 h-auto rounded-l-lg rounded-r-none border-r-0"
             placeholder="Search videos (e.g., 'person running on beach')"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
