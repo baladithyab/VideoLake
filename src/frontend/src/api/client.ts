@@ -1,7 +1,19 @@
 import axios from 'axios';
 import type { BenchmarkRequest, BenchmarkResult, BenchmarkProgress } from '../types/benchmark';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || (() => {
+  // In test/SSR environment, use mock URL
+  if (typeof window === 'undefined' || import.meta.env.MODE === 'test') {
+    return 'http://localhost:8000';
+  }
+  // In development, fall back to current origin's port 8000
+  if (import.meta.env.DEV) {
+    const url = new URL(window.location.origin);
+    url.port = '8000';
+    return url.toString().replace(/\/$/, '');
+  }
+  throw new Error('VITE_API_URL environment variable is required in production');
+})();
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

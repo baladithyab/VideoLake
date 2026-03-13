@@ -39,28 +39,33 @@ export default function TerraformLogViewer({
 
   // Connect to SSE endpoint
   useEffect(() => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const apiUrl = import.meta.env.VITE_API_URL || (() => {
+      if (typeof window === 'undefined' || import.meta.env.MODE === 'test') {
+        return 'http://localhost:8000';
+      }
+      if (import.meta.env.DEV) {
+        const url = new URL(window.location.origin);
+        url.port = '8000';
+        return url.toString().replace(/\/$/, '');
+      }
+      throw new Error('VITE_API_URL environment variable is required in production');
+    })();
     const sseUrl = `${apiUrl}/api/infrastructure/logs/${operationId}`;
-
-    console.log(`[TerraformLogViewer] Connecting to SSE: ${sseUrl}`);
 
     const eventSource = new EventSource(sseUrl);
 
     eventSourceRef.current = eventSource;
 
     eventSource.onopen = () => {
-      console.log('[TerraformLogViewer] SSE connection opened');
+      // SSE connection opened
     };
 
     eventSource.onmessage = (event) => {
-      console.log('[TerraformLogViewer] Received SSE message:', event.data);
-
       try {
         const logEntry: LogEntry = JSON.parse(event.data);
 
         // Check if this is a completion event
         if (logEntry.level === 'COMPLETE') {
-          console.log('[TerraformLogViewer] Operation completed:', logEntry.status);
           setStatus(logEntry.status as 'completed' | 'failed');
           if (logEntry.error) {
             setError(logEntry.error);
@@ -68,7 +73,6 @@ export default function TerraformLogViewer({
           eventSource.close();
         } else {
           // Add log entry
-          console.log('[TerraformLogViewer] Adding log:', logEntry.message);
           setLogs((prev) => [...prev, logEntry]);
         }
       } catch (err) {
