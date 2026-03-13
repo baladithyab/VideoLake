@@ -67,6 +67,18 @@ variable "s3_bucket_name" {
   type        = string
 }
 
+variable "acm_certificate_arn" {
+  description = "ARN of ACM certificate for HTTPS (optional - if not provided, will create self-signed for dev)"
+  type        = string
+  default     = null
+}
+
+variable "domain_name" {
+  description = "Domain name for ACM certificate (required if acm_certificate_arn not provided)"
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
