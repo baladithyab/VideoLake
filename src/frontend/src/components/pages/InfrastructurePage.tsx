@@ -16,9 +16,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { api } from '../../api/client';
+import { useInfrastructure } from '../../contexts/InfrastructureContext';
 import TerraformLogViewer from '../TerraformLogsViewer';
 import { toast } from 'react-hot-toast';
+import type { VectorStoreType } from '../../types/infrastructure';
 
 interface BackendStatus {
   name: string;
@@ -47,44 +48,37 @@ interface ActivityLog {
 }
 
 export const InfrastructurePage: React.FC = () => {
-  const [status, setStatus] = useState<InfrastructureStatus | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { deployments, isLoading, deployStore, destroyStore, refreshStatus, operationInProgress } = useInfrastructure();
   const [operationId, setOperationId] = useState<string | null>(null);
   const [operationType, setOperationType] = useState<'deploy' | 'destroy'>('deploy');
   const [activeStore, setActiveStore] = useState<string>('');
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
 
-  const fetchStatus = async () => {
-    try {
-      setLoading(true);
-      const response = await api.getInfrastructureStatus();
+  // Transform context deployments to page format
+  const status: InfrastructureStatus | null = React.useMemo(() => {
+    const deployed_stores: BackendStatus[] = Object.entries(deployments).map(([name, deployment]) => ({
+      name,
+      deployed: deployment.status === 'deployed',
+      endpoint: deployment.endpoint || null,
+      status: deployment.status,
+      estimated_cost_monthly: deployment.status === 'deployed' ? 50 : null, // Mock cost
+      queries_24h: Math.floor(Math.random() * 5000), // Mock data
+      avg_latency_ms: Math.floor(Math.random() * 200) + 20, // Mock data
+      uptime_percent: 99.5 + Math.random() * 0.5 // Mock data
+    }));
 
-      // Transform and enrich the response data
-      const enrichedStatus: InfrastructureStatus = {
-        deployed_stores: response.data.deployed_stores.map((store: BackendStatus) => ({
-          ...store,
-          queries_24h: Math.floor(Math.random() * 5000), // Mock data
-          avg_latency_ms: Math.floor(Math.random() * 200) + 20, // Mock data
-          uptime_percent: 99.5 + Math.random() * 0.5 // Mock data
-        })),
-        total_deployed: response.data.total_deployed,
-        total_cost_monthly: response.data.total_cost_monthly,
-        overall_status: response.data.total_deployed > 0 ? 'healthy' : 'down',
-        uptime_percent: 99.8
-      };
+    const total_deployed = deployed_stores.filter(s => s.deployed).length;
 
-      setStatus(enrichedStatus);
-    } catch (error) {
-      console.error('Failed to fetch infrastructure status:', error);
-      toast.error('Failed to load infrastructure status');
-    } finally {
-      setLoading(false);
-    }
-  };
+    return {
+      deployed_stores,
+      total_deployed,
+      total_cost_monthly: total_deployed * 50, // Mock calculation
+      overall_status: total_deployed > 0 ? 'healthy' : 'down',
+      uptime_percent: 99.8
+    };
+  }, [deployments]);
 
   useEffect(() => {
-    fetchStatus();
-
     // Mock activity logs
     const mockLogs: ActivityLog[] = [
       {
@@ -107,17 +101,11 @@ export const InfrastructurePage: React.FC = () => {
       }
     ];
     setActivityLogs(mockLogs);
-
-    // Poll status every 30 seconds
-    const interval = setInterval(fetchStatus, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   const handleDeploy = async (storeName: string) => {
     try {
-      const response = await api.deploySingleStore(storeName);
-
-      setOperationId(response.data.operation_id);
+      await deployStore(storeName as VectorStoreType);
       setOperationType('deploy');
       setActiveStore(storeName);
       toast.success(`Deployment started for ${storeName}`);
@@ -133,9 +121,7 @@ export const InfrastructurePage: React.FC = () => {
     }
 
     try {
-      const response = await api.destroySingleStore(storeName, true);
-
-      setOperationId(response.data.operation_id);
+      await destroyStore(storeName as VectorStoreType);
       setOperationType('destroy');
       setActiveStore(storeName);
       toast.success(`Destruction started for ${storeName}`);
@@ -147,7 +133,7 @@ export const InfrastructurePage: React.FC = () => {
 
   const handleOperationClose = () => {
     setOperationId(null);
-    fetchStatus();
+    refreshStatus();
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -193,8 +179,8 @@ export const InfrastructurePage: React.FC = () => {
                 Manage and monitor your vector store infrastructure
               </p>
             </div>
-            <Button variant="outline" onClick={fetchStatus} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            <Button variant="outline" onClick={refreshStatus} disabled={isLoading || operationInProgress}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
