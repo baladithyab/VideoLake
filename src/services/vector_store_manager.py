@@ -23,12 +23,16 @@ from src.services.vector_store_s3vector_provider import S3VectorProvider
 from src.services.vector_store_opensearch_provider import OpenSearchProvider
 from src.services.vector_store_lancedb_provider import LanceDBProvider
 from src.services.vector_store_qdrant_provider import QdrantProvider
+from src.services.vector_store_milvus_provider import MilvusProvider
+from src.services.vector_store_faiss_provider import FAISSProvider
 
 # Register all providers
 VectorStoreProviderFactory.register_provider(VectorStoreType.S3_VECTOR, S3VectorProvider)
 VectorStoreProviderFactory.register_provider(VectorStoreType.OPENSEARCH, OpenSearchProvider)
 VectorStoreProviderFactory.register_provider(VectorStoreType.LANCEDB, LanceDBProvider)
 VectorStoreProviderFactory.register_provider(VectorStoreType.QDRANT, QdrantProvider)
+VectorStoreProviderFactory.register_provider(VectorStoreType.MILVUS, MilvusProvider)
+VectorStoreProviderFactory.register_provider(VectorStoreType.FAISS, FAISSProvider)
 
 logger = get_logger(__name__)
 
