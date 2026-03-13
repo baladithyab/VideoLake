@@ -106,7 +106,7 @@ s3vector-env\Scripts\activate     # Windows
 ### 3. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### 4. Verify Installation
@@ -322,14 +322,22 @@ docker-compose logs -f s3vector
 ### 3. Dockerfile
 
 ```dockerfile
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# Copy dependency files
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+# Copy application code
 COPY . .
+
+# Add virtual environment to PATH
+ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8501
 

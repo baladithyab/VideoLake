@@ -11,11 +11,11 @@ Get started with the S3Vector AWS Vector Store Comparison Platform in under 15 m
 - Python >= 3.11
 - Git
 
-**Recommended (for 10x faster installs):**
-- **uv**: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- **bun**: `curl -fsSL https://bun.sh/install | bash`
+**Required:**
+- **uv**: `curl -LsSf https://astral.sh/uv/install.sh | sh` (required for Python package management)
 
-The `start.sh` script will auto-detect and use these tools if available.
+**Recommended:**
+- **bun**: `curl -fsSL https://bun.sh/install | bash` (10x faster JavaScript package manager)
 
 ## What You'll Deploy
 
@@ -40,9 +40,8 @@ See the [full documentation](docs/) for multi-backend comparison setup.
 # Navigate to project root
 cd S3Vector
 
-# Install Python dependencies (use uv if available for 10-100x speedup)
-uv pip install -e .
-# Or: pip install -r requirements.txt
+# Install Python dependencies with uv
+uv sync
 
 # Configure environment variables
 cp .env.example .env
@@ -159,7 +158,7 @@ VITE_API_URL=http://localhost:8000
 
 **Problem**: `ModuleNotFoundError: No module named 'fastapi'`
 ```bash
-pip install fastapi uvicorn python-multipart
+uv sync
 ```
 
 **Problem**: `Services initialization failed`
@@ -207,8 +206,7 @@ If you see CORS errors in browser console:
 ### Backend
 ```bash
 # Use production ASGI server
-pip install gunicorn
-gunicorn src.api.main:app -w 4 -k uvicorn.workers.UvicornWorker
+uv run gunicorn src.api.main:app -w 4 -k uvicorn.workers.UvicornWorker
 ```
 
 ### Frontend
@@ -239,8 +237,7 @@ npm run preview
 ```bash
 # Backend
 python run_api.py                    # Start API server
-uv pip install -e .                  # Install dependencies (fast)
-pip install -r requirements.txt      # Install dependencies (standard)
+uv sync                              # Install dependencies
 
 # Frontend
 cd src/frontend

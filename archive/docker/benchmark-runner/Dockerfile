@@ -5,16 +5,18 @@ FROM python:3.12-slim AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create virtual environment
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt /tmp/
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r /tmp/requirements.txt
+# Copy dependency files
+COPY pyproject.toml uv.lock /tmp/
+
+# Install Python dependencies with uv
+WORKDIR /tmp
+RUN uv sync --frozen --no-dev
 
 # Final stage - minimal runtime image
 FROM python:3.12-slim
@@ -33,8 +35,9 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
     ./aws/install && \
     rm -rf aws awscliv2.zip
 
-# Copy virtual environment from builder
-COPY --from=builder /opt/venv /opt/venv
+# Copy uv and Python environment from builder
+COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
+COPY --from=builder /tmp/.venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Create app directory
