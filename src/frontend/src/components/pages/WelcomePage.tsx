@@ -215,7 +215,7 @@ export function WelcomePage() {
             icon={Zap}
             title="Real-Time Monitoring"
             description="Track deployment progress, benchmark execution, and search performance in real-time."
-            link="/history"
+            link="/benchmark/history"
             linkLabel="View History"
           />
         </div>

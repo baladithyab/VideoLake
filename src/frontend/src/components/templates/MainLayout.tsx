@@ -3,8 +3,7 @@
  */
 
 import React from 'react';
-import type { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, Outlet } from 'react-router-dom';
 import {
   Home,
   Rocket,
@@ -21,10 +20,6 @@ import { useInfrastructure } from '@/contexts/InfrastructureContext';
 import { Toaster } from 'react-hot-toast';
 import { StatusDot } from '@/components/molecules/StatusIndicator';
 
-interface MainLayoutProps {
-  children: ReactNode;
-}
-
 interface NavItem {
   path: string;
   label: string;
@@ -37,10 +32,10 @@ const navigationItems: NavItem[] = [
   { path: '/deployment', label: 'Deploy', icon: Rocket },
   { path: '/benchmark', label: 'Benchmark', icon: BarChart3 },
   { path: '/demo', label: 'Search Demo', icon: Search },
-  { path: '/history', label: 'History', icon: History },
+  { path: '/benchmark/history', label: 'History', icon: History },
 ];
 
-export function MainLayout({ children }: MainLayoutProps) {
+export function MainLayout() {
   const location = useLocation();
   const { sidebarOpen, setSidebarOpen } = useUI();
   const { deployments, isDeployed } = useInfrastructure();
@@ -90,7 +85,10 @@ export function MainLayout({ children }: MainLayoutProps) {
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigationItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.path;
+              // Match exact path for home, or check if current path starts with nav path (for multi-page sections)
+              const isActive = item.path === '/'
+                ? location.pathname === '/'
+                : location.pathname.startsWith(item.path);
 
               return (
                 <Link
@@ -195,7 +193,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
         {/* Page content */}
         <main className="p-4 sm:p-6 lg:p-8">
-          {children}
+          <Outlet />
         </main>
       </div>
     </div>

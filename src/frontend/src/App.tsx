@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { UIProvider } from '@/contexts/UIContext';
 import { InfrastructureProvider } from '@/contexts/InfrastructureContext';
 import { BenchmarkProvider } from '@/contexts/BenchmarkContext';
@@ -49,30 +49,32 @@ function App() {
             <SearchProvider>
               <Routes>
                 {/* Routes with MainLayout */}
-                <Route element={<MainLayout><div /></MainLayout>}>
-                  <Route path="/" element={<MainLayout><WelcomePage /></MainLayout>} />
+                <Route element={<MainLayout />}>
+                  <Route path="/" element={<WelcomePage />} />
 
                   {/* Deployment wizard routes */}
-                  <Route path="/deployment/configure" element={<MainLayout><DeploymentConfigurePage /></MainLayout>} />
-                  <Route path="/deployment/review" element={<MainLayout><DeploymentReviewPage /></MainLayout>} />
-                  <Route path="/deployment/progress" element={<MainLayout><DeploymentProgressPage /></MainLayout>} />
+                  <Route path="/deployment" element={<Navigate to="/deployment/configure" replace />} />
+                  <Route path="/deployment/configure" element={<DeploymentConfigurePage />} />
+                  <Route path="/deployment/review" element={<DeploymentReviewPage />} />
+                  <Route path="/deployment/progress" element={<DeploymentProgressPage />} />
 
                   {/* Benchmark workflow routes */}
-                  <Route path="/benchmark" element={<MainLayout><BenchmarkHubPage /></MainLayout>} />
-                  <Route path="/benchmark/configure" element={<MainLayout><BenchmarkConfigurePage /></MainLayout>} />
-                  <Route path="/benchmark/run/:id" element={<MainLayout><BenchmarkRunPage /></MainLayout>} />
-                  <Route path="/benchmark/results/:id" element={<MainLayout><BenchmarkResultsPage /></MainLayout>} />
-                  <Route path="/benchmark/history" element={<MainLayout><BenchmarkHistoryPage /></MainLayout>} />
+                  <Route path="/benchmark" element={<BenchmarkHubPage />} />
+                  <Route path="/benchmark/configure" element={<BenchmarkConfigurePage />} />
+                  <Route path="/benchmark/run/:id" element={<BenchmarkRunPage />} />
+                  <Route path="/benchmark/results/:id" element={<BenchmarkResultsPage />} />
+                  <Route path="/benchmark/history" element={<BenchmarkHistoryPage />} />
 
                   {/* Demo routes */}
-                  <Route path="/demo/search" element={<MainLayout><DemoSearchPage /></MainLayout>} />
-                  <Route path="/demo/video/:id" element={<MainLayout><VideoDetailPage /></MainLayout>} />
+                  <Route path="/demo" element={<Navigate to="/demo/search" replace />} />
+                  <Route path="/demo/search" element={<DemoSearchPage />} />
+                  <Route path="/demo/video/:id" element={<VideoDetailPage />} />
 
                   {/* Infrastructure page */}
-                  <Route path="/infrastructure" element={<MainLayout><InfrastructurePage /></MainLayout>} />
+                  <Route path="/infrastructure" element={<InfrastructurePage />} />
 
                   {/* Settings placeholder */}
-                  <Route path="/settings" element={<MainLayout><SettingsPage /></MainLayout>} />
+                  <Route path="/settings" element={<SettingsPage />} />
                 </Route>
 
                 {/* 404 page (no layout) */}
