@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
 // Types
@@ -49,6 +51,8 @@ interface DeploymentConfig {
 }
 
 // Data
+// TODO: These should be fetched from the API instead of being hardcoded
+// Consider adding API endpoints: GET /api/v1/models/embedding and GET /api/v1/infrastructure/stores/available
 const EMBEDDING_MODELS: EmbeddingModel[] = [
   {
     id: 'clip',
@@ -428,11 +432,11 @@ export default function DeploymentConfigurePage() {
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium mb-2 block">Auto-scaling</label>
+                      <Label className="text-sm font-medium mb-2 block">Auto-scaling</Label>
                       <div className="flex gap-4">
                         <div className="flex-1">
-                          <label className="text-xs text-muted-foreground">Min tasks</label>
-                          <input
+                          <Label className="text-xs text-muted-foreground">Min tasks</Label>
+                          <Input
                             type="number"
                             min="1"
                             max="10"
@@ -444,12 +448,12 @@ export default function DeploymentConfigurePage() {
                                 lancedb: { ...prev.computeConfigs.lancedb, minTasks: parseInt(e.target.value) }
                               }
                             }))}
-                            className="w-full mt-1 px-3 py-2 border rounded-md"
+                            className="mt-1"
                           />
                         </div>
                         <div className="flex-1">
-                          <label className="text-xs text-muted-foreground">Max tasks</label>
-                          <input
+                          <Label className="text-xs text-muted-foreground">Max tasks</Label>
+                          <Input
                             type="number"
                             min="1"
                             max="10"
@@ -461,7 +465,7 @@ export default function DeploymentConfigurePage() {
                                 lancedb: { ...prev.computeConfigs.lancedb, maxTasks: parseInt(e.target.value) }
                               }
                             }))}
-                            className="w-full mt-1 px-3 py-2 border rounded-md"
+                            className="mt-1"
                           />
                         </div>
                       </div>

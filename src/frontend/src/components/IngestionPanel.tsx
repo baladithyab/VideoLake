@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'react-hot-toast';
 import { Loader2, Upload, Database, FileVideo } from 'lucide-react';
 import axios from 'axios';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Checkbox } from './ui/checkbox';
 
 export function IngestionPanel() {
   const [videoPath, setVideoPath] = useState('');
@@ -227,14 +229,15 @@ export function IngestionPanel() {
 
         <div className="space-y-2">
           <Label>Model Selection</Label>
-          <select
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            value={modelType}
-            onChange={(e) => setModelType(e.target.value)}
-          >
-            <option value="Amazon Nova">Amazon Nova</option>
-            <option value="Bedrock Titan">Bedrock Titan</option>
-          </select>
+          <Select value={modelType} onValueChange={setModelType}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a model" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Amazon Nova">Amazon Nova</SelectItem>
+              <SelectItem value="Bedrock Titan">Bedrock Titan</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">
@@ -242,11 +245,9 @@ export function IngestionPanel() {
           <div className="flex gap-4">
             {['S3Vector', 'LanceDB', 'Qdrant'].map((backend) => (
               <label key={backend} className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                <Checkbox
                   checked={selectedBackends.includes(backend)}
-                  onChange={() => handleBackendToggle(backend)}
+                  onCheckedChange={() => handleBackendToggle(backend)}
                 />
                 <span className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                   {backend}
