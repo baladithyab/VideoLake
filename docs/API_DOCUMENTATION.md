@@ -1,14 +1,15 @@
-# Videolake REST API Documentation
+# S3Vector REST API Documentation
 
 ## Overview
 
-Videolake is a comprehensive AWS vector store comparison platform that supports multiple vector store backends for performance evaluation and optimization. The platform processes videos using TwelveLabs Marengo embeddings and provides similarity search across multiple backend options (AWS S3Vector, OpenSearch, Qdrant, LanceDB).
+S3Vector is a comprehensive AWS vector store comparison platform that supports multiple vector store backends for performance evaluation and optimization. The platform processes multi-modal content (text, images, audio, video) using various embedding providers and provides similarity search across multiple backend options (AWS S3Vector, OpenSearch, Qdrant, LanceDB).
 
 ### Architecture Philosophy
 
+- **Multi-Modal Support**: Process and search across text, image, audio, video, and cross-modal content
 - **Multi-Backend Support**: Compare performance across AWS S3Vector, OpenSearch, Qdrant, and LanceDB
 - **Terraform-First**: All infrastructure managed through Terraform for reproducibility
-- **Video-Centric**: Optimized for video processing and multimodal search
+- **Embedding Provider Abstraction**: Unified interface for AWS Bedrock, SageMaker, and external APIs (OpenAI, Cohere)
 - **Cost-Effective**: AWS S3Vector backend provides 90%+ cost savings vs traditional vector databases
 
 ## Base URL
@@ -19,7 +20,46 @@ http://localhost:8000
 
 ## Authentication
 
-Currently, the API does not require authentication for local development. In production deployments, implement appropriate authentication mechanisms.
+The S3Vector API supports optional X-API-Key authentication via middleware.
+
+### Development Mode (Default)
+
+If the `API_KEY` environment variable is not set, authentication is **disabled** for easy local development:
+
+```bash
+curl http://localhost:8000/api/resources/scan
+```
+
+### Production Mode
+
+Set the `API_KEY` environment variable to enable authentication. All `/api/*` endpoints (except public routes) will require the `X-API-Key` header:
+
+```bash
+# Set API key
+export API_KEY="your-secret-key-here"
+
+# Make authenticated requests
+curl -H "X-API-Key: your-secret-key-here" http://localhost:8000/api/resources/scan
+```
+
+### Public Endpoints (No Authentication Required)
+
+- `GET /` - Root endpoint
+- `GET /api/health` - Health check
+- `GET /docs` - API documentation (Swagger UI)
+- `GET /openapi.json` - OpenAPI schema
+- `GET /redoc` - ReDoc documentation
+
+### Protected Endpoints
+
+All other `/api/*` endpoints require authentication when `API_KEY` is configured.
+
+**Authentication Error Response** (HTTP 403):
+```json
+{
+  "detail": "Invalid or missing API key"
+}
+```
 
 ---
 
@@ -33,8 +73,8 @@ Currently, the API does not require authentication for local development. In pro
 **Response:**
 ```json
 {
-  "message": "Videolake API",
-  "version": "1.0.0", 
+  "message": "S3Vector API - Multi-Modal Vector Store Comparison Platform",
+  "version": "1.0.0",
   "status": "running"
 }
 ```
@@ -100,8 +140,8 @@ Returns complete infrastructure tree showing:
       "children": [
         {
           "type": "s3_bucket",
-          "name": "videolake-media-bucket",
-          "arn": "arn:aws:s3:::videolake-media-bucket",
+          "name": "s3vector-media-bucket",
+          "arn": "arn:aws:s3:::s3vector-media-bucket",
           "region": "us-east-1",
           "status": "active"
         }
@@ -830,7 +870,302 @@ Compute statistics and similarities for a set of embeddings.
 
 ---
 
-### 6. Analytics
+### 6. Multi-Modal Embedding Providers (NEW)
+
+The S3Vector platform provides a unified interface for generating embeddings across multiple modalities (text, image, audio, video, multimodal) using various backend providers.
+
+#### `GET /api/embeddings/providers`
+**List all available embedding providers**
+
+Returns information about each registered embedding provider including supported modalities, available models, and capabilities.
+
+**Response:**
+```json
+{
+  "success": true,
+  "providers": [
+    {
+      "provider_id": "bedrock",
+      "provider_name": "Bedrock",
+      "supported_modalities": ["text", "image", "multimodal"],
+      "max_batch_size": 96,
+      "supports_configurable_dimensions": true,
+      "available_dimensions": [256, 512, 1024, 1536],
+      "typical_latency_ms": 150.0,
+      "models": [
+        {
+          "model_id": "amazon.titan-embed-text-v2:0",
+          "modality": "text",
+          "dimensions": 1024,
+          "max_tokens": 8192,
+          "cost_per_1k_tokens": 0.0001,
+          "description": "Amazon Titan Text Embeddings V2",
+          "supports_batch": true
+        },
+        {
+          "model_id": "amazon.titan-embed-image-v1",
+          "modality": "image",
+          "dimensions": 1024,
+          "description": "Amazon Titan Image Embeddings",
+          "supports_batch": false
+        }
+      ]
+    },
+    {
+      "provider_id": "external",
+      "provider_name": "External APIs",
+      "supported_modalities": ["text"],
+      "max_batch_size": 2048,
+      "supports_configurable_dimensions": true,
+      "available_dimensions": [256, 512, 768, 1024, 1536, 3072],
+      "models": [
+        {
+          "model_id": "openai.text-embedding-3-large",
+          "modality": "text",
+          "dimensions": [3072, 1536, 1024, 768, 512, 256],
+          "max_tokens": 8191,
+          "cost_per_1k_tokens": 0.00013,
+          "description": "OpenAI text-embedding-3-large - State-of-the-art quality"
+        }
+      ]
+    }
+  ],
+  "timing_report": {...}
+}
+```
+
+#### `GET /api/embeddings/providers/{provider_id}`
+**Get detailed information about a specific embedding provider**
+
+**Parameters:**
+- `provider_id`: The provider identifier (bedrock, sagemaker, external)
+
+**Response:**
+```json
+{
+  "success": true,
+  "provider": {
+    "provider_id": "bedrock",
+    "provider_name": "Bedrock",
+    "capabilities": {
+      "supported_modalities": ["text", "image", "multimodal"],
+      "max_batch_size": 96,
+      "supports_configurable_dimensions": true,
+      "available_dimensions": [256, 512, 1024, 1536],
+      "max_input_tokens": 8192,
+      "cost_per_1k_tokens": 0.0001,
+      "typical_latency_ms": 150.0
+    },
+    "models": [...],
+    "health": {
+      "accessible": true,
+      "response_time_ms": 125.3,
+      "health_status": "healthy",
+      "models_available": 15
+    }
+  },
+  "timing_report": {...}
+}
+```
+
+**Error Response** (HTTP 404):
+```json
+{
+  "detail": "Provider 'invalid-provider' not found"
+}
+```
+
+#### `POST /api/embeddings/generate`
+**Generate embeddings for multi-modal content**
+
+Generate embeddings for text, image, audio, video, or multimodal content using specified or auto-selected provider.
+
+**Request:**
+```json
+{
+  "modality": "text",
+  "content": "Example text to embed",
+  "provider_id": "bedrock",
+  "model_id": "amazon.titan-embed-text-v2:0",
+  "dimension": 1024,
+  "metadata": {}
+}
+```
+
+**Parameters:**
+- `modality` (required): Content type - `text`, `image`, `audio`, `video`, or `multimodal`
+- `content` (required): Content to embed (text string, S3 URI, or batch list)
+- `provider_id` (optional): Specific provider to use (`bedrock`, `sagemaker`, `external`). If not specified, provider is auto-selected based on modality
+- `model_id` (optional): Specific model ID. If not specified, provider's default model is used
+- `dimension` (optional): Target embedding dimension (if configurable by the model)
+- `metadata` (optional): Additional provider-specific parameters
+
+**Modality Support by Provider:**
+- **bedrock**: text, image, multimodal
+- **sagemaker**: text, image (model-dependent)
+- **external**: text (OpenAI, Cohere)
+
+**Response:**
+```json
+{
+  "success": true,
+  "embeddings": [[0.1, 0.2, 0.3, ...]],
+  "model_id": "amazon.titan-embed-text-v2:0",
+  "modality": "text",
+  "dimension": 1024,
+  "provider": "bedrock",
+  "processing_time_ms": 145,
+  "metadata": {},
+  "timing_report": {...}
+}
+```
+
+**Batch Request Example:**
+```json
+{
+  "modality": "text",
+  "content": [
+    "First text to embed",
+    "Second text to embed",
+    "Third text to embed"
+  ],
+  "provider_id": "bedrock"
+}
+```
+
+**Batch Response:**
+```json
+{
+  "success": true,
+  "embeddings": [
+    [0.1, 0.2, ...],
+    [0.3, 0.4, ...],
+    [0.5, 0.6, ...]
+  ],
+  "model_id": "amazon.titan-embed-text-v2:0",
+  "dimension": 1024,
+  "processing_time_ms": 380
+}
+```
+
+**Error Responses:**
+
+Invalid modality (HTTP 400):
+```json
+{
+  "detail": "Invalid modality: invalid. Must be one of: text, image, audio, video, multimodal"
+}
+```
+
+Provider not found (HTTP 404):
+```json
+{
+  "detail": "Provider 'invalid-provider' not found"
+}
+```
+
+Unsupported modality (HTTP 400):
+```json
+{
+  "detail": "Provider 'external' does not support modality: image"
+}
+```
+
+No provider available (HTTP 400):
+```json
+{
+  "detail": "No provider available for modality: video"
+}
+```
+
+---
+
+### 7. Vector Store Comparison (NEW)
+
+#### `GET /api/resources/vector-stores/comparison`
+**Compare capabilities of all available vector store providers**
+
+Returns comprehensive comparison of all registered vector store backends including capabilities, costs, performance characteristics, and deployment status.
+
+**Response:**
+```json
+{
+  "success": true,
+  "summary": {
+    "total_providers": 4,
+    "deployed_providers": 2,
+    "available_providers": 2
+  },
+  "providers": [
+    {
+      "provider_id": "s3_vector",
+      "provider_name": "S3 Vector Vector Store",
+      "deployed": true,
+      "capabilities": {
+        "max_dimension": 4096,
+        "max_vectors": 10000000,
+        "supports_metadata_filtering": true,
+        "supports_hybrid_search": false,
+        "supports_batch_upsert": true,
+        "supports_sparse_vectors": false,
+        "supports_multi_vector": false,
+        "max_batch_size": 1000,
+        "typical_query_latency_ms": 50.0
+      },
+      "estimated_monthly_cost_per_million_vectors": 23.0,
+      "health": {
+        "accessible": true,
+        "response_time_ms": 45.2,
+        "health_status": "healthy"
+      }
+    },
+    {
+      "provider_id": "opensearch",
+      "provider_name": "Opensearch Vector Store",
+      "deployed": true,
+      "capabilities": {
+        "max_dimension": 16000,
+        "max_vectors": 100000000,
+        "supports_metadata_filtering": true,
+        "supports_hybrid_search": true,
+        "supports_batch_upsert": true,
+        "supports_sparse_vectors": true,
+        "supports_multi_vector": false,
+        "max_batch_size": 5000,
+        "typical_query_latency_ms": 120.0
+      },
+      "estimated_monthly_cost_per_million_vectors": 500.0,
+      "health": {
+        "accessible": true,
+        "response_time_ms": 115.8,
+        "health_status": "healthy"
+      }
+    },
+    {
+      "provider_id": "qdrant",
+      "provider_name": "Qdrant Vector Store",
+      "deployed": false,
+      "error": "Provider not deployed"
+    },
+    {
+      "provider_id": "lancedb",
+      "provider_name": "Lancedb Vector Store",
+      "deployed": false,
+      "error": "Provider not deployed"
+    }
+  ]
+}
+```
+
+**Use Cases:**
+- Compare vector store capabilities before deployment
+- Evaluate cost vs. performance tradeoffs
+- Identify which backends support required features (hybrid search, sparse vectors, etc.)
+- Monitor health status of deployed backends
+
+---
+
+### 8. Analytics
 
 #### `GET /api/analytics/performance`
 **Get performance metrics**
@@ -1106,24 +1441,27 @@ data: {"timestamp": "2024-01-15T10:35:00.000Z", "level": "COMPLETE", "message": 
 
 ## Deployment Modes
 
-Videolake supports three deployment modes:
+S3Vector supports three deployment modes with multi-modal embedding capabilities:
 
 ### Mode 1: AWS S3Vector Only (Cost-Optimized)
 - **Backends:** AWS S3Vector only
-- **Cost:** ~$0.023/GB/month
-- **Use Case:** Cost-sensitive production workloads
+- **Embedding Providers:** AWS Bedrock (default), optional SageMaker and external APIs
+- **Cost:** ~$0.023/GB/month (storage) + embedding costs
+- **Use Case:** Cost-sensitive production workloads, multi-modal search at scale
 - **Terraform:** AWS S3Vector module enabled
 
 ### Mode 2: AWS S3Vector + Comparison Backends
 - **Backends:** AWS S3Vector + one or more comparison backends
-- **Cost:** $0.023-$2.00/GB/month (depends on backends)
-- **Use Case:** Performance benchmarking, A/B testing
+- **Embedding Providers:** AWS Bedrock, SageMaker, external APIs (OpenAI, Cohere)
+- **Cost:** $0.023-$2.00/GB/month (depends on backends) + embedding costs
+- **Use Case:** Performance benchmarking, A/B testing, multi-modal workloads
 - **Terraform:** AWS S3Vector + optional backend modules enabled
 
 ### Mode 3: Comparison Backends Only
 - **Backends:** OpenSearch, Qdrant, and/or LanceDB (no AWS S3Vector)
-- **Cost:** $0.50-$2.00/GB/month
-- **Use Case:** Existing infrastructure, specific feature requirements
+- **Embedding Providers:** Full multi-modal support across all providers
+- **Cost:** $0.50-$2.00/GB/month + embedding costs
+- **Use Case:** Existing infrastructure, specific feature requirements (hybrid search, sparse vectors)
 - **Terraform:** Optional backend modules enabled (AWS S3Vector disabled)
 
 ---
@@ -1353,19 +1691,46 @@ curl -X POST http://localhost:8000/api/resources/validate-backends \
 ```python
 import requests
 
-class VideolakeClient:
-    def __init__(self, base_url="http://localhost:8000"):
+class S3VectorClient:
+    def __init__(self, base_url="http://localhost:8000", api_key=None):
         self.base_url = base_url
-    
+        self.api_key = api_key
+
+    def _headers(self):
+        headers = {}
+        if self.api_key:
+            headers["X-API-Key"] = self.api_key
+        return headers
+
     def health_check(self):
         return requests.get(f"{self.base_url}/api/health").json()
-    
+
+    def list_embedding_providers(self):
+        return requests.get(
+            f"{self.base_url}/api/embeddings/providers",
+            headers=self._headers()
+        ).json()
+
+    def generate_embedding(self, content, modality="text", provider_id=None, model_id=None):
+        response = requests.post(
+            f"{self.base_url}/api/embeddings/generate",
+            headers=self._headers(),
+            json={
+                "modality": modality,
+                "content": content,
+                "provider_id": provider_id,
+                "model_id": model_id
+            }
+        )
+        return response.json()
+
     def process_video(self, s3_uri, embedding_options=None):
         if embedding_options is None:
             embedding_options = ["visual-text", "visual-image", "audio"]
-        
+
         response = requests.post(
             f"{self.base_url}/api/processing/process",
+            headers=self._headers(),
             json={
                 "video_s3_uri": s3_uri,
                 "embedding_options": embedding_options,
@@ -1373,10 +1738,11 @@ class VideolakeClient:
             }
         )
         return response.json()
-    
+
     def search(self, query_text, backend="s3_vector", top_k=10):
         response = requests.post(
             f"{self.base_url}/api/search/query",
+            headers=self._headers(),
             json={
                 "query_text": query_text,
                 "backend": backend,
@@ -1385,26 +1751,71 @@ class VideolakeClient:
         )
         return response.json()
 
+    def compare_vector_stores(self):
+        return requests.get(
+            f"{self.base_url}/api/resources/vector-stores/comparison",
+            headers=self._headers()
+        ).json()
+
 # Usage
-client = VideolakeClient()
+client = S3VectorClient(api_key="your-api-key-here")  # Optional API key
 print(client.health_check())
+print(client.list_embedding_providers())
+print(client.generate_embedding("Example text", modality="text"))
 ```
 
 ### JavaScript/TypeScript Example
 
 ```typescript
-class VideolakeClient {
-  constructor(private baseUrl: string = 'http://localhost:8000') {}
-  
+class S3VectorClient {
+  constructor(
+    private baseUrl: string = 'http://localhost:8000',
+    private apiKey?: string
+  ) {}
+
+  private headers(): HeadersInit {
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (this.apiKey) {
+      headers['X-API-Key'] = this.apiKey;
+    }
+    return headers;
+  }
+
   async healthCheck() {
     const response = await fetch(`${this.baseUrl}/api/health`);
     return response.json();
   }
-  
+
+  async listEmbeddingProviders() {
+    const response = await fetch(`${this.baseUrl}/api/embeddings/providers`, {
+      headers: this.headers()
+    });
+    return response.json();
+  }
+
+  async generateEmbedding(
+    content: string | string[],
+    modality: string = 'text',
+    providerId?: string,
+    modelId?: string
+  ) {
+    const response = await fetch(`${this.baseUrl}/api/embeddings/generate`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify({
+        modality,
+        content,
+        provider_id: providerId,
+        model_id: modelId
+      })
+    });
+    return response.json();
+  }
+
   async processVideo(s3Uri: string, embeddingOptions?: string[]) {
     const response = await fetch(`${this.baseUrl}/api/processing/process`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.headers(),
       body: JSON.stringify({
         video_s3_uri: s3Uri,
         embedding_options: embeddingOptions || ['visual-text', 'visual-image', 'audio'],
@@ -1413,11 +1824,11 @@ class VideolakeClient {
     });
     return response.json();
   }
-  
+
   async search(queryText: string, backend: string = 's3_vector', topK: number = 10) {
     const response = await fetch(`${this.baseUrl}/api/search/query`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.headers(),
       body: JSON.stringify({
         query_text: queryText,
         backend,
@@ -1426,12 +1837,27 @@ class VideolakeClient {
     });
     return response.json();
   }
+
+  async compareVectorStores() {
+    const response = await fetch(`${this.baseUrl}/api/resources/vector-stores/comparison`, {
+      headers: this.headers()
+    });
+    return response.json();
+  }
 }
 
 // Usage
-const client = new VideolakeClient();
+const client = new S3VectorClient('http://localhost:8000', 'your-api-key-here');
 const health = await client.healthCheck();
 console.log(health);
+
+// Generate text embedding
+const embedding = await client.generateEmbedding('Example text', 'text');
+console.log(embedding);
+
+// Compare vector stores
+const comparison = await client.compareVectorStores();
+console.log(comparison);
 ```
 
 ---
