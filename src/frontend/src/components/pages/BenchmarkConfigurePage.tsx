@@ -8,6 +8,7 @@ import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Alert, AlertDescription } from '../ui/alert';
 import { api } from '../../api/client';
+import { useBenchmark } from '../../contexts/BenchmarkContext';
 import { toast } from 'react-hot-toast';
 import type { BenchmarkConfig } from '../../types/benchmark';
 
@@ -21,6 +22,7 @@ type WizardStep = 'backends' | 'parameters';
 
 export const BenchmarkConfigurePage: React.FC = () => {
   const navigate = useNavigate();
+  const { startBenchmark } = useBenchmark();
   const [currentStep, setCurrentStep] = useState<WizardStep>('backends');
   const [availableBackends, setAvailableBackends] = useState<BackendOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -99,7 +101,7 @@ export const BenchmarkConfigurePage: React.FC = () => {
   const handleStartBenchmark = async () => {
     setIsStarting(true);
     try {
-      const response = await api.startBenchmark({
+      const id = await startBenchmark({
         backends: config.backends,
         config: {
           queries: config.num_queries,
@@ -109,7 +111,7 @@ export const BenchmarkConfigurePage: React.FC = () => {
       });
 
       toast.success('Benchmark started!');
-      navigate(`/benchmark/run/${response.data.id}`);
+      navigate(`/benchmark/run/${id}`);
     } catch (error) {
       const errorMessage = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to start benchmark';
       toast.error(errorMessage);

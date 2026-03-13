@@ -1,36 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Play, History, Clock, Trophy, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { api } from '../../api/client';
+import { useBenchmark } from '../../contexts/BenchmarkContext';
 import type { BenchmarkResult } from '../../types/benchmark';
 
 export const BenchmarkHubPage: React.FC = () => {
   const navigate = useNavigate();
-  const [recentBenchmarks, setRecentBenchmarks] = useState<BenchmarkResult[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { benchmarks, isLoading } = useBenchmark();
 
-  useEffect(() => {
-    loadRecentBenchmarks();
-  }, []);
-
-  const loadRecentBenchmarks = async () => {
-    try {
-      const response = await api.listBenchmarks();
-      // Get the 3 most recent completed benchmarks
-      const completed = response.data
-        .filter(b => b.status === 'completed')
-        .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
-        .slice(0, 3);
-      setRecentBenchmarks(completed);
-    } catch (error) {
-      console.error('Failed to load benchmark history:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Get the 3 most recent completed benchmarks
+  const recentBenchmarks = useMemo(() => {
+    return benchmarks
+      .filter(b => b.status === 'completed')
+      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
+      .slice(0, 3);
+  }, [benchmarks]);
 
   const getWinner = (benchmark: BenchmarkResult) => {
     if (!benchmark.metrics || benchmark.metrics.length === 0) return null;
@@ -120,7 +107,7 @@ export const BenchmarkHubPage: React.FC = () => {
             </CardHeader>
             <CardContent>
               <Button
-                onClick={() => navigate('/history')}
+                onClick={() => navigate('/benchmark/history')}
                 variant="outline"
                 className="w-full"
                 size="lg"
