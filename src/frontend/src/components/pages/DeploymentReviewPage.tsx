@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useInfrastructure } from '@/contexts/InfrastructureContext';
 import type { VectorStoreType } from '@/types/infrastructure';
 
@@ -312,11 +313,10 @@ export default function DeploymentReviewPage() {
         <Card>
           <CardContent className="py-4">
             <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={confirmed}
-                onChange={e => setConfirmed(e.target.checked)}
-                className="w-5 h-5 mt-0.5 rounded border-gray-300"
+                onCheckedChange={(checked) => setConfirmed(checked as boolean)}
+                className="mt-0.5"
                 disabled={deploying}
               />
               <span className="text-sm">

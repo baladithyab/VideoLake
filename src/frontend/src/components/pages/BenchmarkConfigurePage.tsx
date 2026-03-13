@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
+import { Checkbox } from '../ui/checkbox';
 import { Alert, AlertDescription } from '../ui/alert';
 import { api } from '../../api/client';
 import { useBenchmark } from '../../contexts/BenchmarkContext';
@@ -196,12 +197,11 @@ export const BenchmarkConfigurePage: React.FC = () => {
                     } ${!backend.deployed ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={config.backends.includes(backend.value)}
-                        onChange={() => handleBackendToggle(backend.value)}
+                        onCheckedChange={() => handleBackendToggle(backend.value)}
                         disabled={!backend.deployed}
-                        className="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        className="h-5 w-5"
                       />
                       {backend.deployed ? (
                         <Badge variant="default" className="bg-green-500">
@@ -313,12 +313,11 @@ export const BenchmarkConfigurePage: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Performance Configuration</h3>
 
                 <div className="space-y-3">
-                  <label className="flex items-start">
-                    <input
-                      type="checkbox"
+                  <label className="flex items-start cursor-pointer">
+                    <Checkbox
                       checked={config.use_existing_embeddings}
-                      onChange={(e) => setConfig({ ...config, use_existing_embeddings: e.target.checked })}
-                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded mt-0.5"
+                      onCheckedChange={(checked) => setConfig({ ...config, use_existing_embeddings: checked as boolean })}
+                      className="mt-0.5"
                     />
                     <div className="ml-2">
                       <span className="text-sm font-medium text-gray-900">
