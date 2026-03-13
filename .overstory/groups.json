@@ -95,5 +95,15 @@
 		"status": "active",
 		"createdAt": "2026-03-12T23:38:05.942Z",
 		"completedAt": null
+	},
+	{
+		"id": "group-22b12add",
+		"name": "wave-5b-docs",
+		"memberIssueIds": [
+			"S3Vector-1709"
+		],
+		"status": "active",
+		"createdAt": "2026-03-13T00:03:04.389Z",
+		"completedAt": null
 	}
 ]
