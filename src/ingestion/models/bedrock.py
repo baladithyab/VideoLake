@@ -6,14 +6,12 @@ using Amazon Bedrock's multimodal models (Titan Multimodal Embeddings).
 """
 
 import json
-import logging
-import base64
-from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass
+from typing import Any
 
+from src.exceptions import VectorEmbeddingError
 from src.utils.aws_clients import aws_client_factory
 from src.utils.logging_config import get_logger
-from src.exceptions import VectorEmbeddingError
 
 logger = get_logger(__name__)
 
@@ -22,9 +20,9 @@ class EmbeddingSegment:
     """Represents a segment of video with its embedding."""
     start_sec: float
     end_sec: float
-    embedding: List[float]
-    text: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    embedding: list[float]
+    text: str | None = None
+    metadata: dict[str, Any] | None = None
 
 class BedrockMultimodalAdapter:
     """Adapter for Amazon Bedrock Multimodal Embeddings."""
@@ -40,9 +38,9 @@ class BedrockMultimodalAdapter:
         self.bedrock_client = aws_client_factory.get_bedrock_runtime_client()
         logger.info(f"Initialized BedrockMultimodalAdapter with model {model_id}")
 
-    def generate_embedding(self, 
-                         image_base64: Optional[str] = None, 
-                         text: Optional[str] = None) -> List[float]:
+    def generate_embedding(self,
+                         image_base64: str | None = None,
+                         text: str | None = None) -> list[float]:
         """
         Generate embedding for an image or text using Bedrock.
 
@@ -77,9 +75,9 @@ class BedrockMultimodalAdapter:
             logger.error(f"Error generating embedding with Bedrock: {e}")
             raise VectorEmbeddingError(f"Bedrock embedding generation failed: {e}")
 
-    def process_video_segments(self, 
-                             video_path: str, 
-                             segments: List[Dict[str, float]]) -> List[EmbeddingSegment]:
+    def process_video_segments(self,
+                             video_path: str,
+                             segments: list[dict[str, float]]) -> list[EmbeddingSegment]:
         """
         Process video segments and generate embeddings.
         
