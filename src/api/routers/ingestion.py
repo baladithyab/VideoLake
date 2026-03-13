@@ -87,6 +87,8 @@ async def get_upload_url(request: UploadUrlRequest):
         
         try:
             import asyncio
+
+            # Wrap blocking boto3 call
             url = await asyncio.to_thread(
                 s3_service.s3.generate_presigned_url,
                 ClientMethod='put_object',

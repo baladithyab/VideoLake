@@ -30,7 +30,7 @@ Example:
 
 import uuid
 import time
-from typing import Dict, List, Optional, Generator
+from typing import Dict, List, Optional, Generator, AsyncGenerator
 from dataclasses import dataclass, field
 from datetime import datetime
 from collections import deque
@@ -236,55 +236,57 @@ class TerraformOperationTracker:
         with operation.lock:
             return list(operation.logs)
     
-    def stream_logs(
+    async def stream_logs(
         self,
         operation_id: str,
         from_index: int = 0
-    ) -> Generator[Dict, None, None]:
+    ) -> AsyncGenerator[Dict, None]:
         """
         Stream logs from an operation starting from a specific index.
-        
+
         Used for SSE streaming - yields new logs as they arrive.
-        
+
         Args:
             operation_id: Operation ID
             from_index: Start streaming from this log index
-            
+
         Yields:
             Log entries as they arrive
         """
+        import asyncio
+
         operation = self.get_operation(operation_id)
-        
+
         if not operation:
             logger.warning(f"Operation {operation_id} not found for streaming")
             return
-        
+
         current_index = from_index
-        
+
         # Stream existing logs first
         with operation.lock:
             logs = list(operation.logs)
-            
+
         for i in range(from_index, len(logs)):
             yield logs[i]
             current_index = i + 1
-        
+
         # Then stream new logs as they arrive (if operation still running)
         while operation.status == "running":
-            time.sleep(0.1)  # Poll every 100ms
-            
+            await asyncio.sleep(0.1)  # Poll every 100ms
+
             with operation.lock:
                 logs = list(operation.logs)
-            
+
             # Yield any new logs
             for i in range(current_index, len(logs)):
                 yield logs[i]
                 current_index = i + 1
-        
+
         # Stream final logs after completion
         with operation.lock:
             logs = list(operation.logs)
-            
+
         for i in range(current_index, len(logs)):
             yield logs[i]
     

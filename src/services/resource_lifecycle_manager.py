@@ -539,7 +539,7 @@ class ResourceLifecycleManager:
 
     # ==================== Generic Status Polling ====================
 
-    def poll_resource_status(self, resource_type: ResourceType, resource_id: str,
+    async def poll_resource_status(self, resource_type: ResourceType, resource_id: str,
                             timeout: Optional[int] = None) -> ResourceStatus:
         """
         Poll resource status until it reaches a terminal state or timeout.
@@ -552,6 +552,8 @@ class ResourceLifecycleManager:
         Returns:
             Final ResourceStatus
         """
+        import asyncio
+
         timeout = timeout or self.timeouts.get(resource_type, 300)
         start_time = time.time()
         poll_interval = 5  # seconds
@@ -569,7 +571,7 @@ class ResourceLifecycleManager:
             elapsed = time.time() - start_time
             status.estimated_time_remaining = max(0, int(timeout - elapsed))
 
-            time.sleep(poll_interval)
+            await asyncio.sleep(poll_interval)
 
         # Timeout reached
         status = self.get_resource_status(resource_type, resource_id)

@@ -328,7 +328,3 @@ class S3VectorProvider(VectorStoreProvider):
                 }
             }
 
-
-# Register the S3Vector provider
-VectorStoreProviderFactory.register_provider(VectorStoreType.S3_VECTOR, S3VectorProvider)
-

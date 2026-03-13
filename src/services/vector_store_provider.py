@@ -252,41 +252,43 @@ class VectorStoreProvider(ABC):
         
         return True
     
-    def poll_until_ready(self, name: str, timeout: int = 300, poll_interval: int = 5) -> VectorStoreStatus:
+    async def poll_until_ready(self, name: str, timeout: int = 300, poll_interval: int = 5) -> VectorStoreStatus:
         """
         Poll store status until it reaches a ready state or timeout.
-        
+
         Args:
             name: Name of the vector store
             timeout: Maximum time to wait in seconds
             poll_interval: Time between polls in seconds
-            
+
         Returns:
             Final VectorStoreStatus
         """
         import time
+        import asyncio
+
         start_time = time.time()
-        
+
         while time.time() - start_time < timeout:
             status = self.get_status(name)
-            
+
             # Check if terminal state reached
             if status.state in [VectorStoreState.ACTIVE, VectorStoreState.AVAILABLE,
                               VectorStoreState.DELETED, VectorStoreState.FAILED,
                               VectorStoreState.NOT_FOUND]:
                 return status
-            
+
             # Update estimated time
             elapsed = time.time() - start_time
             status.estimated_time_remaining = max(0, int(timeout - elapsed))
-            
-            time.sleep(poll_interval)
-        
+
+            await asyncio.sleep(poll_interval)
+
         # Timeout reached
         status = self.get_status(name)
         if status.state not in [VectorStoreState.ACTIVE, VectorStoreState.AVAILABLE]:
             status.error_message = f"Operation timed out after {timeout} seconds"
-        
+
         return status
 
 
