@@ -207,5 +207,15 @@
 		"status": "active",
 		"createdAt": "2026-03-13T19:07:44.999Z",
 		"completedAt": null
+	},
+	{
+		"id": "group-d8234261",
+		"name": "wave-c",
+		"memberIssueIds": [
+			"S3Vector-2eaf"
+		],
+		"status": "active",
+		"createdAt": "2026-03-13T19:26:14.171Z",
+		"completedAt": null
 	}
 ]
