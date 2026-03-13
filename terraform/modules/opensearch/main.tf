@@ -75,16 +75,16 @@ resource "aws_opensearch_domain" "s3vector_backend" {
     }
   }
 
-  # Access policy - when fine-grained access control is enabled, this allows
-  # the resource-based policy check to pass, while actual authentication is
-  # handled by the master user credentials
+  # Access policy - scoped to account principal for security
+  # When fine-grained access control is enabled, this allows the resource-based
+  # policy check to pass, while actual authentication is handled by master user credentials
   access_policies = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Effect = "Allow"
         Principal = {
-          AWS = "*"
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
         }
         Action   = "es:*"
         Resource = "arn:aws:es:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:domain/${var.domain_name}/*"
@@ -93,10 +93,10 @@ resource "aws_opensearch_domain" "s3vector_backend" {
   })
 
   tags = merge(var.tags, {
-    Name         = var.domain_name
-    Service      = "OpenSearch"
-    VectorStore  = "OpenSearch-Standard-Backend"
-    ManagedBy    = "Terraform"
+    Name          = var.domain_name
+    Service       = "OpenSearch"
+    VectorStore   = "OpenSearch-Standard-Backend"
+    ManagedBy     = "Terraform"
     EnginePattern = "Standard"
   })
 

@@ -52,10 +52,61 @@ resource "aws_iam_role" "sagemaker_execution" {
   )
 }
 
-# Attach AWS managed SageMaker execution policy
-resource "aws_iam_role_policy_attachment" "sagemaker_execution_policy" {
-  role       = aws_iam_role.sagemaker_execution.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
+# Scoped SageMaker execution policy (endpoint invoke/describe only)
+resource "aws_iam_role_policy" "sagemaker_execution_scoped" {
+  name = "${var.deployment_name}-marketplace-sagemaker-scoped-policy"
+  role = aws_iam_role.sagemaker_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sagemaker:InvokeEndpoint",
+          "sagemaker:InvokeEndpointAsync",
+          "sagemaker:DescribeEndpoint",
+          "sagemaker:DescribeEndpointConfig",
+          "sagemaker:DescribeModel"
+        ]
+        Resource = [
+          "arn:aws:sagemaker:*:*:endpoint/${var.deployment_name}-*",
+          "arn:aws:sagemaker:*:*:endpoint-config/${var.deployment_name}-*",
+          "arn:aws:sagemaker:*:*:model/${var.deployment_name}-*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:BatchCheckLayerAvailability"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = "/aws/sagemaker/Endpoints"
+          }
+        }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:log-group:/aws/sagemaker/*"
+      }
+    ]
+  })
 }
 
 # SageMaker model linked to marketplace subscription
@@ -188,8 +239,8 @@ resource "aws_cloudwatch_metric_alarm" "endpoint_latency" {
 
 # SSM Parameter for endpoint configuration (for application use)
 resource "aws_ssm_parameter" "marketplace_endpoint_config" {
-  name  = "/${var.deployment_name}/marketplace/endpoint-config"
-  type  = "String"
+  name = "/${var.deployment_name}/marketplace/endpoint-config"
+  type = "String"
   value = jsonencode({
     endpoint_name       = aws_sagemaker_endpoint.marketplace_embedding.name
     model_package_arn   = var.marketplace_model_package_arn

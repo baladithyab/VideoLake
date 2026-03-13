@@ -95,7 +95,8 @@ resource "aws_iam_policy" "lambda_policy" {
           "s3:HeadObject"
         ]
         Resource = [
-          "arn:aws:s3:::*/*"
+          "arn:aws:s3:::${var.project_name}-*/*",
+          "arn:aws:s3:::${var.embeddings_bucket_name}/*"
         ]
       },
       {
@@ -104,7 +105,8 @@ resource "aws_iam_policy" "lambda_policy" {
           "s3:ListBucket"
         ]
         Resource = [
-          "arn:aws:s3:::*"
+          "arn:aws:s3:::${var.project_name}-*",
+          "arn:aws:s3:::${var.embeddings_bucket_name}"
         ]
       },
       {
@@ -116,8 +118,8 @@ resource "aws_iam_policy" "lambda_policy" {
           "bedrock:ListAsyncInvokes"
         ]
         Resource = [
-          "arn:aws:bedrock:*:*:model/*",
-          "arn:aws:bedrock:*:*:async-invoke/*"
+          "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:model/*",
+          "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:async-invoke/*"
         ]
       },
       {
@@ -128,7 +130,7 @@ resource "aws_iam_policy" "lambda_policy" {
           "logs:PutLogEvents"
         ]
         Resource = [
-          "arn:aws:logs:*:*:*"
+          "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.project_name}-${var.environment}-*"
         ]
       }
     ]
@@ -150,12 +152,12 @@ data "archive_file" "validate_input_lambda" {
 resource "aws_lambda_function" "validate_input" {
   filename         = data.archive_file.validate_input_lambda.output_path
   function_name    = "${var.project_name}-${var.environment}-validate-input"
-  role            = aws_iam_role.lambda_role.arn
-  handler         = "validate_input.lambda_handler"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "validate_input.lambda_handler"
   source_code_hash = data.archive_file.validate_input_lambda.output_base64sha256
-  runtime         = "python3.11"
-  timeout         = 60
-  memory_size     = 256
+  runtime          = "python3.11"
+  timeout          = 60
+  memory_size      = 256
 
   environment {
     variables = {
@@ -174,12 +176,12 @@ data "archive_file" "start_embedding_job_lambda" {
 resource "aws_lambda_function" "start_embedding_job" {
   filename         = data.archive_file.start_embedding_job_lambda.output_path
   function_name    = "${var.project_name}-${var.environment}-start-embedding-job"
-  role            = aws_iam_role.lambda_role.arn
-  handler         = "start_embedding_job.lambda_handler"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "start_embedding_job.lambda_handler"
   source_code_hash = data.archive_file.start_embedding_job_lambda.output_base64sha256
-  runtime         = "python3.11"
-  timeout         = 60
-  memory_size     = 256
+  runtime          = "python3.11"
+  timeout          = 60
+  memory_size      = 256
 
   environment {
     variables = {
@@ -199,12 +201,12 @@ data "archive_file" "check_embedding_status_lambda" {
 resource "aws_lambda_function" "check_embedding_status" {
   filename         = data.archive_file.check_embedding_status_lambda.output_path
   function_name    = "${var.project_name}-${var.environment}-check-embedding-status"
-  role            = aws_iam_role.lambda_role.arn
-  handler         = "check_embedding_status.lambda_handler"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "check_embedding_status.lambda_handler"
   source_code_hash = data.archive_file.check_embedding_status_lambda.output_base64sha256
-  runtime         = "python3.11"
-  timeout         = 30
-  memory_size     = 256
+  runtime          = "python3.11"
+  timeout          = 30
+  memory_size      = 256
 
   environment {
     variables = {
@@ -224,12 +226,12 @@ data "archive_file" "retrieve_embeddings_lambda" {
 resource "aws_lambda_function" "retrieve_embeddings" {
   filename         = data.archive_file.retrieve_embeddings_lambda.output_path
   function_name    = "${var.project_name}-${var.environment}-retrieve-embeddings"
-  role            = aws_iam_role.lambda_role.arn
-  handler         = "retrieve_embeddings.lambda_handler"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "retrieve_embeddings.lambda_handler"
   source_code_hash = data.archive_file.retrieve_embeddings_lambda.output_base64sha256
-  runtime         = "python3.11"
-  timeout         = 120
-  memory_size     = 512
+  runtime          = "python3.11"
+  timeout          = 120
+  memory_size      = 512
 
   environment {
     variables = {
@@ -247,12 +249,12 @@ data "archive_file" "backend_upsert_lambda" {
 resource "aws_lambda_function" "backend_upsert" {
   filename         = data.archive_file.backend_upsert_lambda.output_path
   function_name    = "${var.project_name}-${var.environment}-backend-upsert"
-  role            = aws_iam_role.lambda_role.arn
-  handler         = "backend_upsert.lambda_handler"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "backend_upsert.lambda_handler"
   source_code_hash = data.archive_file.backend_upsert_lambda.output_base64sha256
-  runtime         = "python3.11"
-  timeout         = 300  # 5 minutes for upsert operations
-  memory_size     = 1024
+  runtime          = "python3.11"
+  timeout          = 300 # 5 minutes for upsert operations
+  memory_size      = 1024
 
   environment {
     variables = {
@@ -262,6 +264,7 @@ resource "aws_lambda_function" "backend_upsert" {
 }
 
 data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
 
 # Step Function IAM Role
 resource "aws_iam_role" "step_function_role" {
@@ -335,7 +338,9 @@ resource "aws_iam_policy" "step_function_policy" {
           "ecs:StopTask",
           "ecs:DescribeTasks"
         ]
-        Resource = "*"
+        Resource = [
+          "arn:aws:ecs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:task/${var.project_name}-${var.environment}-*"
+        ]
       },
       {
         Effect = "Allow"
@@ -345,7 +350,7 @@ resource "aws_iam_policy" "step_function_policy" {
           "events:DescribeRule"
         ]
         Resource = [
-          "arn:aws:events:*:*:rule/StepFunctionsGetEventsForStepFunctionsExecutionRule"
+          "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:rule/StepFunctionsGetEventsForStepFunctionsExecutionRule"
         ]
       },
       {
@@ -353,10 +358,12 @@ resource "aws_iam_policy" "step_function_policy" {
         Action = [
           "iam:PassRole"
         ]
-        Resource = "*"
+        Resource = [
+          "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-*"
+        ]
         Condition = {
           StringLike = {
-            "iam:PassedToService": "ecs-tasks.amazonaws.com"
+            "iam:PassedToService" : "ecs-tasks.amazonaws.com"
           }
         }
       }
@@ -375,13 +382,13 @@ resource "aws_sfn_state_machine" "ingestion_pipeline" {
   role_arn = aws_iam_role.step_function_role.arn
 
   definition = templatefile("${path.module}/../../../src/ingestion/step_function_definition.json", {
-    ValidateInputLambdaArn         = aws_lambda_function.validate_input.arn
-    StartEmbeddingJobLambdaArn     = aws_lambda_function.start_embedding_job.arn
-    CheckEmbeddingStatusLambdaArn  = aws_lambda_function.check_embedding_status.arn
-    RetrieveEmbeddingsLambdaArn    = aws_lambda_function.retrieve_embeddings.arn
-    BackendUpsertLambdaArn         = aws_lambda_function.backend_upsert.arn
-    EmbeddingsBucket               = var.embeddings_bucket_name
-    CompletionTopicArn             = aws_sns_topic.completion_topic.arn
-    ErrorTopicArn                  = aws_sns_topic.error_topic.arn
+    ValidateInputLambdaArn        = aws_lambda_function.validate_input.arn
+    StartEmbeddingJobLambdaArn    = aws_lambda_function.start_embedding_job.arn
+    CheckEmbeddingStatusLambdaArn = aws_lambda_function.check_embedding_status.arn
+    RetrieveEmbeddingsLambdaArn   = aws_lambda_function.retrieve_embeddings.arn
+    BackendUpsertLambdaArn        = aws_lambda_function.backend_upsert.arn
+    EmbeddingsBucket              = var.embeddings_bucket_name
+    CompletionTopicArn            = aws_sns_topic.completion_topic.arn
+    ErrorTopicArn                 = aws_sns_topic.error_topic.arn
   })
 }
