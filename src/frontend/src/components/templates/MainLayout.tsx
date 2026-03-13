@@ -17,7 +17,6 @@ import {
 import { cn } from '@/lib/utils';
 import { useUI } from '@/contexts/UIContext';
 import { useInfrastructure } from '@/contexts/InfrastructureContext';
-import { Toaster } from 'react-hot-toast';
 import { StatusDot } from '@/components/molecules/StatusIndicator';
 
 interface NavItem {
@@ -47,8 +46,6 @@ export function MainLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Toaster position="top-right" />
-
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div

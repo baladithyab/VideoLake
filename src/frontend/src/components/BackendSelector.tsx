@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { Database } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export const BackendSelector: React.FC = () => {
   const [backends, setBackends] = useState<string[]>([]);
@@ -21,8 +28,7 @@ export const BackendSelector: React.FC = () => {
     }
   };
 
-  const handleBackendChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newBackend = e.target.value;
+  const handleBackendChange = async (newBackend: string) => {
     setLoading(true);
     try {
       await api.switchBackend({ backend_type: newBackend });
@@ -37,22 +43,25 @@ export const BackendSelector: React.FC = () => {
   return (
     <div className="flex items-center space-x-2 bg-white p-2 rounded-md shadow-sm border border-gray-200">
       <Database className="h-4 w-4 text-gray-500" />
-      <label htmlFor="backend-select" className="text-sm font-medium text-gray-700">
+      <label className="text-sm font-medium text-gray-700">
         Backend:
       </label>
-      <select
-        id="backend-select"
+      <Select
         value={activeBackend}
-        onChange={handleBackendChange}
+        onValueChange={handleBackendChange}
         disabled={loading}
-        className="block w-full pl-3 pr-10 py-1 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
       >
-        {backends.map((backend) => (
-          <option key={backend} value={backend}>
-            {backend}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Select backend" />
+        </SelectTrigger>
+        <SelectContent>
+          {backends.map((backend) => (
+            <SelectItem key={backend} value={backend}>
+              {backend}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {loading && <span className="text-xs text-gray-500">Switching...</span>}
     </div>
   );
