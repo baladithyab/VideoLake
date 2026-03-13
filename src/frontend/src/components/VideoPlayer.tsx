@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, Repeat } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 interface VideoPlayerProps {
   videoUrl: string;
@@ -110,7 +111,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             {isPlaying ? <Pause size={24} /> : <Play size={24} />}
           </button>
           
-          <input
+          <Input
             type="range"
             min="0"
             max={duration}
