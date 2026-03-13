@@ -4,22 +4,21 @@ Unit tests for External Embedding Provider.
 Tests external API integration (OpenAI, Cohere) with mocked HTTP calls.
 """
 
-import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from typing import List, Dict, Any
 import os
+from unittest.mock import AsyncMock, Mock, patch
 
-from src.services.external_embedding_provider import ExternalEmbeddingProvider
+import pytest
+
+from src.exceptions import ModelAccessError, ValidationError, VectorEmbeddingError
 from src.services.embedding_provider import (
+    EmbeddingModelInfo,
+    EmbeddingProviderType,
     EmbeddingRequest,
     EmbeddingResponse,
     ModalityType,
-    EmbeddingProviderType,
-    EmbeddingModelInfo,
     ProviderCapabilities,
 )
-from src.exceptions import ValidationError, ModelAccessError, VectorEmbeddingError
+from src.services.external_embedding_provider import ExternalEmbeddingProvider
 
 
 class TestExternalEmbeddingProviderInit:
@@ -63,7 +62,7 @@ class TestExternalModelRegistry:
 
         assert len(provider.MODELS) > 0
 
-        for model_id, config in provider.MODELS.items():
+        for _model_id, config in provider.MODELS.items():
             assert "modality" in config
             assert "dimensions" in config
             assert "description" in config
@@ -231,7 +230,7 @@ class TestExternalEmbeddingGeneration:
             dimensions=1024
         )
 
-        response = await provider.generate_embedding(request)
+        await provider.generate_embedding(request)
 
         # Verify dimensions parameter was passed
         call_kwargs = mock_client.embeddings.create.call_args[1]
@@ -355,7 +354,7 @@ class TestExternalEmbeddingGeneration:
             with patch('src.services.external_embedding_provider.AsyncOpenAI'):
                 try:
                     await provider.generate_embedding(request)
-                except:
+                except Exception:
                     pass  # We're just checking the default assignment
 
 
@@ -542,7 +541,7 @@ class TestExternalBatchContentHandling:
 
         provider = ExternalEmbeddingProvider()
 
-        embeddings = await provider._generate_openai_embeddings(
+        await provider._generate_openai_embeddings(
             content="Single text",
             model_id="openai.text-embedding-3-large",
             dimension=None

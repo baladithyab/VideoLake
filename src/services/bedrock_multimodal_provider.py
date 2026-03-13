@@ -10,25 +10,25 @@ Supports embedding generation for text, image, audio, and video using AWS Bedroc
 Uses asyncio.to_thread to wrap blocking boto3 calls and prevent event loop blocking.
 """
 
+import asyncio
+import base64
 import json
 import time
-import asyncio
-from typing import List, Dict, Any, Optional
-import base64
+from typing import Any
 
+from src.exceptions import ValidationError, VectorEmbeddingError
 from src.services.embedding_provider import (
+    EmbeddingModelInfo,
     EmbeddingProvider,
     EmbeddingProviderType,
-    ModalityType,
     EmbeddingRequest,
     EmbeddingResponse,
-    EmbeddingModelInfo,
+    ModalityType,
     ProviderCapabilities,
-    register_embedding_provider
+    register_embedding_provider,
 )
 from src.utils.aws_clients import aws_client_factory
 from src.utils.logging_config import get_logger
-from src.exceptions import ValidationError, ModelAccessError, VectorEmbeddingError
 
 logger = get_logger(__name__)
 
@@ -176,7 +176,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
         """Return provider type."""
         return EmbeddingProviderType.BEDROCK
 
-    def get_supported_modalities(self) -> List[ModalityType]:
+    def get_supported_modalities(self) -> list[ModalityType]:
         """Return all supported modalities."""
         return [
             ModalityType.TEXT,
@@ -186,11 +186,11 @@ class BedrockMultiModalProvider(EmbeddingProvider):
             ModalityType.MULTIMODAL
         ]
 
-    def get_available_models(self) -> List[EmbeddingModelInfo]:
+    def get_available_models(self) -> list[EmbeddingModelInfo]:
         """Return list of available Bedrock models."""
         return list(self.MODELS.values())
 
-    def get_default_model(self, modality: ModalityType) -> Optional[str]:
+    def get_default_model(self, modality: ModalityType) -> str | None:
         """Get default model for a modality."""
         return self.DEFAULT_MODELS.get(modality)
 
@@ -286,8 +286,8 @@ class BedrockMultiModalProvider(EmbeddingProvider):
 
     async def batch_generate_embeddings(
         self,
-        requests: List[EmbeddingRequest]
-    ) -> List[EmbeddingResponse]:
+        requests: list[EmbeddingRequest]
+    ) -> list[EmbeddingResponse]:
         """
         Generate embeddings for multiple inputs.
 
@@ -297,7 +297,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
             raise ValidationError("Requests list cannot be empty", error_code="EMPTY_REQUESTS")
 
         # Group requests by model
-        requests_by_model: Dict[str, List[EmbeddingRequest]] = {}
+        requests_by_model: dict[str, list[EmbeddingRequest]] = {}
         for req in requests:
             model_id = req.model_id or self.get_default_model(req.modality)
             if not model_id:
@@ -325,7 +325,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
         logger.info(f"Generated {len(all_responses)} embeddings in batch")
         return all_responses
 
-    async def validate_connectivity(self) -> Dict[str, Any]:
+    async def validate_connectivity(self) -> dict[str, Any]:
         """Validate connectivity to Bedrock."""
         try:
             # Test with a simple embedding call
@@ -366,7 +366,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
         self,
         text: str,
         model_id: str
-    ) -> List[float]:
+    ) -> list[float]:
         """Generate text embedding using Titan models."""
         if not isinstance(text, str):
             raise ValueError("Text content must be a string")
@@ -406,7 +406,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
         self,
         text: str,
         model_id: str
-    ) -> List[float]:
+    ) -> list[float]:
         """Generate text embedding using Cohere models."""
         if not isinstance(text, str):
             raise ValueError("Text content must be a string")
@@ -434,7 +434,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
         self,
         text: str,
         model_id: str
-    ) -> List[float]:
+    ) -> list[float]:
         """Generate text embedding using AI21 Jamba models."""
         if not isinstance(text, str):
             raise ValueError("Text content must be a string")
@@ -467,7 +467,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
         self,
         request: EmbeddingRequest,
         model_id: str
-    ) -> List[float]:
+    ) -> list[float]:
         """Generate embedding using Titan Multimodal model."""
         def _invoke():
             body = {}
@@ -508,7 +508,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
         self,
         request: EmbeddingRequest,
         model_id: str
-    ) -> List[float]:
+    ) -> list[float]:
         """Generate embedding using Amazon Nova Canvas."""
         def _invoke():
             body = {}
@@ -548,7 +548,7 @@ class BedrockMultiModalProvider(EmbeddingProvider):
         self,
         request: EmbeddingRequest,
         model_id: str
-    ) -> List[float]:
+    ) -> list[float]:
         """Generate embedding using TwelveLabs Marengo (returns first vector)."""
         def _invoke():
             body = {
@@ -579,9 +579,9 @@ class BedrockMultiModalProvider(EmbeddingProvider):
 
     async def _batch_generate_cohere_embeddings(
         self,
-        requests: List[EmbeddingRequest],
+        requests: list[EmbeddingRequest],
         model_id: str
-    ) -> List[EmbeddingResponse]:
+    ) -> list[EmbeddingResponse]:
         """Generate embeddings using Cohere batch API."""
         # Cohere supports up to 96 texts per call
         batch_size = 96
@@ -591,9 +591,9 @@ class BedrockMultiModalProvider(EmbeddingProvider):
             batch = requests[i:i + batch_size]
             texts = [req.content for req in batch]
 
-            def _invoke():
+            def _invoke(batch_texts=texts):
                 body = {
-                    "texts": texts,
+                    "texts": batch_texts,
                     "input_type": "search_document",
                     "embedding_types": ["float"]
                 }
@@ -629,8 +629,8 @@ class BedrockMultiModalProvider(EmbeddingProvider):
 
     async def _concurrent_generate_embeddings(
         self,
-        requests: List[EmbeddingRequest]
-    ) -> List[EmbeddingResponse]:
+        requests: list[EmbeddingRequest]
+    ) -> list[EmbeddingResponse]:
         """Generate embeddings concurrently for non-batch models."""
         tasks = [self.generate_embedding(req) for req in requests]
         return await asyncio.gather(*tasks)

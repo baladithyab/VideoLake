@@ -5,20 +5,19 @@ Tests model configuration, endpoint management, and embedding generation
 without requiring actual AWS SageMaker endpoints.
 """
 
-import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from typing import List, Dict, Any
+from unittest.mock import Mock, patch
 
-from src.services.sagemaker_embedding_provider import SageMakerEmbeddingProvider
+import pytest
+
+from src.exceptions import ValidationError, VectorEmbeddingError
 from src.services.embedding_provider import (
+    EmbeddingModelInfo,
+    EmbeddingProviderType,
     EmbeddingRequest,
     EmbeddingResponse,
     ModalityType,
-    EmbeddingProviderType,
-    EmbeddingModelInfo,
 )
-from src.exceptions import ValidationError, ModelAccessError, VectorEmbeddingError
+from src.services.sagemaker_embedding_provider import SageMakerEmbeddingProvider
 
 
 class TestSageMakerEmbeddingProviderInit:

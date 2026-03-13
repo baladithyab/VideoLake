@@ -10,23 +10,23 @@ Supports embedding generation using models deployed to SageMaker endpoints
 Uses asyncio.to_thread to wrap blocking boto3 calls and prevent event loop blocking.
 """
 
+import asyncio
 import json
 import time
-import asyncio
-from typing import List, Dict, Any, Optional
+from typing import Any
 
+from src.exceptions import ValidationError, VectorEmbeddingError
 from src.services.embedding_provider import (
+    EmbeddingModelInfo,
     EmbeddingProvider,
     EmbeddingProviderType,
-    ModalityType,
     EmbeddingRequest,
     EmbeddingResponse,
-    EmbeddingModelInfo,
-    register_embedding_provider
+    ModalityType,
+    register_embedding_provider,
 )
 from src.utils.aws_clients import aws_client_factory
 from src.utils.logging_config import get_logger
-from src.exceptions import ModelAccessError, ValidationError, VectorEmbeddingError
 
 logger = get_logger(__name__)
 
@@ -149,7 +149,7 @@ class SageMakerEmbeddingProvider(EmbeddingProvider):
 
     def __init__(
         self,
-        endpoint_mapping: Optional[Dict[str, str]] = None,
+        endpoint_mapping: dict[str, str] | None = None,
         region_name: str = "us-east-1"
     ):
         """
@@ -178,14 +178,14 @@ class SageMakerEmbeddingProvider(EmbeddingProvider):
         """Return provider type."""
         return EmbeddingProviderType.SAGEMAKER
 
-    def get_supported_modalities(self) -> List[ModalityType]:
+    def get_supported_modalities(self) -> list[ModalityType]:
         """Return all supported modalities."""
         modalities = set()
         for model in self.KNOWN_MODELS.values():
             modalities.update(model.supported_modalities)
         return list(modalities)
 
-    def get_available_models(self) -> List[EmbeddingModelInfo]:
+    def get_available_models(self) -> list[EmbeddingModelInfo]:
         """Return list of known SageMaker models."""
         # Only return models that have endpoint mappings configured
         if self.endpoint_mapping:
@@ -195,7 +195,7 @@ class SageMakerEmbeddingProvider(EmbeddingProvider):
             ]
         return list(self.KNOWN_MODELS.values())
 
-    def get_default_model(self, modality: ModalityType) -> Optional[str]:
+    def get_default_model(self, modality: ModalityType) -> str | None:
         """Get default model for a modality."""
         default = self.DEFAULT_MODELS.get(modality)
         # Only return if endpoint is configured
@@ -299,8 +299,8 @@ class SageMakerEmbeddingProvider(EmbeddingProvider):
 
     async def batch_generate_embeddings(
         self,
-        requests: List[EmbeddingRequest]
-    ) -> List[EmbeddingResponse]:
+        requests: list[EmbeddingRequest]
+    ) -> list[EmbeddingResponse]:
         """
         Generate embeddings for multiple inputs.
 
@@ -311,7 +311,7 @@ class SageMakerEmbeddingProvider(EmbeddingProvider):
             raise ValidationError("Requests list cannot be empty", error_code="EMPTY_REQUESTS")
 
         # Group by model for efficiency
-        requests_by_model: Dict[str, List[EmbeddingRequest]] = {}
+        requests_by_model: dict[str, list[EmbeddingRequest]] = {}
         for req in requests:
             model_id = req.model_id or self.get_default_model(req.modality)
             if not model_id:
@@ -339,7 +339,7 @@ class SageMakerEmbeddingProvider(EmbeddingProvider):
         logger.info(f"Generated {len(all_responses)} embeddings in batch")
         return all_responses
 
-    def validate_connectivity(self) -> Dict[str, Any]:
+    def validate_connectivity(self) -> dict[str, Any]:
         """Validate connectivity to SageMaker endpoints."""
         accessible_endpoints = []
         failed_endpoints = []
@@ -407,7 +407,7 @@ class SageMakerEmbeddingProvider(EmbeddingProvider):
         endpoint_name: str,
         model_id: str,
         request: EmbeddingRequest
-    ) -> List[float]:
+    ) -> list[float]:
         """Invoke SageMaker endpoint with appropriate payload format."""
 
         def _invoke():
@@ -439,9 +439,9 @@ class SageMakerEmbeddingProvider(EmbeddingProvider):
 
     async def _batch_invoke_endpoint(
         self,
-        requests: List[EmbeddingRequest],
+        requests: list[EmbeddingRequest],
         model_id: str
-    ) -> List[EmbeddingResponse]:
+    ) -> list[EmbeddingResponse]:
         """Batch invoke for models supporting native batch."""
         endpoint_name = self.get_endpoint_name(model_id)
 
@@ -486,14 +486,14 @@ class SageMakerEmbeddingProvider(EmbeddingProvider):
 
         return responses
 
-    def _build_voyage_payload(self, request: EmbeddingRequest) -> Dict[str, Any]:
+    def _build_voyage_payload(self, request: EmbeddingRequest) -> dict[str, Any]:
         """Build payload for Voyage models."""
         return {
             "input": request.content,
             "input_type": "document"  # or "query"
         }
 
-    def _build_jina_payload(self, request: EmbeddingRequest, model_id: str) -> Dict[str, Any]:
+    def _build_jina_payload(self, request: EmbeddingRequest, model_id: str) -> dict[str, Any]:
         """Build payload for Jina models."""
         if model_id == "jina-clip-v2" and request.modality != ModalityType.TEXT:
             # Multimodal - include image
@@ -508,18 +508,18 @@ class SageMakerEmbeddingProvider(EmbeddingProvider):
                 "task": "retrieval.passage"
             }
 
-    def _build_bge_payload(self, request: EmbeddingRequest) -> Dict[str, Any]:
+    def _build_bge_payload(self, request: EmbeddingRequest) -> dict[str, Any]:
         """Build payload for BGE models."""
         return {
             "text": request.content,
             "normalize": request.normalize
         }
 
-    def _build_sentence_transformers_payload(self, request: EmbeddingRequest) -> Dict[str, Any]:
+    def _build_sentence_transformers_payload(self, request: EmbeddingRequest) -> dict[str, Any]:
         """Build payload for Sentence Transformers models."""
         return {"text": request.content}
 
-    def _extract_embedding(self, result: Dict[str, Any], model_id: str) -> List[float]:
+    def _extract_embedding(self, result: dict[str, Any], model_id: str) -> list[float]:
         """Extract embedding from endpoint response."""
         # Try common response formats
         if "embedding" in result:
