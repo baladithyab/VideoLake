@@ -1,57 +1,60 @@
 """
-Batch Processor for Large-Scale Multi-Modal Ingestion.
+Large-Scale Batch Processor for Dataset Ingestion.
 
 Orchestrates batch processing of 10K-100K+ items with:
 - Configurable batch sizes and chunking
-- Checkpoint/resume for long-running jobs
-- Rate limiting for AWS services
+- Checkpoint/resume capability for long-running jobs
 - Progress tracking and cost estimation
-- Error handling and retry logic
-- Support for all modalities (text, image, audio, video)
+- Rate limiting and retry logic
+- Multi-modal support (text, image, audio, video)
 """
 
 import asyncio
+import json
 import time
-from typing import List, Dict, Any, Optional, Callable, AsyncIterator, Iterator
-from dataclasses import dataclass, field
-from enum import Enum
+from dataclasses import dataclass, asdict, field
 from datetime import datetime
+from pathlib import Path
+from typing import List, Dict, Any, Optional, Callable, AsyncIterator
+from enum import Enum
 
-from src.ingestion.checkpoint import CheckpointManager, CheckpointState
-from src.ingestion.rate_limiter import RateLimiter, ServiceType
-from src.services.embedding_provider import (
-    EmbeddingProviderFactory,
-    ModalityType,
-    EmbeddingRequest
+from src.services.unified_ingestion_service import (
+    UnifiedIngestionService,
+    IngestionRequest,
+    IngestionResult
 )
-from src.services.vector_store_provider import VectorStoreProviderFactory, VectorStoreType
+from src.services.embedding_provider import ModalityType
+from src.services.vector_store_provider import VectorStoreType
 from src.utils.logging_config import get_logger
-from src.utils.aws_retry import AWSRetryHandler
-from src.exceptions import ProcessingError, VectorEmbeddingError
 
 logger = get_logger(__name__)
+
+
+class ProcessingStatus(Enum):
+    """Status of batch processing job."""
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 @dataclass
 class BatchConfig:
     """Configuration for batch processing."""
-    # Batch sizing
-    batch_size: int = 50  # Items per batch
-    max_concurrent_batches: int = 5  # Parallel batch processing
-    chunk_size: Optional[int] = None  # For text chunking (None = no chunking)
-
-    # Checkpointing
-    enable_checkpointing: bool = True
-    checkpoint_interval: int = 100  # Items per checkpoint
-    checkpoint_s3_bucket: str = "s3vector-checkpoints"
-
-    # Rate limiting
-    enable_rate_limiting: bool = True
-    bedrock_rps: Optional[float] = None  # Override default rate limit
-
-    # Retry configuration
-    max_retries: int = 3
-    retry_delay_seconds: float = 1.0
+    job_id: str
+    modality: ModalityType
+    vector_store_type: VectorStoreType
+    vector_store_name: str
+    batch_size: int = 100
+    max_concurrent: int = 5
+    rate_limit_requests_per_second: float = 10.0
+    checkpoint_interval: int = 100
+    checkpoint_dir: str = ".checkpoints"
+    enable_cost_tracking: bool = True
+    enable_progress_tracking: bool = True
+    embedding_provider_id: Optional[str] = None
+    embedding_model_id: Optional[str] = None
 
     # Resource limits
     max_processing_time_hours: Optional[float] = None
@@ -63,458 +66,165 @@ class BatchConfig:
 
 
 @dataclass
-class BatchItem:
-    """
-    Item to be processed in a batch.
+class BatchCheckpoint:
+    """Checkpoint for resuming batch processing."""
+    job_id: str
+    total_items: int
+    processed_items: int
+    failed_items: int
+    successful_items: int
+    last_processed_index: int
+    status: ProcessingStatus
+    start_time: str
+    last_update_time: str
+    total_embedding_time_ms: int = 0
+    total_storage_time_ms: int = 0
+    estimated_cost_usd: float = 0.0
+    error_log: List[Dict[str, Any]] = None
 
-    Represents a single data item (text, image, audio, video) with metadata.
-    """
-    item_id: str
-    content: Any  # Text string, image bytes, S3 URI, etc.
-    modality: ModalityType
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    def __post_init__(self):
+        if self.error_log is None:
+            self.error_log = []
 
 
 @dataclass
 class BatchResult:
-    """Result from processing a single batch."""
-    batch_id: int
-    success: bool
-    items_processed: int
-    items_failed: int
-    embeddings_generated: int
-    vectors_stored: int
-    processing_time_seconds: float
-    cost_usd: float
-    errors: List[str] = field(default_factory=list)
-
-
-@dataclass
-class IngestionJobResult:
-    """Final result from ingestion job."""
+    """Final result of batch processing."""
     job_id: str
-    success: bool
+    status: ProcessingStatus
     total_items: int
-    items_processed: int
-    items_failed: int
-    items_skipped: int
-
-    total_batches: int
-    embeddings_generated: int
-    vectors_stored: int
-
+    successful_items: int
+    failed_items: int
+    skipped_items: int
     total_time_seconds: float
-    total_cost_usd: float
-
-    # Performance metrics
-    avg_items_per_second: float
-    avg_cost_per_item: float
-
-    # Error summary
-    error_count: int
-
-    started_at: str
-    completed_at: str
-
-    # Errors (with default, must come last)
-    errors: List[str] = field(default_factory=list)
+    total_embedding_time_ms: int
+    total_storage_time_ms: int
+    estimated_cost_usd: float
+    throughput_items_per_second: float
+    error_summary: Dict[str, int]
 
 
 class BatchProcessor:
     """
-    Production-grade batch processor for large-scale ingestion.
+    Production-grade batch processor for large-scale dataset ingestion.
 
-    Handles 10K-100K+ items with:
-    - Automatic batching and parallelization
-    - Checkpoint/resume for fault tolerance
-    - Rate limiting to prevent throttling
-    - Cost tracking and limits
-    - Progress reporting
+    Handles 10K-100K+ items with checkpointing, rate limiting, and comprehensive tracking.
 
     Example:
-        # Configure processor
         config = BatchConfig(
+            job_id="ingest-msmarco-100k",
+            modality=ModalityType.TEXT,
+            vector_store_type=VectorStoreType.S3VECTOR,
+            vector_store_name="msmarco-index",
             batch_size=100,
-            max_concurrent_batches=10,
-            enable_checkpointing=True,
-            checkpoint_interval=500,
+            max_concurrent=10,
             max_cost_usd=100.0
         )
 
-        processor = BatchProcessor(
-            job_id="ingest-msmarco-100k",
-            config=config
+        processor = BatchProcessor(config)
+
+        result = await processor.process_batch(
+            data_source=item_generator(),
+            total_items=100000
         )
 
-        # Process dataset
-        async def item_generator():
-            for item in dataset:
-                yield BatchItem(
-                    item_id=item['id'],
-                    content=item['text'],
-                    modality=ModalityType.TEXT,
-                    metadata={'source': 'ms-marco'}
-                )
-
-        result = await processor.process_dataset(
-            items=item_generator(),
-            dataset_name="ms-marco-100k",
-            embedding_provider_id="bedrock-titan",
-            vector_store_type=VectorStoreType.S3VECTOR,
-            vector_store_name="msmarco-index"
-        )
-
-        print(f"Processed: {result.items_processed}/{result.total_items}")
-        print(f"Cost: ${result.total_cost_usd:.2f}")
-        print(f"Throughput: {result.avg_items_per_second:.1f} items/sec")
+        print(f"Processed: {result.successful_items}/{result.total_items}")
+        print(f"Cost: ${result.estimated_cost_usd:.4f}")
+        print(f"Throughput: {result.throughput_items_per_second:.2f} items/sec")
     """
 
-    def __init__(self, job_id: str, config: BatchConfig):
-        """
-        Initialize batch processor.
+    # Cost estimates per 1K operations (in USD)
+    COST_ESTIMATES = {
+        'bedrock_text_embedding': 0.0001,
+        'bedrock_image_embedding': 0.0008,
+        'sagemaker_inference': 0.0005,
+        's3_put_requests': 0.000005,
+        's3_storage_gb_month': 0.023,
+    }
 
-        Args:
-            job_id: Unique job identifier
-            config: Batch processing configuration
-        """
-        self.job_id = job_id
+    def __init__(self, config: BatchConfig):
+        """Initialize batch processor with configuration."""
         self.config = config
-
-        # Initialize components
-        self.embedding_factory = EmbeddingProviderFactory()
-        self.vector_store_factory = VectorStoreProviderFactory()
-
-        # Rate limiter
-        if config.enable_rate_limiting:
-            self.rate_limiter = RateLimiter()
-        else:
-            self.rate_limiter = None
-
-        # Checkpoint manager
-        if config.enable_checkpointing:
-            self.checkpoint_manager = CheckpointManager(
-                job_id=job_id,
-                s3_bucket=config.checkpoint_s3_bucket,
-                checkpoint_interval=config.checkpoint_interval
-            )
-        else:
-            self.checkpoint_manager = None
-
-        # State tracking
+        self.ingestion_service = UnifiedIngestionService()
+        self.checkpoint_path = Path(config.checkpoint_dir) / f"{config.job_id}.json"
+        self.checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         self.start_time: Optional[float] = None
         self.batches_processed = 0
 
+        # Load existing checkpoint if available
+        self.checkpoint = self._load_checkpoint()
+        if not self.checkpoint:
+            self.checkpoint = BatchCheckpoint(
+                job_id=config.job_id,
+                total_items=0,
+                processed_items=0,
+                failed_items=0,
+                successful_items=0,
+                last_processed_index=-1,
+                status=ProcessingStatus.PENDING,
+                start_time=datetime.utcnow().isoformat(),
+                last_update_time=datetime.utcnow().isoformat()
+            )
+
         logger.info(
-            f"BatchProcessor initialized: job={job_id}, "
+            f"BatchProcessor initialized: job={config.job_id}, "
             f"batch_size={config.batch_size}, "
-            f"checkpointing={'enabled' if config.enable_checkpointing else 'disabled'}"
+            f"max_concurrent={config.max_concurrent}"
         )
 
-    async def process_dataset(
-        self,
-        items: AsyncIterator[BatchItem],
-        dataset_name: str,
-        embedding_provider_id: str,
-        vector_store_type: VectorStoreType,
-        vector_store_name: str,
-        resume: bool = False
-    ) -> IngestionJobResult:
-        """
-        Process entire dataset with batching and checkpointing.
-
-        Args:
-            items: Async iterator of BatchItem objects
-            dataset_name: Name of dataset being processed
-            embedding_provider_id: ID of embedding provider to use
-            vector_store_type: Type of vector store
-            vector_store_name: Name of vector store/index
-            resume: Resume from checkpoint if available
-
-        Returns:
-            IngestionJobResult with complete metrics
-        """
-        self.start_time = time.time()
-        started_at = datetime.utcnow().isoformat()
-
-        logger.info(f"Starting ingestion job: {self.job_id} - {dataset_name}")
-
-        # Try to resume from checkpoint
-        checkpoint_state: Optional[CheckpointState] = None
-        if resume and self.checkpoint_manager:
-            checkpoint_state = self.checkpoint_manager.load_checkpoint()
-            if checkpoint_state:
-                logger.info(
-                    f"Resuming from checkpoint: {len(checkpoint_state.processed_items)} "
-                    f"items already processed"
-                )
-
-        # Initialize checkpoint if not resuming
-        if not checkpoint_state:
-            # Count total items (need to consume iterator first)
-            items_list = []
-            async for item in items:
-                items_list.append(item)
-
-            total_items = len(items_list)
-
-            if self.checkpoint_manager:
-                checkpoint_state = self.checkpoint_manager.create_checkpoint(
-                    dataset_name=dataset_name,
-                    modality=items_list[0].modality.value if items_list else "unknown",
-                    total_items=total_items
-                )
-
-            # Convert back to async iterator
-            async def items_from_list():
-                for item in items_list:
-                    yield item
-
-            items = items_from_list()
-
-        # Get embedding provider
-        embedding_provider = self.embedding_factory.create_provider(embedding_provider_id)
-        if not embedding_provider:
-            raise ProcessingError(f"Embedding provider not found: {embedding_provider_id}")
-
-        # Get vector store provider
-        vector_store_provider = self.vector_store_factory.create_provider(vector_store_type)
-
-        # Process batches
-        current_batch = []
-        batch_results = []
-
-        try:
-            async for item in items:
-                # Skip if already processed
-                if checkpoint_state and checkpoint_state.is_processed(item.item_id):
-                    checkpoint_state.mark_skipped(item.item_id)
-                    continue
-
-                current_batch.append(item)
-
-                # Process batch when full
-                if len(current_batch) >= self.config.batch_size:
-                    result = await self._process_batch(
-                        batch=current_batch,
-                        embedding_provider=embedding_provider,
-                        vector_store_provider=vector_store_provider,
-                        vector_store_name=vector_store_name,
-                        checkpoint_state=checkpoint_state
-                    )
-
-                    batch_results.append(result)
-                    current_batch = []
-                    self.batches_processed += 1
-
-                    # Update checkpoint
-                    if checkpoint_state and self.checkpoint_manager:
-                        if self.checkpoint_manager.should_checkpoint(result.items_processed):
-                            self.checkpoint_manager.save_checkpoint(checkpoint_state)
-
-                    # Progress callback
-                    if self.config.progress_callback:
-                        self._call_progress_callback(checkpoint_state, batch_results)
-
-                    # Check resource limits
-                    self._check_resource_limits(checkpoint_state)
-
-                    # Log progress
-                    if self.batches_processed % self.config.log_interval == 0:
-                        self._log_progress(checkpoint_state, batch_results)
-
-            # Process remaining items
-            if current_batch:
-                result = await self._process_batch(
-                    batch=current_batch,
-                    embedding_provider=embedding_provider,
-                    vector_store_provider=vector_store_provider,
-                    vector_store_name=vector_store_name,
-                    checkpoint_state=checkpoint_state
-                )
-                batch_results.append(result)
-
-            # Final checkpoint
-            if checkpoint_state and self.checkpoint_manager:
-                checkpoint_state.status = "completed"
-                self.checkpoint_manager.save_checkpoint(checkpoint_state, force=True)
-
-            # Compile final result
-            total_time = time.time() - self.start_time
-            completed_at = datetime.utcnow().isoformat()
-
-            result = self._compile_final_result(
-                checkpoint_state=checkpoint_state,
-                batch_results=batch_results,
-                total_time=total_time,
-                started_at=started_at,
-                completed_at=completed_at
-            )
-
-            logger.info(
-                f"Ingestion complete: {result.items_processed}/{result.total_items} items "
-                f"in {total_time/3600:.2f}h, ${result.total_cost_usd:.2f}, "
-                f"{result.avg_items_per_second:.1f} items/sec"
-            )
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Ingestion failed: {e}", exc_info=True)
-
-            # Save error checkpoint
-            if checkpoint_state and self.checkpoint_manager:
-                checkpoint_state.status = "failed"
-                checkpoint_state.last_error = str(e)
-                self.checkpoint_manager.save_checkpoint(checkpoint_state, force=True)
-
-            raise ProcessingError(f"Batch processing failed: {e}")
-
-    async def _process_batch(
-        self,
-        batch: List[BatchItem],
-        embedding_provider: Any,
-        vector_store_provider: Any,
-        vector_store_name: str,
-        checkpoint_state: Optional[CheckpointState]
-    ) -> BatchResult:
-        """Process a single batch of items."""
-        batch_id = self.batches_processed
-        start_time = time.time()
-
-        items_processed = 0
-        items_failed = 0
-        embeddings_generated = 0
-        vectors_stored = 0
-        cost_usd = 0.0
-        errors = []
-
-        logger.debug(f"Processing batch {batch_id}: {len(batch)} items")
-
-        for item in batch:
+    def _load_checkpoint(self) -> Optional[BatchCheckpoint]:
+        """Load checkpoint from disk if exists."""
+        if self.checkpoint_path.exists():
             try:
-                # Rate limiting
-                if self.rate_limiter:
-                    await self.rate_limiter.acquire(
-                        ServiceType.BEDROCK,
-                        model_id=embedding_provider.provider_id
-                    )
-
-                # Generate embedding
-                embedding_request = EmbeddingRequest(
-                    modality=item.modality,
-                    content=item.content,
-                    metadata=item.metadata
-                )
-
-                embedding_response = await embedding_provider.generate_embeddings(
-                    embedding_request
-                )
-
-                embeddings_generated += len(embedding_response.embeddings)
-
-                # Estimate cost (rough approximation)
-                cost_usd += self._estimate_cost(item.modality, embedding_provider.provider_id)
-
-                # Store vectors
-                vectors_data = [{
-                    "id": item.item_id,
-                    "values": embedding_response.embeddings[0],
-                    "metadata": {
-                        **item.metadata,
-                        "modality": item.modality.value,
-                        "model_id": embedding_response.model_id
-                    }
-                }]
-
-                await asyncio.to_thread(
-                    vector_store_provider.upsert_vectors,
-                    vector_store_name,
-                    vectors_data
-                )
-
-                vectors_stored += 1
-                items_processed += 1
-
-                # Update checkpoint
-                if checkpoint_state:
-                    checkpoint_state.mark_processed(item.item_id)
-                    checkpoint_state.embeddings_generated += len(embedding_response.embeddings)
-                    checkpoint_state.vectors_stored += 1
-                    checkpoint_state.total_cost_usd += cost_usd
-
-                # Report success to rate limiter
-                if self.rate_limiter:
-                    self.rate_limiter.report_success(
-                        ServiceType.BEDROCK,
-                        model_id=embedding_provider.provider_id
-                    )
-
-            except VectorEmbeddingError as e:
-                logger.error(f"Embedding failed for item {item.item_id}: {e}")
-                items_failed += 1
-                errors.append(f"{item.item_id}: {str(e)}")
-
-                if checkpoint_state:
-                    checkpoint_state.mark_failed(item.item_id, str(e))
-
-                # Report throttle to rate limiter
-                if self.rate_limiter and "throttl" in str(e).lower():
-                    self.rate_limiter.report_throttle(
-                        ServiceType.BEDROCK,
-                        model_id=embedding_provider.provider_id
-                    )
-
+                with open(self.checkpoint_path, 'r') as f:
+                    data = json.load(f)
+                    data['status'] = ProcessingStatus(data['status'])
+                    checkpoint = BatchCheckpoint(**data)
+                    logger.info(f"Loaded checkpoint: {checkpoint.processed_items}/{checkpoint.total_items} items processed")
+                    return checkpoint
             except Exception as e:
-                logger.error(f"Failed to process item {item.item_id}: {e}")
-                items_failed += 1
-                errors.append(f"{item.item_id}: {str(e)}")
+                logger.error(f"Failed to load checkpoint: {e}")
+                return None
+        return None
 
-                if checkpoint_state:
-                    checkpoint_state.mark_failed(item.item_id, str(e))
+    def _save_checkpoint(self):
+        """Save checkpoint to disk."""
+        try:
+            checkpoint_dict = asdict(self.checkpoint)
+            checkpoint_dict['status'] = self.checkpoint.status.value
+            checkpoint_dict['last_update_time'] = datetime.utcnow().isoformat()
 
-        processing_time = time.time() - start_time
+            with open(self.checkpoint_path, 'w') as f:
+                json.dump(checkpoint_dict, f, indent=2)
 
-        if checkpoint_state:
-            checkpoint_state.processing_time_seconds += processing_time
-            checkpoint_state.current_batch_index = batch_id + 1
+            logger.debug(f"Checkpoint saved: {self.checkpoint.processed_items}/{self.checkpoint.total_items}")
+        except Exception as e:
+            logger.error(f"Failed to save checkpoint: {e}")
 
-        return BatchResult(
-            batch_id=batch_id,
-            success=(items_failed == 0),
-            items_processed=items_processed,
-            items_failed=items_failed,
-            embeddings_generated=embeddings_generated,
-            vectors_stored=vectors_stored,
-            processing_time_seconds=processing_time,
-            cost_usd=cost_usd,
-            errors=errors
-        )
+    def _estimate_cost(self, items_count: int, modality: ModalityType) -> float:
+        """Estimate cost for processing items."""
+        cost = 0.0
 
-    def _estimate_cost(self, modality: ModalityType, provider_id: str) -> float:
-        """Estimate cost per item (rough approximation)."""
-        # Rough cost estimates
-        if "titan" in provider_id.lower():
-            if modality == ModalityType.TEXT:
-                return 0.0001  # $0.0001 per 1K tokens, assume ~1K tokens avg
-            elif modality == ModalityType.IMAGE:
-                return 0.0008  # Titan multimodal
-            elif modality == ModalityType.VIDEO:
-                return 0.02  # ~$0.35/min, assume ~3 sec clips
-        elif "cohere" in provider_id.lower():
-            return 0.0001
+        # Embedding cost
+        if modality == ModalityType.TEXT:
+            cost += (items_count / 1000) * self.COST_ESTIMATES['bedrock_text_embedding']
+        elif modality in [ModalityType.IMAGE, ModalityType.VIDEO]:
+            cost += items_count * self.COST_ESTIMATES['bedrock_image_embedding']
+        elif modality == ModalityType.AUDIO:
+            cost += (items_count / 1000) * self.COST_ESTIMATES['sagemaker_inference']
 
-        return 0.001  # Default estimate
+        # S3 storage cost (rough estimate)
+        cost += (items_count / 1000) * self.COST_ESTIMATES['s3_put_requests']
 
-    def _check_resource_limits(self, checkpoint_state: Optional[CheckpointState]):
-        """Check if resource limits exceeded."""
-        if not checkpoint_state:
-            return
+        return round(cost, 4)
 
+    def _check_resource_limits(self):
+        """Check if resource limits have been exceeded."""
         # Check cost limit
         if self.config.max_cost_usd:
-            if checkpoint_state.total_cost_usd >= self.config.max_cost_usd:
-                raise ProcessingError(
-                    f"Cost limit exceeded: ${checkpoint_state.total_cost_usd:.2f} "
+            if self.checkpoint.estimated_cost_usd >= self.config.max_cost_usd:
+                raise RuntimeError(
+                    f"Cost limit exceeded: ${self.checkpoint.estimated_cost_usd:.2f} "
                     f">= ${self.config.max_cost_usd}"
                 )
 
@@ -522,99 +232,293 @@ class BatchProcessor:
         if self.config.max_processing_time_hours and self.start_time:
             elapsed_hours = (time.time() - self.start_time) / 3600
             if elapsed_hours >= self.config.max_processing_time_hours:
-                raise ProcessingError(
+                raise RuntimeError(
                     f"Time limit exceeded: {elapsed_hours:.1f}h "
                     f">= {self.config.max_processing_time_hours}h"
                 )
 
-    def _log_progress(self, checkpoint_state: Optional[CheckpointState], batch_results: List[BatchResult]):
+    async def process_batch(
+        self,
+        data_source: AsyncIterator[Any],
+        total_items: Optional[int] = None,
+        metadata_fn: Optional[Callable[[Any, int], Dict[str, Any]]] = None
+    ) -> BatchResult:
+        """
+        Process a batch of items from an async data source.
+
+        Args:
+            data_source: Async iterator yielding items to process
+            total_items: Total number of items (for progress tracking)
+            metadata_fn: Optional function to extract metadata from each item
+
+        Returns:
+            BatchResult with processing statistics
+        """
+        self.start_time = time.time()
+
+        # Initialize checkpoint if first run
+        if self.checkpoint.status == ProcessingStatus.PENDING:
+            self.checkpoint.total_items = total_items or 0
+            self.checkpoint.status = ProcessingStatus.IN_PROGRESS
+            self._save_checkpoint()
+
+        logger.info(f"Starting batch processing: job_id={self.config.job_id}")
+        logger.info(f"Configuration: batch_size={self.config.batch_size}, "
+                   f"max_concurrent={self.config.max_concurrent}, "
+                   f"rate_limit={self.config.rate_limit_requests_per_second}/s")
+
+        # Process items in batches
+        batch_items = []
+        batch_metadata = []
+        current_index = self.checkpoint.last_processed_index + 1
+
+        try:
+            async for idx, item in self._enumerate_with_resume(data_source, current_index):
+                batch_items.append(item)
+
+                # Extract metadata if function provided
+                if metadata_fn:
+                    metadata = metadata_fn(item, idx)
+                else:
+                    metadata = {"index": idx, "job_id": self.config.job_id}
+                batch_metadata.append(metadata)
+
+                # Process batch when full
+                if len(batch_items) >= self.config.batch_size:
+                    await self._process_batch_chunk(
+                        batch_items,
+                        batch_metadata,
+                        current_index - len(batch_items) + 1
+                    )
+                    batch_items = []
+                    batch_metadata = []
+                    self.batches_processed += 1
+
+                    # Check resource limits
+                    self._check_resource_limits()
+
+                    # Progress callback
+                    if self.config.progress_callback:
+                        self.config.progress_callback(self.get_progress())
+
+                    # Log progress
+                    if self.batches_processed % self.config.log_interval == 0:
+                        self._log_progress()
+
+                current_index = idx
+
+            # Process remaining items
+            if batch_items:
+                await self._process_batch_chunk(
+                    batch_items,
+                    batch_metadata,
+                    current_index - len(batch_items) + 1
+                )
+
+            # Mark as completed
+            self.checkpoint.status = ProcessingStatus.COMPLETED
+            self._save_checkpoint()
+
+        except Exception as e:
+            logger.error(f"Batch processing failed: {e}", exc_info=True)
+            self.checkpoint.status = ProcessingStatus.FAILED
+            self._save_checkpoint()
+            raise
+
+        # Calculate final statistics
+        total_time = time.time() - self.start_time
+        throughput = self.checkpoint.successful_items / total_time if total_time > 0 else 0
+
+        # Summarize errors
+        error_summary = {}
+        for error in self.checkpoint.error_log:
+            error_type = error.get('error_type', 'unknown')
+            error_summary[error_type] = error_summary.get(error_type, 0) + 1
+
+        result = BatchResult(
+            job_id=self.config.job_id,
+            status=self.checkpoint.status,
+            total_items=self.checkpoint.total_items,
+            successful_items=self.checkpoint.successful_items,
+            failed_items=self.checkpoint.failed_items,
+            skipped_items=current_index + 1 - self.checkpoint.processed_items,
+            total_time_seconds=total_time,
+            total_embedding_time_ms=self.checkpoint.total_embedding_time_ms,
+            total_storage_time_ms=self.checkpoint.total_storage_time_ms,
+            estimated_cost_usd=self.checkpoint.estimated_cost_usd,
+            throughput_items_per_second=throughput,
+            error_summary=error_summary
+        )
+
+        logger.info(f"Batch processing completed: {result.successful_items}/{result.total_items} successful, "
+                   f"throughput={result.throughput_items_per_second:.2f} items/s, "
+                   f"estimated_cost=${result.estimated_cost_usd:.4f}")
+
+        return result
+
+    async def _enumerate_with_resume(self, data_source: AsyncIterator[Any], start_index: int):
+        """Enumerate data source, resuming from checkpoint."""
+        idx = 0
+        async for item in data_source:
+            if idx >= start_index:
+                yield idx, item
+            idx += 1
+
+    async def _process_batch_chunk(
+        self,
+        items: List[Any],
+        metadata_list: List[Dict[str, Any]],
+        start_index: int
+    ):
+        """Process a chunk of items with rate limiting."""
+        logger.info(f"Processing chunk: {len(items)} items starting at index {start_index}")
+
+        # Create ingestion requests
+        requests = []
+        for item, metadata in zip(items, metadata_list):
+            request = IngestionRequest(
+                modality=self.config.modality,
+                content=item,
+                vector_store_type=self.config.vector_store_type,
+                vector_store_name=self.config.vector_store_name,
+                embedding_provider_id=self.config.embedding_provider_id,
+                embedding_model_id=self.config.embedding_model_id,
+                metadata=metadata
+            )
+            requests.append(request)
+
+        # Process with rate limiting
+        results = await self._process_with_rate_limit(requests)
+
+        # Update checkpoint
+        for idx, result in enumerate(results):
+            self.checkpoint.processed_items += 1
+            self.checkpoint.last_processed_index = start_index + idx
+
+            if result.success:
+                self.checkpoint.successful_items += result.vectors_ingested
+                self.checkpoint.total_embedding_time_ms += result.embedding_time_ms
+                self.checkpoint.total_storage_time_ms += result.storage_time_ms
+            else:
+                self.checkpoint.failed_items += 1
+                # Log error
+                error_entry = {
+                    "index": start_index + idx,
+                    "error_type": result.errors[0] if result.errors else "unknown",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                self.checkpoint.error_log.append(error_entry)
+
+        # Update cost estimate
+        if self.config.enable_cost_tracking:
+            self.checkpoint.estimated_cost_usd += self._estimate_cost(
+                len(items),
+                self.config.modality
+            )
+
+        # Save checkpoint at interval
+        if self.checkpoint.processed_items % self.config.checkpoint_interval == 0:
+            self._save_checkpoint()
+            logger.info(f"Progress: {self.checkpoint.processed_items}/{self.checkpoint.total_items} "
+                       f"({self.checkpoint.successful_items} successful, {self.checkpoint.failed_items} failed)")
+
+    async def _process_with_rate_limit(
+        self,
+        requests: List[IngestionRequest]
+    ) -> List[IngestionResult]:
+        """Process requests with rate limiting."""
+        # Calculate delay between requests to respect rate limit
+        delay = 1.0 / self.config.rate_limit_requests_per_second
+
+        # Process in parallel batches with concurrency limit
+        semaphore = asyncio.Semaphore(self.config.max_concurrent)
+
+        async def process_with_semaphore(request: IngestionRequest) -> IngestionResult:
+            async with semaphore:
+                result = await self.ingestion_service.ingest(request)
+                await asyncio.sleep(delay)  # Rate limiting
+                return result
+
+        # Execute all requests
+        results = await asyncio.gather(
+            *[process_with_semaphore(req) for req in requests],
+            return_exceptions=True
+        )
+
+        # Convert exceptions to failed results
+        processed_results = []
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"Processing failed: {result}")
+                processed_results.append(
+                    IngestionResult(
+                        success=False,
+                        vectors_ingested=0,
+                        vectors_failed=1,
+                        embedding_time_ms=0,
+                        storage_time_ms=0,
+                        total_time_ms=0,
+                        errors=[str(result)]
+                    )
+                )
+            else:
+                processed_results.append(result)
+
+        return processed_results
+
+    def _log_progress(self):
         """Log progress update."""
-        if not checkpoint_state:
+        if not self.start_time:
             return
 
-        total_processed = len(checkpoint_state.processed_items)
-        total_failed = len(checkpoint_state.failed_items)
-        progress_pct = checkpoint_state.progress_percentage
-
-        elapsed_time = time.time() - self.start_time if self.start_time else 0
-        items_per_sec = total_processed / elapsed_time if elapsed_time > 0 else 0
+        elapsed_time = time.time() - self.start_time
+        items_per_sec = self.checkpoint.successful_items / elapsed_time if elapsed_time > 0 else 0
+        progress_pct = (
+            (self.checkpoint.processed_items / self.checkpoint.total_items) * 100
+            if self.checkpoint.total_items > 0 else 0
+        )
 
         logger.info(
-            f"Progress: {total_processed}/{checkpoint_state.total_items} "
-            f"({progress_pct:.1f}%), {total_failed} failed, "
-            f"{items_per_sec:.1f} items/sec, ${checkpoint_state.total_cost_usd:.2f}"
+            f"Progress: {self.checkpoint.processed_items}/{self.checkpoint.total_items} "
+            f"({progress_pct:.1f}%), {self.checkpoint.failed_items} failed, "
+            f"{items_per_sec:.1f} items/sec, ${self.checkpoint.estimated_cost_usd:.4f}"
         )
 
-    def _call_progress_callback(self, checkpoint_state: Optional[CheckpointState], batch_results: List[BatchResult]):
-        """Call progress callback with current state."""
-        if not self.config.progress_callback or not checkpoint_state:
-            return
+    def get_progress(self) -> Dict[str, Any]:
+        """Get current processing progress."""
+        progress_pct = 0.0
+        if self.checkpoint.total_items > 0:
+            progress_pct = (self.checkpoint.processed_items / self.checkpoint.total_items) * 100
 
-        progress_data = {
-            "job_id": self.job_id,
-            "total_items": checkpoint_state.total_items,
-            "processed_items": len(checkpoint_state.processed_items),
-            "failed_items": len(checkpoint_state.failed_items),
-            "progress_percentage": checkpoint_state.progress_percentage,
-            "total_cost_usd": checkpoint_state.total_cost_usd,
-            "elapsed_time_seconds": time.time() - self.start_time if self.start_time else 0
+        return {
+            "job_id": self.config.job_id,
+            "status": self.checkpoint.status.value,
+            "total_items": self.checkpoint.total_items,
+            "processed_items": self.checkpoint.processed_items,
+            "successful_items": self.checkpoint.successful_items,
+            "failed_items": self.checkpoint.failed_items,
+            "progress_percent": round(progress_pct, 2),
+            "estimated_cost_usd": self.checkpoint.estimated_cost_usd,
+            "avg_embedding_time_ms": (
+                self.checkpoint.total_embedding_time_ms / self.checkpoint.successful_items
+                if self.checkpoint.successful_items > 0 else 0
+            ),
+            "avg_storage_time_ms": (
+                self.checkpoint.total_storage_time_ms / self.checkpoint.successful_items
+                if self.checkpoint.successful_items > 0 else 0
+            )
         }
 
-        self.config.progress_callback(progress_data)
+    def pause(self):
+        """Pause processing (save checkpoint and mark as paused)."""
+        self.checkpoint.status = ProcessingStatus.PAUSED
+        self._save_checkpoint()
+        logger.info(f"Job paused: {self.config.job_id}")
 
-    def _compile_final_result(
-        self,
-        checkpoint_state: Optional[CheckpointState],
-        batch_results: List[BatchResult],
-        total_time: float,
-        started_at: str,
-        completed_at: str
-    ) -> IngestionJobResult:
-        """Compile final ingestion result."""
-        if checkpoint_state:
-            total_items = checkpoint_state.total_items
-            items_processed = len(checkpoint_state.processed_items)
-            items_failed = len(checkpoint_state.failed_items)
-            items_skipped = len(checkpoint_state.skipped_items)
-            embeddings_generated = checkpoint_state.embeddings_generated
-            vectors_stored = checkpoint_state.vectors_stored
-            total_cost_usd = checkpoint_state.total_cost_usd
-            error_count = checkpoint_state.error_count
+    def resume(self):
+        """Resume processing from last checkpoint."""
+        if self.checkpoint.status == ProcessingStatus.PAUSED:
+            self.checkpoint.status = ProcessingStatus.IN_PROGRESS
+            logger.info(f"Job resumed: {self.config.job_id} from index {self.checkpoint.last_processed_index}")
         else:
-            total_items = sum(br.items_processed + br.items_failed for br in batch_results)
-            items_processed = sum(br.items_processed for br in batch_results)
-            items_failed = sum(br.items_failed for br in batch_results)
-            items_skipped = 0
-            embeddings_generated = sum(br.embeddings_generated for br in batch_results)
-            vectors_stored = sum(br.vectors_stored for br in batch_results)
-            total_cost_usd = sum(br.cost_usd for br in batch_results)
-            error_count = sum(len(br.errors) for br in batch_results)
-
-        # Calculate performance metrics
-        avg_items_per_second = items_processed / total_time if total_time > 0 else 0
-        avg_cost_per_item = total_cost_usd / items_processed if items_processed > 0 else 0
-
-        # Collect errors
-        all_errors = []
-        for br in batch_results:
-            all_errors.extend(br.errors)
-
-        return IngestionJobResult(
-            job_id=self.job_id,
-            success=(items_failed == 0),
-            total_items=total_items,
-            items_processed=items_processed,
-            items_failed=items_failed,
-            items_skipped=items_skipped,
-            total_batches=len(batch_results),
-            embeddings_generated=embeddings_generated,
-            vectors_stored=vectors_stored,
-            total_time_seconds=total_time,
-            total_cost_usd=total_cost_usd,
-            avg_items_per_second=avg_items_per_second,
-            avg_cost_per_item=avg_cost_per_item,
-            error_count=error_count,
-            errors=all_errors[:100],  # Limit to first 100 errors
-            started_at=started_at,
-            completed_at=completed_at
-        )
+            logger.warning(f"Cannot resume job with status: {self.checkpoint.status}")
