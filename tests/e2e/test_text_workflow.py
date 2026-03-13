@@ -10,10 +10,8 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 import json
-@pytest.mark.e2e
 import asyncio
 from typing import List, Dict, Any
-@pytest.mark.requires_aws
 
 
 @pytest.mark.slow

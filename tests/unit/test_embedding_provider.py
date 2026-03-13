@@ -11,16 +11,16 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import json
 from src.services.embedding_provider import (
-EmbeddingProvider,
-ModalityType,
-EmbeddingProviderFactory,
-ProviderCapabilities,
+    EmbeddingProvider,
+    ModalityType,
+    EmbeddingProviderFactory,
+    ProviderCapabilities,
+    EmbeddingProviderType,
+    EmbeddingRequest,
+    EmbeddingResponse,
 )
 from typing import List
 from datetime import datetime
-EmbeddingProviderType,
-EmbeddingRequest,
-EmbeddingResponse,
 
 
 @pytest.mark.unit

@@ -11,13 +11,13 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from typing import List, Dict, Any
 try:
-from src.services.vector_store_s3vector_provider import S3VectorProvider
-from src.services.vector_store_opensearch_provider import OpenSearchProvider
-from src.services.vector_store_lancedb_provider import LanceDBProvider
+    from src.services.vector_store_s3vector_provider import S3VectorProvider
+    from src.services.vector_store_opensearch_provider import OpenSearchProvider
+    from src.services.vector_store_lancedb_provider import LanceDBProvider
 except ImportError:
-S3VectorProvider = None
-OpenSearchProvider = None
-LanceDBProvider = None
+    S3VectorProvider = None
+    OpenSearchProvider = None
+    LanceDBProvider = None
 from datetime import datetime, timezone
 from src.services.vector_store_provider import (
 VectorStoreProvider,

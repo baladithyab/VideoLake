@@ -12,13 +12,13 @@ import json
 from pathlib import Path
 from typing import List, Dict
 import os
-@pytest.mark.terraform
+
 TERRAFORM_ROOT = Path(__file__).parent.parent.parent / "terraform"
 PROFILES = [
-"fast-start.tfvars",
-"comparison.tfvars",
-"full-multimodal.tfvars",
-"production.tfvars",
+    "fast-start.tfvars",
+    "comparison.tfvars",
+    "full-multimodal.tfvars",
+    "production.tfvars",
 ]
 
 
@@ -260,9 +260,6 @@ class TestTerraformModuleValidation:
 
 
 @pytest.mark.terraform
-
-
-@pytest.mark.terraform
 class TestTerraformModules:
     """Test individual terraform modules."""
 
@@ -481,8 +478,3 @@ class TestTerraformValidation:
         content = profile_path.read_text()
         assert len(content) > 0, f"Profile {profile} is empty"
         assert "=" in content, f"Profile {profile} doesn't appear to contain variable assignments"
-
-
-@pytest.mark.terraform
-
-

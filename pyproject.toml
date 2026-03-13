@@ -109,6 +109,14 @@ markers = [
     "terraform: Terraform infrastructure tests",
     "provider: Provider interface tests",
     "frontend: Frontend component tests",
+    "performance: Performance and benchmark tests",
+    "concurrent: Concurrency and multi-threading tests",
+    "error_recovery: Error recovery and resilience tests",
+    "resource_limits: Resource limit and constraint tests",
+    "aws_integration: AWS service integration tests",
+    "multi_region: Multi-region deployment tests",
+    "security: Security and authorization tests",
+    "combination: Combined/composite feature tests",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
