@@ -99,16 +99,35 @@ The platform uses a modular "opt-in" design:
 - [`outputs.tf`](../terraform/outputs.tf) - Infrastructure discovery outputs
 - [`terraform.tfvars.example`](../terraform/terraform.tfvars.example) - Example configuration
 
-**Design Philosophy**: 
+**Design Philosophy**:
 - Conditional deployment via boolean flags
 - Default to S3Vector-only (fast)
 - Opt-in for comparison backends
+
+### API Authentication (NEW)
+
+**Location**: [`src/api/middleware/auth.py`](../src/api/middleware/auth.py)
+
+**Authentication Method**: X-API-Key header
+
+**Behavior**:
+- Public endpoints (/, /api/health, /docs) - No authentication required
+- Protected endpoints (/api/*) - Require X-API-Key header
+- Development mode: If `API_KEY` environment variable is not set, authentication is disabled
+- Production mode: Set `API_KEY` environment variable to enable authentication
+
+**Usage**:
+```bash
+curl -H "X-API-Key: your-api-key" http://localhost:8000/api/resources/scan
+```
+
+**Implementation**: FastAPI middleware validates all requests before routing
 
 ### 2. Backend Services Layer
 
 **Location**: [`/src/`](../src/)
 
-**Purpose**: API server, business logic, vector store operations
+**Purpose**: API server, business logic, vector store operations, multi-modal embedding generation
 
 **Directory Structure**:
 ```
@@ -119,15 +138,22 @@ src/
 │   │   ├── resources.py   # Infrastructure endpoints
 │   │   ├── processing.py  # Video processing
 │   │   ├── search.py      # Vector search
-│   │   └── embeddings.py  # Embedding generation
-│   └── middleware/        # CORS, logging, etc.
+│   │   └── embeddings.py  # Embedding generation & provider management
+│   └── middleware/        # CORS, logging, authentication (X-API-Key)
 │
 ├── services/              # Business logic
-│   ├── vector_store_provider.py        # Abstract provider 
+│   ├── vector_store_provider.py          # Abstract vector store interface
 │   ├── vector_store_s3vector_provider.py
 │   ├── vector_store_opensearch_provider.py
 │   ├── vector_store_qdrant_provider.py
-│   └── vector_store_lancedb_provider.py
+│   ├── vector_store_lancedb_provider.py
+│   │
+│   ├── embedding_provider.py             # Abstract embedding provider (NEW)
+│   ├── bedrock_multi_modal_provider.py   # AWS Bedrock embeddings (NEW)
+│   ├── sagemaker_embedding_provider.py   # SageMaker embeddings (NEW)
+│   ├── external_embedding_provider.py    # External APIs (OpenAI, Cohere) (NEW)
+│   │
+│   └── unified_ingestion_service.py      # End-to-end ingestion pipeline (NEW)
 │
 └── utils/                 # Shared utilities
     ├── aws_clients.py
@@ -137,7 +163,9 @@ src/
 ```
 
 **Key Patterns**:
-- **Provider Pattern**: Unified [`VectorStoreProvider`](../src/services/vector_store_provider.py) interface
+- **Provider Pattern**: Unified [`VectorStoreProvider`](../src/services/vector_store_provider.py) interface for vector stores
+- **Embedding Provider Pattern**: Unified [`EmbeddingProvider`](../src/services/embedding_provider.py) interface for multi-modal embeddings (NEW)
+- **Factory Auto-Registration**: Decorator-based provider registration with singleton pattern
 - **Async/Await**: Non-blocking I/O throughout
 - **Health Checks**: Real-time backend status with 3s timeout
 - **Error Handling**: Graceful degradation for unavailable backends
@@ -231,6 +259,7 @@ deploy_lancedb_s3 = true
 **1. Resources Router** ([`/api/resources`](../src/api/routers/resources.py))
 - `GET /deployed-resources-tree` - Read Terraform state, return deployed resources
 - `GET /health-check/{backend_type}` - Check specific backend health
+- `GET /vector-stores/comparison` - Compare all vector store backends (capabilities, costs, performance) (NEW)
 - **Read-only**: No POST/DELETE for infrastructure (Terraform-only)
 
 **2. Processing Router** ([`/api/processing`](../src/api/routers/processing.py))
@@ -241,9 +270,13 @@ deploy_lancedb_s3 = true
 - `POST /query` - Vector similarity search
 - `GET /search-history` - Recent searches
 
-**4. Embeddings Router** ([`/api/embeddings`](../src/api/routers/embeddings.py))
-- `POST /generate` - Create embeddings with AWS Bedrock
-- `GET /models` - List available embedding models
+**4. Embeddings Router** ([`/api/embeddings`](../src/api/routers/embeddings.py) - NEW/EXPANDED)
+- `GET /api/embeddings/providers` - List all embedding providers and their modalities (NEW)
+- `GET /api/embeddings/providers/{id}` - Get provider details and health status (NEW)
+- `POST /api/embeddings/generate` - Generate embeddings for multi-modal content (NEW)
+- `POST /visualize` - Generate embedding visualizations
+- `POST /analyze` - Analyze embedding space
+- `GET /methods` - List visualization methods
 
 ### Vector Store Provider Pattern
 
@@ -274,6 +307,105 @@ class VectorStoreProvider(ABC):
 - Easy to add new backends
 - Consistent error handling
 - Testable in isolation
+
+### Embedding Provider Pattern (NEW)
+
+**Abstract Interface**:
+```python
+class EmbeddingProvider(ABC):
+    @abstractmethod
+    async def generate_embedding(self, request: EmbeddingRequest) -> EmbeddingResponse
+
+    @abstractmethod
+    def get_supported_modalities(self) -> List[ModalityType]
+
+    @abstractmethod
+    def get_available_models(self) -> List[EmbeddingModelInfo]
+
+    @abstractmethod
+    async def validate_connectivity(self) -> Dict[str, Any]
+```
+
+**Modality Types**:
+```python
+class ModalityType(str, Enum):
+    TEXT = "text"
+    IMAGE = "image"
+    AUDIO = "audio"
+    VIDEO = "video"
+    MULTIMODAL = "multimodal"  # Cross-modal (e.g., text+image)
+```
+
+**Implementations**:
+- [`BedrockMultiModalProvider`](../src/services/bedrock_multi_modal_provider.py) - AWS Bedrock (Titan Text/Image, Nova Multi-modal)
+- [`SageMakerEmbeddingProvider`](../src/services/sagemaker_embedding_provider.py) - SageMaker endpoints (Voyage, Jina, custom)
+- [`ExternalEmbeddingProvider`](../src/services/external_embedding_provider.py) - External APIs (OpenAI, Cohere)
+
+**Auto-Registration**:
+```python
+@register_embedding_provider("bedrock")
+class BedrockMultiModalProvider(EmbeddingProvider):
+    # Implementation auto-registered with factory
+```
+
+**Factory Pattern**:
+```python
+# Get provider by ID
+provider = EmbeddingProviderFactory.create_provider("bedrock")
+
+# Auto-select provider by modality
+provider = EmbeddingProviderFactory.get_provider_for_modality(ModalityType.IMAGE)
+
+# List all providers supporting a modality
+providers = EmbeddingProviderFactory.get_providers_for_modality(ModalityType.TEXT)
+```
+
+**Benefits**:
+- Modality-aware provider selection
+- Support for text, image, audio, video, and cross-modal content
+- Unified API across AWS Bedrock, SageMaker, and external APIs
+- Auto-discovery via decorator registration
+- Easy to add new embedding providers
+- Configurable dimensions for compatible models
+
+### Unified Ingestion Service (NEW)
+
+**Purpose**: End-to-end pipeline for ingesting multi-modal content into vector stores
+
+**Location**: [`src/services/unified_ingestion_service.py`](../src/services/unified_ingestion_service.py)
+
+**Pipeline Flow**:
+```
+1. Content Input (text, image, audio, video, or batch)
+   ↓
+2. Auto-select Embedding Provider (based on modality)
+   ↓
+3. Generate Embeddings (using selected provider)
+   ↓
+4. Store Vectors (in target vector store)
+   ↓
+5. Return Results (with timing and statistics)
+```
+
+**Features**:
+- Automatic embedding provider selection based on content modality
+- Batch processing with concurrency control
+- Comprehensive error handling and recovery
+- Detailed timing metrics for each pipeline stage
+- Support for all vector store backends (S3Vector, OpenSearch, Qdrant, LanceDB)
+
+**Usage Example**:
+```python
+service = UnifiedIngestionService()
+
+result = await service.ingest(IngestionRequest(
+    modality=ModalityType.TEXT,
+    content="Example text to embed",
+    vector_store_type=VectorStoreType.S3_VECTOR,
+    vector_store_name="my-index",
+    embedding_provider_id="bedrock"  # Optional - auto-selected if not specified
+))
+```
 
 ### Health Check System
 
