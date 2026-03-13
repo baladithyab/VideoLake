@@ -9,7 +9,7 @@ This document outlines the technical plan to address user feedback regarding Ben
 ### Current State
 - **Infrastructure:** `terraform/modules/benchmark_runner_ecs` deploys a dedicated ECS Cluster and Task Definition (`videolake-benchmark-runner`).
 - **API:** `src/api/routers/benchmark.py` calls `BenchmarkService.start_benchmark`.
-- **Service:** `src/backend/benchmark_service.py` runs benchmarks locally using `ThreadPoolExecutor`.
+- **Service:** Benchmark service logic (previously in `src/backend/`, now removed or integrated into `src/services/`).
 
 ### Implementation Plan
 
@@ -18,7 +18,7 @@ This document outlines the technical plan to address user feedback regarding Ben
     *   Required Actions: `ecs:RunTask`, `iam:PassRole` (for the benchmark task execution role).
     *   Resource: ARN of the benchmark task definition.
 
-2.  **Modify `BenchmarkService` (`src/backend/benchmark_service.py`)**
+2.  **Modify `BenchmarkService` (`benchmark service (src/services/)`)**
     *   Replace `ThreadPoolExecutor` logic with `boto3.client('ecs').run_task`.
     *   **Configuration Passing:** Pass benchmark parameters (backends, queries, vectors, etc.) as environment variable overrides to the container command.
     *   **Command:** `["python", "scripts/benchmark_backend.py", "--backend", "...", "--config", "..."]`

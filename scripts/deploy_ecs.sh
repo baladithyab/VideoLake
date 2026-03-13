@@ -2,6 +2,10 @@
 #
 # VideoLake ECS Deployment Script
 #
+# ⚠️  DEPRECATED: This script references src/backend/Dockerfile which has been removed.
+# ⚠️  The src/backend/ directory was removed as part of code cleanup.
+# ⚠️  For current deployment, use Terraform modules in terraform/ directory.
+#
 # Usage: ./scripts/deploy_ecs.sh
 #
 # This script deploys the VideoLake platform to ECS and S3:
@@ -83,8 +87,11 @@ aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS 
 
 # Build Docker Image
 log "Building Docker image..."
+# ⚠️  DEPRECATED: src/backend/Dockerfile has been removed
 # We need to be in the root context to copy src/ correctly as per Dockerfile
-docker build -t "$ECR_REPO_URL:latest" -f src/backend/Dockerfile .
+# docker build -t "$ECR_REPO_URL:latest" -f src/backend/Dockerfile .
+echo "ERROR: src/backend/Dockerfile no longer exists. This script is deprecated."
+exit 1
 
 # Push to ECR
 log "Pushing image to ECR..."

@@ -58,7 +58,7 @@ VideoLake demonstrates solid architectural foundations and impressive benchmark 
 **Critical Vulnerabilities:**
 - ❌ **Zero authentication/authorization** on all API endpoints (CVSS 10.0)
 - ❌ **Wildcard IAM permissions** (`dynamodb:*`, `ecs:*`, `s3:*`) (CVSS 8.5)
-- ❌ **Command injection** vulnerability in [`TerraformManager.apply()`](src/backend/terraform_manager.py:120) (CVSS 9.0)
+- ❌ **Command injection** vulnerability in `TerraformManager.apply()` (previously in src/backend/, now removed) (CVSS 9.0)
 - ❌ Overly permissive CORS (`Access-Control-Allow-Origin: *`)
 - ❌ No HTTPS enforcement or TLS configuration
 - ❌ Secrets stored in environment variables (plaintext)

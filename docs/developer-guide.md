@@ -300,38 +300,7 @@ class Config(BaseSettings):
         case_sensitive = False
 ```
 
-### 2. Data Models (src/models/)
-
-```python
-# src/models/embedding_models.py
-from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
-from datetime import datetime
-
-class EmbeddingResult(BaseModel):
-    """Standard embedding result structure"""
-    embedding: List[float]
-    model_id: str
-    input_text: str
-    processing_time_ms: float
-    token_count: Optional[int] = None
-    cost_estimate_usd: Optional[float] = None
-
-class VectorData(BaseModel):
-    """S3 Vector storage format"""
-    key: str
-    data: Dict[str, List[float]]  # {"float32": [0.1, 0.2, ...]}
-    metadata: Dict[str, Any]
-
-class SearchResult(BaseModel):
-    """Search result with metadata"""
-    vector_key: str
-    similarity_score: float
-    metadata: Dict[str, Any]
-    temporal_info: Optional[Dict[str, float]] = None  # For video segments
-```
-
-### 3. Error Handling (src/utils/error_handling.py)
+### 2. Error Handling (src/utils/error_handling.py)
 
 ```python
 import functools
