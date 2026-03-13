@@ -472,3 +472,43 @@ variable "cost_estimator_enable_cors" {
   type        = bool
   default     = true
 }
+
+#------------------------------------------------------------------------------
+# MONITORING (Operations)
+#------------------------------------------------------------------------------
+
+variable "deploy_monitoring" {
+  description = "Deploy CloudWatch monitoring and alarms"
+  type        = bool
+  default     = true
+}
+
+variable "monitoring_alarm_emails" {
+  description = "Email addresses to receive monitoring alarms"
+  type        = list(string)
+  default     = []
+}
+
+variable "monitoring_enable_cost_alarms" {
+  description = "Enable cost monitoring alarms"
+  type        = bool
+  default     = true
+}
+
+variable "monitoring_monthly_budget" {
+  description = "Monthly cost budget threshold in USD"
+  type        = number
+  default     = 100
+}
+
+variable "monitoring_enable_dashboard" {
+  description = "Create CloudWatch dashboard"
+  type        = bool
+  default     = true
+}
+
+variable "monitoring_lambda_functions" {
+  description = "Map of lambda function logical names to actual function names to monitor"
+  type        = map(string)
+  default     = {}
+}
