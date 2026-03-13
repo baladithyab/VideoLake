@@ -54,29 +54,113 @@ function App() {
                   <Route element={<MainLayout />}>
                     <Route path="/" element={<WelcomePage />} />
 
-                  {/* Deployment wizard routes */}
+                  {/* Deployment wizard routes with isolated error boundary */}
                   <Route path="/deployment" element={<Navigate to="/deployment/configure" replace />} />
-                  <Route path="/deployment/configure" element={<DeploymentConfigurePage />} />
-                  <Route path="/deployment/review" element={<DeploymentReviewPage />} />
-                  <Route path="/deployment/progress" element={<DeploymentProgressPage />} />
+                  <Route
+                    path="/deployment/configure"
+                    element={
+                      <ErrorBoundary level="page">
+                        <DeploymentConfigurePage />
+                      </ErrorBoundary>
+                    }
+                  />
+                  <Route
+                    path="/deployment/review"
+                    element={
+                      <ErrorBoundary level="page">
+                        <DeploymentReviewPage />
+                      </ErrorBoundary>
+                    }
+                  />
+                  <Route
+                    path="/deployment/progress"
+                    element={
+                      <ErrorBoundary level="page">
+                        <DeploymentProgressPage />
+                      </ErrorBoundary>
+                    }
+                  />
 
-                  {/* Benchmark workflow routes */}
-                  <Route path="/benchmark" element={<BenchmarkHubPage />} />
-                  <Route path="/benchmark/configure" element={<BenchmarkConfigurePage />} />
-                  <Route path="/benchmark/run/:id" element={<BenchmarkRunPage />} />
-                  <Route path="/benchmark/results/:id" element={<BenchmarkResultsPage />} />
-                  <Route path="/benchmark/history" element={<BenchmarkHistoryPage />} />
+                  {/* Benchmark workflow routes with isolated error boundary */}
+                  <Route
+                    path="/benchmark"
+                    element={
+                      <ErrorBoundary level="page">
+                        <BenchmarkHubPage />
+                      </ErrorBoundary>
+                    }
+                  />
+                  <Route
+                    path="/benchmark/configure"
+                    element={
+                      <ErrorBoundary level="page">
+                        <BenchmarkConfigurePage />
+                      </ErrorBoundary>
+                    }
+                  />
+                  <Route
+                    path="/benchmark/run/:id"
+                    element={
+                      <ErrorBoundary level="page">
+                        <BenchmarkRunPage />
+                      </ErrorBoundary>
+                    }
+                  />
+                  <Route
+                    path="/benchmark/results/:id"
+                    element={
+                      <ErrorBoundary level="page">
+                        <BenchmarkResultsPage />
+                      </ErrorBoundary>
+                    }
+                  />
+                  <Route
+                    path="/benchmark/history"
+                    element={
+                      <ErrorBoundary level="page">
+                        <BenchmarkHistoryPage />
+                      </ErrorBoundary>
+                    }
+                  />
 
-                  {/* Demo routes */}
+                  {/* Demo routes with isolated error boundary */}
                   <Route path="/demo" element={<Navigate to="/demo/search" replace />} />
-                  <Route path="/demo/search" element={<DemoSearchPage />} />
-                  <Route path="/demo/video/:id" element={<VideoDetailPage />} />
+                  <Route
+                    path="/demo/search"
+                    element={
+                      <ErrorBoundary level="page">
+                        <DemoSearchPage />
+                      </ErrorBoundary>
+                    }
+                  />
+                  <Route
+                    path="/demo/video/:id"
+                    element={
+                      <ErrorBoundary level="page">
+                        <VideoDetailPage />
+                      </ErrorBoundary>
+                    }
+                  />
 
-                  {/* Infrastructure page */}
-                  <Route path="/infrastructure" element={<InfrastructurePage />} />
+                  {/* Infrastructure page with isolated error boundary */}
+                  <Route
+                    path="/infrastructure"
+                    element={
+                      <ErrorBoundary level="page">
+                        <InfrastructurePage />
+                      </ErrorBoundary>
+                    }
+                  />
 
-                  {/* Settings placeholder */}
-                  <Route path="/settings" element={<SettingsPage />} />
+                  {/* Settings placeholder with isolated error boundary */}
+                  <Route
+                    path="/settings"
+                    element={
+                      <ErrorBoundary level="page">
+                        <SettingsPage />
+                      </ErrorBoundary>
+                    }
+                  />
                 </Route>
 
                   {/* 404 page (no layout) */}
