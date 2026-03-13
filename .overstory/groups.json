@@ -155,5 +155,19 @@
 		"status": "active",
 		"createdAt": "2026-03-13T06:19:24.743Z",
 		"completedAt": null
+	},
+	{
+		"id": "group-d764e707",
+		"name": "deep-review-wave",
+		"memberIssueIds": [
+			"S3Vector-2f28",
+			"S3Vector-bb15",
+			"S3Vector-6825",
+			"S3Vector-5a1a",
+			"S3Vector-801a"
+		],
+		"status": "active",
+		"createdAt": "2026-03-13T16:26:17.530Z",
+		"completedAt": null
 	}
 ]
