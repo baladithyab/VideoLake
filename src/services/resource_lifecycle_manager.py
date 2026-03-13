@@ -559,7 +559,7 @@ class ResourceLifecycleManager:
         poll_interval = 5  # seconds
 
         while time.time() - start_time < timeout:
-            status = self.get_resource_status(resource_type, resource_id)
+            status = await asyncio.to_thread(self.get_resource_status, resource_type, resource_id)
 
             # Check if terminal state reached
             if status.state in [ResourceState.ACTIVE, ResourceState.AVAILABLE,
@@ -574,7 +574,7 @@ class ResourceLifecycleManager:
             await asyncio.sleep(poll_interval)
 
         # Timeout reached
-        status = self.get_resource_status(resource_type, resource_id)
+        status = await asyncio.to_thread(self.get_resource_status, resource_type, resource_id)
         if status.state not in [ResourceState.ACTIVE, ResourceState.AVAILABLE, ResourceState.DELETED]:
             status.error_message = f"Operation timed out after {timeout} seconds"
 

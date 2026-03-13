@@ -150,7 +150,8 @@ class BenchmarkService:
              # For now, we'll assume they are set or we might fail if not set.
              logger.warning("ECS_SUBNETS not set. ECS run_task might fail if using awsvpc network mode.")
 
-        response = self.ecs_client.run_task(
+        response = await asyncio.to_thread(
+            self.ecs_client.run_task,
             cluster=self.ecs_cluster,
             taskDefinition=self.ecs_task_definition,
             launchType='FARGATE',

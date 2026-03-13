@@ -421,7 +421,7 @@ class TwelveLabsVideoProcessingService:
 
         while time.time() - start_time < timeout_sec:
             attempts += 1
-            job_info = self.get_job_status(job_id)
+            job_info = await asyncio.to_thread(self.get_job_status, job_id)
 
             if job_info.status == 'Completed':
                 logger.info(f"Job {job_id} completed after {attempts} attempts ({time.time() - start_time:.1f}s)")
