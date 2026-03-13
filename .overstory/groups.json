@@ -182,5 +182,18 @@
 		"status": "active",
 		"createdAt": "2026-03-13T17:06:32.686Z",
 		"completedAt": null
+	},
+	{
+		"id": "group-90cd15a9",
+		"name": "wave-a",
+		"memberIssueIds": [
+			"S3Vector-d1ac",
+			"S3Vector-ca4b",
+			"S3Vector-c71a",
+			"S3Vector-6d62"
+		],
+		"status": "active",
+		"createdAt": "2026-03-13T18:11:18.975Z",
+		"completedAt": null
 	}
 ]
