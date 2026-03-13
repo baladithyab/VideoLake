@@ -108,6 +108,16 @@ class SageMakerEmbeddingProvider(EmbeddingProvider):
             cost_per_1k_tokens=0.0,  # Free model license
             description="E5-large-v2 - Semantic search (ml.g5.xlarge, JumpStart)"
         ),
+        "e5-mistral-7b-instruct": EmbeddingModelInfo(
+            model_id="e5-mistral-7b-instruct",
+            provider="sagemaker",
+            supported_modalities=[ModalityType.TEXT],
+            dimensions=4096,
+            max_input_tokens=32768,
+            supports_batch=False,
+            cost_per_1k_tokens=0.0,  # Free model license
+            description="E5 Mistral 7B Instruct - LLM-based embeddings with 32K context (ml.g5.2xlarge, JumpStart)"
+        ),
         "all-mpnet-base-v2": EmbeddingModelInfo(
             model_id="all-mpnet-base-v2",
             provider="sagemaker",
