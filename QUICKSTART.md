@@ -1,6 +1,6 @@
-# Videolake Quick Start Guide
+# S3Vector Quick Start Guide
 
-Get started with the Videolake AWS Vector Store Comparison Platform in under 15 minutes.
+Get started with the S3Vector AWS Vector Store Comparison Platform in under 15 minutes.
 
 ## Prerequisites
 

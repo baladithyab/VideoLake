@@ -1,12 +1,10 @@
-# Videolake: AWS Vector Store Comparison Platform
+# S3Vector: AWS Vector Store Comparison Platform
 
 > **Hands-on platform for evaluating and comparing AWS vector storage solutions with real multimodal data**
 
 An interactive demonstration platform that helps you evaluate and choose between AWS vector storage options (S3Vector, OpenSearch Serverless, Qdrant, LanceDB) using real video processing and semantic search workloads.
 
-> **Note:** This project was previously known as S3Vector. The rebrand to Videolake better reflects its purpose as a comprehensive comparison platform for multiple AWS vector storage backends, not just a single backend implementation.
-
-![Videolake Architecture](https://img.shields.io/badge/AWS-S3%20Vectors-orange) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Tests](https://img.shields.io/badge/tests-134%2B-brightgreen) ![Cost Savings](https://img.shields.io/badge/savings-90%25%2B-gold)
+![S3Vector Architecture](https://img.shields.io/badge/AWS-S3%20Vectors-orange) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Tests](https://img.shields.io/badge/tests-134%2B-brightgreen) ![Cost Savings](https://img.shields.io/badge/savings-90%25%2B-gold)
 
 ## 🎯 What This Platform Does
 
@@ -397,7 +395,7 @@ python -m pytest tests/integration_test_end_to_end_text_processing.py -v  # End-
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    Videolake: AWS Vector Store Comparison                    │
+│                    S3Vector: AWS Vector Store Comparison                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────────┐    │
@@ -461,7 +459,7 @@ python -m pytest tests/integration_test_end_to_end_text_processing.py -v  # End-
 
 ## 🎯 Final Benchmark Results
 
-Videolake has completed comprehensive benchmarking across all three target backends with 100 queries each:
+S3Vector has completed comprehensive benchmarking across all three target backends with 100 queries each:
 
 | Backend | Throughput | P50 Latency | P95 Latency | Success Rate | Status |
 |---------|------------|-------------|-------------|--------------|--------|
