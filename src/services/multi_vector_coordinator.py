@@ -957,6 +957,111 @@ class MultiVectorCoordinator:
         
         return stats
 
+    # ==================== Async Wrapper Methods ====================
+    # These methods wrap blocking I/O operations with asyncio.to_thread()
+    # to prevent blocking the event loop when called from async contexts.
+
+    async def async_process_video_urls(
+        self,
+        video_urls: List[str],
+        target_indexes: Optional[Dict[str, str]] = None,
+        progress_callback: Optional[Callable[[int, int, Dict[str, Any]], None]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Async wrapper for process_video_urls.
+        Wraps blocking I/O with asyncio.to_thread().
+
+        Args:
+            video_urls: List of HTTP/HTTPS video URLs to process
+            target_indexes: Mapping of vector types to S3Vector index ARNs
+            progress_callback: Optional progress callback (current, total, result)
+
+        Returns:
+            List of processing results
+        """
+        return await asyncio.to_thread(
+            self.process_video_urls,
+            video_urls,
+            target_indexes,
+            progress_callback
+        )
+
+    async def async_process_sample_videos(
+        self,
+        sample_videos: List[Dict[str, Any]],
+        target_indexes: Optional[Dict[str, str]] = None,
+        progress_callback: Optional[Callable[[int, int, Dict[str, Any]], None]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Async wrapper for process_sample_videos.
+        Wraps blocking I/O with asyncio.to_thread().
+
+        Args:
+            sample_videos: List of sample video dictionaries with 'sources' field
+            target_indexes: Mapping of vector types to S3Vector index ARNs
+            progress_callback: Optional progress callback
+
+        Returns:
+            List of processing results
+        """
+        return await asyncio.to_thread(
+            self.process_sample_videos,
+            sample_videos,
+            target_indexes,
+            progress_callback
+        )
+
+    async def async_process_multi_vector_content(
+        self,
+        content_inputs: List[Dict[str, Any]],
+        vector_types: Optional[List[str]] = None
+    ) -> MultiVectorResult:
+        """
+        Async wrapper for process_multi_vector_content.
+        Wraps blocking I/O with asyncio.to_thread().
+
+        Args:
+            content_inputs: List of content input configurations
+            vector_types: Vector types to generate (defaults to config)
+
+        Returns:
+            MultiVectorResult with embeddings by vector type
+        """
+        return await asyncio.to_thread(
+            self.process_multi_vector_content,
+            content_inputs,
+            vector_types
+        )
+
+    async def async_search_multi_vector(
+        self,
+        search_request: SearchRequest
+    ) -> Dict[str, Any]:
+        """
+        Async wrapper for search_multi_vector.
+        Wraps blocking I/O with asyncio.to_thread().
+
+        Args:
+            search_request: Unified search request configuration
+
+        Returns:
+            Dictionary with search results and metadata
+        """
+        return await asyncio.to_thread(
+            self.search_multi_vector,
+            search_request
+        )
+
+    async def async_get_coordination_stats(self) -> Dict[str, Any]:
+        """
+        Async wrapper for get_coordination_stats.
+        Wraps blocking I/O with asyncio.to_thread().
+
+        Returns:
+            Dictionary with comprehensive coordination statistics
+        """
+        return await asyncio.to_thread(self.get_coordination_stats)
+
     def shutdown(self) -> None:
         """Shutdown the coordinator and cleanup resources."""
         logger.info("Shutting down MultiVectorCoordinator")
