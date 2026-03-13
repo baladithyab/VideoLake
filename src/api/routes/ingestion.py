@@ -86,7 +86,9 @@ async def get_upload_url(request: UploadUrlRequest):
         # We need to use the underlying client for PUT (upload)
         
         try:
-            url = s3_service.s3.generate_presigned_url(
+            import asyncio
+            url = await asyncio.to_thread(
+                s3_service.s3.generate_presigned_url,
                 ClientMethod='put_object',
                 Params={
                     'Bucket': bucket_name,

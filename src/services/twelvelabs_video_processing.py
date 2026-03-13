@@ -400,38 +400,38 @@ class TwelveLabsVideoProcessingService:
             logger.error(f"Error checking job status: {error_msg}")
             raise VectorEmbeddingError(f"Failed to check job status: {error_msg}")
 
-    def wait_for_completion(self, job_id: str, timeout_sec: int = None) -> AsyncJobInfo:
+    async def wait_for_completion(self, job_id: str, timeout_sec: int = None) -> AsyncJobInfo:
         """Wait for async job to complete with polling.
-        
+
         Args:
             job_id: Job ID to wait for
             timeout_sec: Maximum wait time in seconds
-            
+
         Returns:
             Completed AsyncJobInfo
-            
+
         Raises:
             VectorEmbeddingError: If job fails or times out
         """
         timeout_sec = timeout_sec or (self.config.max_poll_attempts * self.config.poll_interval_sec)
         start_time = time.time()
         attempts = 0
-        
+
         logger.info(f"Waiting for job {job_id} to complete (timeout: {timeout_sec}s)")
-        
+
         while time.time() - start_time < timeout_sec:
             attempts += 1
             job_info = self.get_job_status(job_id)
-            
+
             if job_info.status == 'Completed':
                 logger.info(f"Job {job_id} completed after {attempts} attempts ({time.time() - start_time:.1f}s)")
                 return job_info
             elif job_info.status == 'Failed':
                 raise VectorEmbeddingError(f"Job {job_id} failed: {job_info.error_message}")
-            
+
             logger.debug(f"Job {job_id} still in progress (attempt {attempts})")
-            time.sleep(self.config.poll_interval_sec)
-        
+            await asyncio.sleep(self.config.poll_interval_sec)
+
         raise VectorEmbeddingError(f"Job {job_id} timed out after {timeout_sec} seconds")
 
     def retrieve_results(self, job_id: str) -> VideoEmbeddingResult:

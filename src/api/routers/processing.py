@@ -97,7 +97,7 @@ class StoreEmbeddingsRequest(BaseModel):
 processing_jobs: Dict[str, ProcessingJobStatus] = {}
 
 
-def download_video_to_s3(http_url: str, video_id: str) -> str:
+async def download_video_to_s3(http_url: str, video_id: str) -> str:
     """
     Download video from HTTP URL and upload to S3 media bucket.
 
@@ -128,8 +128,12 @@ def download_video_to_s3(http_url: str, video_id: str) -> str:
             media_bucket = media_buckets[0]["name"]
 
         # Download video from HTTP URL
+        import asyncio
+
         logger.info(f"Downloading video from {http_url}")
-        response = requests.get(http_url, stream=True, timeout=300)
+        response = await asyncio.to_thread(
+            requests.get, http_url, stream=True, timeout=300
+        )
         response.raise_for_status()
 
         # Get file extension from URL
@@ -142,8 +146,9 @@ def download_video_to_s3(http_url: str, video_id: str) -> str:
         s3_client = boto3.client('s3')
         logger.info(f"Uploading video to s3://{media_bucket}/{s3_key}")
 
-        # Upload in chunks
-        s3_client.upload_fileobj(
+        # Upload in chunks (wrap blocking boto3 call)
+        await asyncio.to_thread(
+            s3_client.upload_fileobj,
             response.raw,
             media_bucket,
             s3_key,
@@ -179,7 +184,9 @@ async def upload_video(file: UploadFile = File(...)):
             bucket_name = os.getenv('S3_VECTORS_BUCKET')
             s3_key = f"uploads/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
 
-            s3_client.upload_file(tmp_path, bucket_name, s3_key)
+            await asyncio.to_thread(
+                s3_client.upload_file, tmp_path, bucket_name, s3_key
+            )
             s3_uri = f"s3://{bucket_name}/{s3_key}"
 
         # Cleanup temp file
@@ -218,7 +225,7 @@ async def process_video(
             with tracker.time_operation("download_video_to_s3"):
                 logger.info(f"Detected HTTP URL, downloading to S3: {video_uri}")
                 video_id = str(uuid.uuid4())
-                video_uri = download_video_to_s3(video_uri, video_id)
+                video_uri = await download_video_to_s3(video_uri, video_id)
                 logger.info(f"Downloaded to S3: {video_uri}")
 
         # Start async processing
@@ -334,7 +341,7 @@ async def monitor_processing_job(job_id: str, service: TwelveLabsVideoProcessing
     """Background task to monitor processing job."""
     try:
         # Poll for job completion (use correct method name)
-        result = service.wait_for_completion(job_id, timeout_sec=3600)
+        result = await service.wait_for_completion(job_id, timeout_sec=3600)
 
         # Update job status
         if job_id in processing_jobs:
@@ -508,7 +515,7 @@ async def process_sample_video(
         # Download video to S3
         logger.info(f"Downloading sample video '{video['title']}' to S3")
         http_url = video["sources"][0]
-        s3_uri = download_video_to_s3(http_url, video_id)
+        s3_uri = await download_video_to_s3(http_url, video_id)
 
         # Start async processing with S3 URI
         job_info = twelvelabs_service.start_video_processing(
