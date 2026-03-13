@@ -99,7 +99,7 @@ locals {
     var.data_bucket_name, # Backward compatibility
     "${var.project_name}-shared-media"
   )
-  
+
   common_tags = {
     Project     = var.project_name
     Environment = var.environment
@@ -240,9 +240,9 @@ module "qdrant" {
   aws_region      = var.aws_region
   deployment_name = var.qdrant_deployment_name
   # Scale Qdrant to 4 vCPU / 8 GB to improve QPS for benchmark workloads.
-  task_cpu        = 4096 # 4 vCPU
-  task_memory_mb  = 8192 # 8 GB
-  qdrant_version  = var.qdrant_version
+  task_cpu       = 4096 # 4 vCPU
+  task_memory_mb = 8192 # 8 GB
+  qdrant_version = var.qdrant_version
 
   tags = {
     VectorStore = "Qdrant"
@@ -264,10 +264,10 @@ module "qdrant_ebs" {
   count  = var.deploy_qdrant_ebs ? 1 : 0
   source = "./modules/qdrant"
 
-  aws_region        = var.aws_region
-  deployment_name   = "${var.qdrant_deployment_name}-ebs"
-  availability_zone = data.aws_availability_zones.available.names[0]
-  instance_type     = var.qdrant_instance_type
+  aws_region         = var.aws_region
+  deployment_name    = "${var.qdrant_deployment_name}-ebs"
+  availability_zone  = data.aws_availability_zones.available.names[0]
+  instance_type      = var.qdrant_instance_type
   ebs_volume_size_gb = var.qdrant_storage_gb
   qdrant_version     = var.qdrant_version
 
@@ -305,8 +305,8 @@ module "lancedb_s3" {
   deployment_name = "${var.lancedb_deployment_name}-s3"
   backend_type    = "s3"
   # Scale LanceDB S3 backend to 4 vCPU / 16 GB when enabled.
-  task_cpu        = 4096
-  task_memory_mb  = 16384
+  task_cpu       = 4096
+  task_memory_mb = 16384
 
   tags = {
     VectorStore = "LanceDB"
@@ -324,8 +324,8 @@ module "lancedb_efs" {
   deployment_name = "${var.lancedb_deployment_name}-efs"
   backend_type    = "efs"
   # Scale LanceDB EFS backend (currently used) to 4 vCPU / 16 GB.
-  task_cpu        = 4096
-  task_memory_mb  = 16384
+  task_cpu       = 4096
+  task_memory_mb = 16384
 
   tags = {
     VectorStore = "LanceDB"
@@ -339,10 +339,10 @@ module "lancedb_ebs" {
   count  = var.deploy_lancedb_ebs ? 1 : 0
   source = "./modules/lancedb_ec2"
 
-  aws_region        = var.aws_region
-  deployment_name   = "${var.lancedb_deployment_name}-ebs"
-  availability_zone = data.aws_availability_zones.available.names[0]
-  instance_type     = var.lancedb_instance_type
+  aws_region         = var.aws_region
+  deployment_name    = "${var.lancedb_deployment_name}-ebs"
+  availability_zone  = data.aws_availability_zones.available.names[0]
+  instance_type      = var.lancedb_instance_type
   ebs_volume_size_gb = var.lancedb_storage_gb
 
   tags = {
@@ -362,7 +362,7 @@ module "videolake_backend" {
   project_name   = var.project_name
   environment    = var.environment
   s3_bucket_name = module.shared_bucket.bucket_name
-  
+
   # Use EFS if available (from LanceDB EFS module)
   efs_id         = var.deploy_lancedb_efs ? module.lancedb_efs[0].efs_id : ""
   efs_mount_path = "/mnt/videolake_efs"
@@ -391,11 +391,11 @@ module "videolake_frontend" {
 
 # Benchmark Runner ECS (OPTIONAL)
 module "benchmark_runner" {
-  count  = var.deploy_benchmark_runner ? 1 : 0
+  count  = var.deploy_benchmark_runner && var.deploy_s3vector ? 1 : 0
   source = "./modules/benchmark_runner_ecs"
 
-  aws_region         = var.aws_region
-  deployment_name    = "videolake-benchmark-runner"
+  aws_region          = var.aws_region
+  deployment_name     = "videolake-benchmark-runner"
   results_bucket_name = local.shared_bucket_name
   vector_bucket_name  = module.s3vector[0].vector_bucket_name
 
@@ -412,7 +412,7 @@ module "lancedb_benchmark_ec2" {
   deployment_name   = "lancedb-benchmark-runner"
   availability_zone = data.aws_availability_zones.available.names[0]
   instance_type     = "t3.xlarge"
-  
+
   tags = {
     Component = "BenchmarkRunner"
     Type      = "EC2"
@@ -436,18 +436,18 @@ module "ingestion_pipeline" {
   source = "./modules/ingestion_pipeline"
   count  = var.deploy_ingestion_pipeline ? 1 : 0
 
-  project_name           = var.project_name
-  environment            = var.environment
-  
+  project_name = var.project_name
+  environment  = var.environment
+
   # ECS Configuration
-  ecs_cluster_arn              = module.videolake_backend.ecs_cluster_arn
+  ecs_cluster_arn               = module.videolake_backend.ecs_cluster_arn
   ingestion_task_definition_arn = module.videolake_backend.task_definition_arn
   subnet_ids                    = module.videolake_backend.subnet_ids
   security_group_id             = module.videolake_backend.security_group_id
-  
+
   # S3 Configuration
-  embeddings_bucket_name   = var.embeddings_bucket_name != "" ? var.embeddings_bucket_name : "${var.project_name}-embeddings-${random_string.suffix.result}"
-  
+  embeddings_bucket_name = var.embeddings_bucket_name != "" ? var.embeddings_bucket_name : "${var.project_name}-embeddings-${random_string.suffix.result}"
+
   # Notification Configuration
   notification_email = var.notification_email
 }
@@ -467,16 +467,16 @@ module "bedrock_native" {
   count  = var.deploy_bedrock_native ? 1 : 0
   source = "./modules/embedding_provider_bedrock_native"
 
-  deployment_name              = var.project_name
-  aws_region                   = var.aws_region
-  bedrock_text_model           = var.bedrock_text_model
-  bedrock_image_model          = var.bedrock_image_model
-  bedrock_multimodal_model     = var.bedrock_multimodal_model
-  enable_logging               = var.environment == "prod"
-  enable_monitoring            = var.environment == "prod"
+  deployment_name          = var.project_name
+  aws_region               = var.aws_region
+  bedrock_text_model       = var.bedrock_text_model
+  bedrock_image_model      = var.bedrock_image_model
+  bedrock_multimodal_model = var.bedrock_multimodal_model
+  enable_logging           = var.environment == "prod"
+  enable_monitoring        = var.environment == "prod"
 
   tags = {
-    Provider = "Bedrock-Native"
+    Provider  = "Bedrock-Native"
     Component = "Embedding-Provider"
   }
 }
@@ -486,15 +486,15 @@ module "marketplace_provider" {
   count  = var.deploy_marketplace_provider ? 1 : 0
   source = "./modules/embedding_provider_marketplace"
 
-  deployment_name           = "${var.project_name}-marketplace"
+  deployment_name               = "${var.project_name}-marketplace"
   marketplace_model_package_arn = var.marketplace_model_package_arn
-  instance_type             = var.marketplace_instance_type
-  min_instances             = 1
-  max_instances             = 3
-  enable_monitoring         = true
+  instance_type                 = var.marketplace_instance_type
+  min_instances                 = 1
+  max_instances                 = 3
+  enable_monitoring             = true
 
   tags = {
-    Provider = "AWS-Marketplace"
+    Provider  = "AWS-Marketplace"
     Component = "Embedding-Provider"
   }
 }
@@ -504,17 +504,17 @@ module "sagemaker_custom" {
   count  = var.deploy_sagemaker_custom ? 1 : 0
   source = "./modules/embedding_provider_sagemaker"
 
-  deployment_name      = "${var.project_name}-sagemaker"
-  container_image_uri  = var.sagemaker_container_image_uri
-  model_artifact_key   = var.sagemaker_model_artifact_key
-  model_name           = var.sagemaker_model_name
-  embedding_dimension  = var.sagemaker_embedding_dimension
-  instance_type        = "ml.m5.xlarge"
-  initial_instances    = 1
-  enable_monitoring    = true
+  deployment_name     = "${var.project_name}-sagemaker"
+  container_image_uri = var.sagemaker_container_image_uri
+  model_artifact_key  = var.sagemaker_model_artifact_key
+  model_name          = var.sagemaker_model_name
+  embedding_dimension = var.sagemaker_embedding_dimension
+  instance_type       = "ml.m5.xlarge"
+  initial_instances   = 1
+  enable_monitoring   = true
 
   tags = {
-    Provider = "SageMaker-Custom"
+    Provider  = "SageMaker-Custom"
     Component = "Embedding-Provider"
   }
 }
@@ -549,7 +549,7 @@ module "pgvector" {
 
   tags = {
     VectorStore = "pgvector"
-    Component = "Database"
+    Component   = "Database"
   }
 }
 
@@ -602,12 +602,12 @@ module "cost_estimator" {
   count  = var.deploy_cost_estimator ? 1 : 0
   source = "./modules/cost_estimator"
 
-  project_name                  = var.project_name
-  enable_api_gateway            = var.cost_estimator_enable_api_gateway
-  enable_cors                   = var.cost_estimator_enable_cors
-  api_stage_name                = var.environment
-  enable_api_key_auth           = var.environment == "prod"
-  log_retention_days            = var.environment == "prod" ? 30 : 7
+  project_name        = var.project_name
+  enable_api_gateway  = var.cost_estimator_enable_api_gateway
+  enable_cors         = var.cost_estimator_enable_cors
+  api_stage_name      = var.environment
+  enable_api_key_auth = var.environment == "prod"
+  log_retention_days  = var.environment == "prod" ? 30 : 7
 
   tags = {
     Component = "Cost-Estimator"

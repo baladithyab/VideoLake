@@ -46,6 +46,18 @@ resource "aws_s3_bucket_versioning" "datasets" {
   }
 }
 
+# Enable server-side encryption
+resource "aws_s3_bucket_server_side_encryption_configuration" "datasets" {
+  bucket = aws_s3_bucket.sample_datasets.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+    bucket_key_enabled = true
+  }
+}
+
 # Block public access
 resource "aws_s3_bucket_public_access_block" "datasets" {
   bucket = aws_s3_bucket.sample_datasets.id
@@ -158,17 +170,17 @@ resource "aws_lambda_function" "populate_datasets" {
   handler          = "populate_datasets.handler"
   source_code_hash = data.archive_file.populate_datasets.output_base64sha256
   runtime          = "python3.11"
-  timeout          = 900    # 15 minutes for large downloads
-  memory_size      = 1024   # 1 GB for processing large files
+  timeout          = 900  # 15 minutes for large downloads
+  memory_size      = 1024 # 1 GB for processing large files
 
   environment {
     variables = {
-      DATASETS_BUCKET     = aws_s3_bucket.sample_datasets.bucket
-      TEXT_DATASET_SIZE   = var.text_dataset_size
-      IMAGE_DATASET_SIZE  = var.image_dataset_size
-      AUDIO_DATASET_SIZE  = var.audio_dataset_size
-      VIDEO_DATASET_SIZE  = var.video_dataset_size
-      ENABLE_TEXT_DATASET = var.enable_text_dataset ? "true" : "false"
+      DATASETS_BUCKET      = aws_s3_bucket.sample_datasets.bucket
+      TEXT_DATASET_SIZE    = var.text_dataset_size
+      IMAGE_DATASET_SIZE   = var.image_dataset_size
+      AUDIO_DATASET_SIZE   = var.audio_dataset_size
+      VIDEO_DATASET_SIZE   = var.video_dataset_size
+      ENABLE_TEXT_DATASET  = var.enable_text_dataset ? "true" : "false"
       ENABLE_IMAGE_DATASET = var.enable_image_dataset ? "true" : "false"
       ENABLE_AUDIO_DATASET = var.enable_audio_dataset ? "true" : "false"
       ENABLE_VIDEO_DATASET = var.enable_video_dataset ? "true" : "false"
@@ -209,7 +221,7 @@ resource "null_resource" "trigger_populate" {
   }
 
   triggers = {
-    bucket_id = aws_s3_bucket.sample_datasets.id
+    bucket_id   = aws_s3_bucket.sample_datasets.id
     lambda_hash = data.archive_file.populate_datasets.output_base64sha256
   }
 }
