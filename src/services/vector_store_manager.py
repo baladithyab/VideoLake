@@ -13,6 +13,7 @@ from src.services.vector_store_provider import (
     VectorStoreType,
     VectorStoreConfig,
     VectorStoreStatus,
+    VectorStoreState,
     VectorStoreProviderFactory
 )
 from src.utils.logging_config import get_logger
@@ -124,7 +125,7 @@ class VectorStoreManager:
             return VectorStoreStatus(
                 store_type=config.store_type,
                 name=config.name,
-                state="FAILED",
+                state=VectorStoreState.FAILED,
                 error_message=str(e),
                 progress_percentage=0
             )
@@ -156,7 +157,7 @@ class VectorStoreManager:
             return VectorStoreStatus(
                 store_type=store_type,
                 name=name,
-                state="FAILED",
+                state=VectorStoreState.FAILED,
                 error_message=str(e),
                 progress_percentage=0
             )
@@ -181,7 +182,7 @@ class VectorStoreManager:
             return VectorStoreStatus(
                 store_type=store_type,
                 name=name,
-                state="FAILED",
+                state=VectorStoreState.FAILED,
                 error_message=str(e),
                 progress_percentage=0
             )
@@ -246,7 +247,7 @@ class VectorStoreManager:
             return VectorStoreStatus(
                 store_type=store_type,
                 name=name,
-                state="FAILED",
+                state=VectorStoreState.FAILED,
                 error_message=str(e),
                 progress_percentage=0
             )

@@ -197,7 +197,56 @@ class AWSClientFactory:
                 )
         
         return self._clients['s3']
-    
+
+    def get_stepfunctions_client(self) -> Any:
+        """Get Step Functions client for workflow orchestration."""
+        if 'stepfunctions' not in self._clients:
+            try:
+                session = self._get_session()
+                config = self._get_client_config()
+
+                self._clients['stepfunctions'] = session.client(
+                    'stepfunctions',
+                    config=config
+                )
+
+                logger.info("Step Functions client created successfully")
+
+            except Exception as e:
+                raise ConfigurationError(
+                    f"Failed to create Step Functions client: {str(e)}. Please ensure AWS credentials and region are properly configured.",
+                    error_code="STEPFUNCTIONS_CLIENT_ERROR",
+                    error_details={"original_error": str(e)}
+                )
+
+        return self._clients['stepfunctions']
+
+    def get_sagemaker_runtime_client(self, region_name: str = None) -> Any:
+        """Get SageMaker Runtime client for model endpoint invocations."""
+        client_key = f'sagemaker-runtime-{region_name}' if region_name else 'sagemaker-runtime'
+
+        if client_key not in self._clients:
+            try:
+                session = self._get_session()
+                config = self._get_client_config()
+
+                self._clients[client_key] = session.client(
+                    'sagemaker-runtime',
+                    region_name=region_name,
+                    config=config
+                )
+
+                logger.info(f"SageMaker Runtime client created successfully (region: {region_name or 'default'})")
+
+            except Exception as e:
+                raise ConfigurationError(
+                    f"Failed to create SageMaker Runtime client: {str(e)}. Please ensure AWS credentials and region are properly configured.",
+                    error_code="SAGEMAKER_RUNTIME_CLIENT_ERROR",
+                    error_details={"original_error": str(e)}
+                )
+
+        return self._clients[client_key]
+
     def validate_clients(self) -> Dict[str, bool]:
         """Validate that all clients can be created successfully."""
         validation_results = {}

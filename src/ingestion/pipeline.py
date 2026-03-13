@@ -12,9 +12,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-import boto3
-
 from src.config.unified_config_manager import get_config
+from src.utils.aws_clients import aws_client_factory
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -31,7 +30,7 @@ class VideoIngestionPipeline:
 
     def __init__(self):
         """Initialize the ingestion pipeline."""
-        self.sfn_client = boto3.client('stepfunctions')
+        self.sfn_client = aws_client_factory.get_stepfunctions_client()
         self.config = get_config()
         # In a real deployment, this ARN would come from config or environment variables
         # populated by Terraform outputs.

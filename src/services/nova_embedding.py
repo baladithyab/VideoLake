@@ -15,6 +15,7 @@ AWS Documentation:
 https://docs.aws.amazon.com/nova/latest/userguide/nova-embeddings.html
 """
 
+import asyncio
 import json
 import time
 import logging
@@ -157,7 +158,7 @@ class NovaEmbeddingService:
             f"unified_space=True"
         )
 
-    def generate_video_embedding(
+    async def generate_video_embedding(
         self,
         video_uri: str,
         embedding_mode: VideoEmbeddingMode = "AUDIO_VIDEO_COMBINED",
@@ -235,7 +236,7 @@ class NovaEmbeddingService:
                     request_body["singleEmbeddingParams"]["video"]["timeRange"]["endSeconds"] = end_time_sec
 
             try:
-                # Call Bedrock with retry logic
+                # Call Bedrock with retry logic (wrapped for async)
                 def _invoke_nova():
                     return self.bedrock_client.invoke_model(
                         modelId=self.model_id,
@@ -244,7 +245,8 @@ class NovaEmbeddingService:
                         body=json.dumps(request_body)
                     )
 
-                response = AWSRetryHandler.retry_with_backoff(
+                response = await asyncio.to_thread(
+                    AWSRetryHandler.retry_with_backoff,
                     _invoke_nova,
                     max_retries=3,
                     operation_name=f"nova_video_embedding_{self.model_id}"
@@ -283,13 +285,13 @@ class NovaEmbeddingService:
                     "Segmented embeddings require use_async=True"
                 )
 
-            return self._generate_video_embedding_async(
+            return await self._generate_video_embedding_async(
                 video_uri=video_uri,
                 embedding_mode=embedding_mode,
                 segment_duration_sec=segment_duration_sec
             )
 
-    def generate_text_embedding(
+    async def generate_text_embedding(
         self,
         text: str,
         truncation_mode: TruncationMode = "END"
@@ -334,7 +336,8 @@ class NovaEmbeddingService:
                     body=json.dumps(request_body)
                 )
 
-            response = AWSRetryHandler.retry_with_backoff(
+            response = await asyncio.to_thread(
+                AWSRetryHandler.retry_with_backoff,
                 _invoke_nova,
                 max_retries=3,
                 operation_name=f"nova_text_embedding_{self.model_id}"
@@ -366,7 +369,7 @@ class NovaEmbeddingService:
         except ClientError as e:
             self._handle_bedrock_error(e, "text embedding")
 
-    def generate_image_embedding(
+    async def generate_image_embedding(
         self,
         image_uri: str
     ) -> NovaEmbeddingResult:
@@ -408,7 +411,8 @@ class NovaEmbeddingService:
                     body=json.dumps(request_body)
                 )
 
-            response = AWSRetryHandler.retry_with_backoff(
+            response = await asyncio.to_thread(
+                AWSRetryHandler.retry_with_backoff,
                 _invoke_nova,
                 max_retries=3,
                 operation_name=f"nova_image_embedding_{self.model_id}"
@@ -437,7 +441,7 @@ class NovaEmbeddingService:
         except ClientError as e:
             self._handle_bedrock_error(e, "image embedding")
 
-    def _generate_video_embedding_async(
+    async def _generate_video_embedding_async(
         self,
         video_uri: str,
         embedding_mode: VideoEmbeddingMode,
@@ -512,7 +516,8 @@ class NovaEmbeddingService:
             output_s3_uri = f"s3://{bucket}/nova-embeddings/"
 
             # Submit async job
-            response = self.bedrock_client.start_async_invoke(
+            response = await asyncio.to_thread(
+                self.bedrock_client.start_async_invoke,
                 modelId=self.model_id,
                 modelInput=request_body,
                 outputDataConfig={
@@ -534,7 +539,8 @@ class NovaEmbeddingService:
 
             while time.time() - poll_start < timeout_sec:
                 try:
-                    status_response = self.bedrock_client.get_async_invoke(
+                    status_response = await asyncio.to_thread(
+                        self.bedrock_client.get_async_invoke,
                         invocationArn=invocation_arn
                     )
 
@@ -566,13 +572,13 @@ class NovaEmbeddingService:
                         raise VectorEmbeddingError(f"Async job failed: {error_msg}")
 
                     # Still in progress, wait and retry
-                    time.sleep(poll_interval)
+                    await asyncio.sleep(poll_interval)
 
                 except ClientError as e:
                     if e.response['Error']['Code'] != 'ResourceNotFoundException':
                         raise
                     # Job not found yet, wait and retry
-                    time.sleep(poll_interval)
+                    await asyncio.sleep(poll_interval)
 
             raise VectorEmbeddingError(f"Async job timeout after {timeout_sec}s")
 
@@ -590,10 +596,8 @@ class NovaEmbeddingService:
         Returns:
             List of embedding floats
         """
-        import boto3
-
         try:
-            s3_client = boto3.client('s3')
+            s3_client = aws_client_factory.get_s3_client()
 
             # Parse S3 URI
             s3_parts = s3_output_uri.replace('s3://', '').split('/', 1)
