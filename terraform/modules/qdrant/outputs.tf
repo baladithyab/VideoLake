@@ -71,17 +71,17 @@ output "estimated_monthly_cost_usd" {
 output "deployment_info" {
   description = "Complete deployment information for resource registry"
   value = {
-    deployment_id            = var.deployment_name
-    deployment_type          = "ec2"
-    endpoint                = "http://${aws_instance.qdrant.public_ip}:6333"
-    port                    = 6333
-    grpc_port               = 6334
-    status                  = "running"
-    region                  = var.aws_region
-    instance_id             = aws_instance.qdrant.id
-    instance_arn            = aws_instance.qdrant.arn
-    ebs_volume_id           = aws_ebs_volume.qdrant_data.id
-    security_group_id       = aws_security_group.qdrant.id
-    estimated_cost_monthly  = 138 # t3.xlarge + 100GB gp3 + transfer
+    deployment_id          = var.deployment_name
+    deployment_type        = "ec2"
+    endpoint               = "http://${aws_instance.qdrant.public_ip}:6333"
+    port                   = 6333
+    grpc_port              = 6334
+    status                 = "running"
+    region                 = var.aws_region
+    instance_id            = aws_instance.qdrant.id
+    instance_arn           = aws_instance.qdrant.arn
+    ebs_volume_id          = aws_ebs_volume.qdrant_data.id
+    security_group_id      = aws_security_group.qdrant.id
+    estimated_cost_monthly = 138 # t3.xlarge + 100GB gp3 + transfer
   }
 }

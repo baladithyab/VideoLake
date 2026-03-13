@@ -69,32 +69,32 @@ output "health_check_url" {
 output "deployment_info" {
   description = "Complete deployment information for resource registry"
   value = {
-    deployment_id       = var.domain_name
-    deployment_type     = "managed"
-    backend_type        = "opensearch-s3vector"
-    domain_id           = aws_opensearch_domain.s3vector_backend.domain_id
-    domain_arn          = aws_opensearch_domain.s3vector_backend.arn
-    endpoint            = "https://${aws_opensearch_domain.s3vector_backend.endpoint}"
-    dashboard_endpoint  = "https://${aws_opensearch_domain.s3vector_backend.endpoint}/_dashboards"
-    region              = var.region
-    engine_version      = aws_opensearch_domain.s3vector_backend.engine_version
-    s3vector_enabled    = var.enable_s3vector_engine
-    instance_type       = var.instance_type
-    instance_count      = var.instance_count
-    multi_az            = var.multi_az
-    auth_enabled        = var.enable_fine_grained_access
+    deployment_id      = var.domain_name
+    deployment_type    = "managed"
+    backend_type       = "opensearch-s3vector"
+    domain_id          = aws_opensearch_domain.s3vector_backend.domain_id
+    domain_arn         = aws_opensearch_domain.s3vector_backend.arn
+    endpoint           = "https://${aws_opensearch_domain.s3vector_backend.endpoint}"
+    dashboard_endpoint = "https://${aws_opensearch_domain.s3vector_backend.endpoint}/_dashboards"
+    region             = var.region
+    engine_version     = aws_opensearch_domain.s3vector_backend.engine_version
+    s3vector_enabled   = var.enable_s3vector_engine
+    instance_type      = var.instance_type
+    instance_count     = var.instance_count
+    multi_az           = var.multi_az
+    auth_enabled       = var.enable_fine_grained_access
   }
 }
 
 output "connection_info" {
   description = "Connection information for OpenSearch"
   value = {
-    endpoint            = "https://${aws_opensearch_domain.s3vector_backend.endpoint}"
-    dashboard_url       = "https://${aws_opensearch_domain.s3vector_backend.endpoint}/_dashboards"
-    health_check_url    = "https://${aws_opensearch_domain.s3vector_backend.endpoint}/_cluster/health"
-    requires_auth       = var.enable_fine_grained_access
-    username            = var.enable_fine_grained_access ? var.master_user_name : null
-    note                = var.enable_fine_grained_access ? "Use master user credentials for authentication" : "No authentication required"
+    endpoint         = "https://${aws_opensearch_domain.s3vector_backend.endpoint}"
+    dashboard_url    = "https://${aws_opensearch_domain.s3vector_backend.endpoint}/_dashboards"
+    health_check_url = "https://${aws_opensearch_domain.s3vector_backend.endpoint}/_cluster/health"
+    requires_auth    = var.enable_fine_grained_access
+    username         = var.enable_fine_grained_access ? var.master_user_name : null
+    note             = var.enable_fine_grained_access ? "Use master user credentials for authentication" : "No authentication required"
   }
   sensitive = true
 }

@@ -64,22 +64,10 @@ output "api_key_auth_enabled" {
 
 output "example_curl_command" {
   description = "Example curl command to test the API"
-  value = var.enable_api_gateway ? <<-EOT
-    curl -X POST ${aws_api_gateway_stage.cost_estimator[0].invoke_url}/estimate \
-      -H "Content-Type: application/json" \
-      -d '{
-        "embedding_providers": [
-          {"type": "bedrock", "model": "titan-text-v2", "estimated_requests": 100000}
-        ],
-        "vector_stores": [
-          {"type": "s3vector", "storage_gb": 10, "queries_per_month": 50000}
-        ],
-        "datasets": [
-          {"modality": "text", "size_gb": 0.15}
-        ]
-      }'
-  EOT
-  : "API Gateway not enabled"
+  value = var.enable_api_gateway ? format(
+    "curl -X POST %s/estimate -H 'Content-Type: application/json' -d '{\"embedding_providers\": [{\"type\": \"bedrock\", \"model\": \"titan-text-v2\", \"estimated_requests\": 100000}], \"vector_stores\": [{\"type\": \"s3vector\", \"storage_gb\": 10, \"queries_per_month\": 50000}], \"datasets\": [{\"modality\": \"text\", \"size_gb\": 0.15}]}'",
+    aws_api_gateway_stage.cost_estimator[0].invoke_url
+  ) : "API Gateway not enabled"
 }
 
 output "estimated_monthly_cost" {

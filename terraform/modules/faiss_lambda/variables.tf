@@ -20,7 +20,7 @@ variable "lambda_runtime" {
 variable "lambda_memory_mb" {
   description = "Lambda function memory in MB (128-10240)"
   type        = number
-  default     = 3008  # 3GB - good balance for FAISS index loading
+  default     = 3008 # 3GB - good balance for FAISS index loading
 }
 
 variable "lambda_timeout" {

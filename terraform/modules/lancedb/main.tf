@@ -10,7 +10,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.0"
     }
   }
 }
@@ -84,9 +84,9 @@ data "aws_subnets" "default" {
 
 # EFS Mount Target (in first subnet)
 resource "aws_efs_mount_target" "lancedb" {
-  count           = var.backend_type == "efs" ? 1 : 0
-  file_system_id  = aws_efs_file_system.lancedb[0].id
-  subnet_id       = data.aws_subnets.default[0].ids[0]
+  count          = var.backend_type == "efs" ? 1 : 0
+  file_system_id = aws_efs_file_system.lancedb[0].id
+  subnet_id      = data.aws_subnets.default[0].ids[0]
 }
 
 # EBS Backend for LanceDB

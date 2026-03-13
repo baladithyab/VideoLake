@@ -21,7 +21,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.80"
+      version = "~> 6.0"
     }
   }
 }
@@ -254,8 +254,8 @@ resource "aws_cloudwatch_metric_alarm" "endpoint_latency" {
 
 # SSM Parameter for endpoint configuration (for application use)
 resource "aws_ssm_parameter" "custom_endpoint_config" {
-  name  = "/${var.deployment_name}/sagemaker/endpoint-config"
-  type  = "String"
+  name = "/${var.deployment_name}/sagemaker/endpoint-config"
+  type = "String"
   value = jsonencode({
     endpoint_name       = aws_sagemaker_endpoint.custom_embedding.name
     model_name          = var.model_name

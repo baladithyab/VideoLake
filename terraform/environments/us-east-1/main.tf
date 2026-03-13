@@ -16,11 +16,11 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.80"
+      version = "~> 6.0"
     }
     random = {
       source  = "hashicorp/random"
-      version = "~> 3.6"
+      version = "~> 3.7"
     }
   }
 }
@@ -69,13 +69,13 @@ locals {
 module "production_networking" {
   source = "../../modules/production_networking"
 
-  deployment_name            = local.deployment_name
-  vpc_cidr                   = var.vpc_cidr
-  enable_nat_gateway         = var.enable_nat_gateway
-  single_nat_gateway         = var.single_nat_gateway
-  enable_flow_logs           = var.enable_flow_logs
-  flow_logs_retention_days   = var.flow_logs_retention_days
-  enable_s3_endpoint         = var.enable_s3_endpoint
+  deployment_name          = local.deployment_name
+  vpc_cidr                 = var.vpc_cidr
+  enable_nat_gateway       = var.enable_nat_gateway
+  single_nat_gateway       = var.single_nat_gateway
+  enable_flow_logs         = var.enable_flow_logs
+  flow_logs_retention_days = var.flow_logs_retention_days
+  enable_s3_endpoint       = var.enable_s3_endpoint
 
   tags = local.common_tags
 }
@@ -86,9 +86,9 @@ module "production_networking" {
 module "production_security_groups" {
   source = "../../modules/production_security_groups"
 
-  deployment_name      = local.deployment_name
-  vpc_id               = module.production_networking.vpc_id
-  allowed_cidr_blocks  = var.alb_allowed_cidr_blocks
+  deployment_name     = local.deployment_name
+  vpc_id              = module.production_networking.vpc_id
+  allowed_cidr_blocks = var.alb_allowed_cidr_blocks
 
   tags = local.common_tags
 }
@@ -99,9 +99,9 @@ module "production_security_groups" {
 module "secrets_manager" {
   source = "../../modules/secrets_manager"
 
-  deployment_name            = local.deployment_name
-  recovery_window_in_days    = var.secrets_recovery_window_days
-  create_twelvelabs_secret   = var.create_twelvelabs_secret
+  deployment_name          = local.deployment_name
+  recovery_window_in_days  = var.secrets_recovery_window_days
+  create_twelvelabs_secret = var.create_twelvelabs_secret
 
   tags = local.common_tags
 }
@@ -149,8 +149,8 @@ module "videolake_backend" {
   domain_name         = var.domain_name
 
   # Use cost-optimized instance sizes for production
-  task_cpu    = var.backend_task_cpu
-  task_memory = var.backend_task_memory
+  task_cpu      = var.backend_task_cpu
+  task_memory   = var.backend_task_memory
   desired_count = var.backend_desired_count
 
   tags = merge(
@@ -256,18 +256,18 @@ module "cloudwatch_monitoring" {
   alarm_email     = var.alarm_email
 
   # ALB monitoring
-  alb_arn                       = module.videolake_backend.alb_arn
-  target_group_arn              = module.videolake_backend.target_group_arn
-  alb_response_time_threshold   = var.alarm_alb_response_time_threshold
+  alb_arn                     = module.videolake_backend.alb_arn
+  target_group_arn            = module.videolake_backend.target_group_arn
+  alb_response_time_threshold = var.alarm_alb_response_time_threshold
 
   # ECS monitoring
-  ecs_cluster_name              = module.videolake_backend.ecs_cluster_name
-  ecs_service_name              = module.videolake_backend.ecs_service_name
-  ecs_cpu_threshold             = var.alarm_ecs_cpu_threshold
-  ecs_memory_threshold          = var.alarm_ecs_memory_threshold
+  ecs_cluster_name     = module.videolake_backend.ecs_cluster_name
+  ecs_service_name     = module.videolake_backend.ecs_service_name
+  ecs_cpu_threshold    = var.alarm_ecs_cpu_threshold
+  ecs_memory_threshold = var.alarm_ecs_memory_threshold
 
   # NAT Gateway monitoring
-  nat_gateway_ids               = module.production_networking.nat_gateway_ids
+  nat_gateway_ids = module.production_networking.nat_gateway_ids
 
   tags = local.common_tags
 }
@@ -289,7 +289,7 @@ module "benchmark_runner" {
   tags = merge(
     local.common_tags,
     {
-      Component = "BenchmarkRunner"
+      Component        = "BenchmarkRunner"
       CostOptimization = "Spot"
     }
   )

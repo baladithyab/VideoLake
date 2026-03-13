@@ -19,7 +19,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.80"
+      version = "~> 6.0"
     }
   }
 }
@@ -128,8 +128,8 @@ resource "aws_cloudwatch_metric_alarm" "bedrock_throttling" {
 
 # SSM Parameter Store for model configuration (for application use)
 resource "aws_ssm_parameter" "text_model_config" {
-  name  = "/${var.deployment_name}/bedrock/text-model"
-  type  = "String"
+  name = "/${var.deployment_name}/bedrock/text-model"
+  type = "String"
   value = jsonencode({
     model_id  = var.bedrock_text_model
     dimension = var.text_embedding_dimension

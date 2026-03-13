@@ -82,18 +82,18 @@ output "metrics_port" {
 output "deployment_info" {
   description = "Complete deployment information for resource registry"
   value = {
-    deployment_id       = var.deployment_name
-    deployment_type     = "ecs"
-    backend_type        = "milvus-standalone-efs"
-    cluster_arn         = aws_ecs_cluster.milvus.arn
-    service_name        = aws_ecs_service.milvus.name
-    grpc_port           = 19530
-    metrics_port        = 9091
-    region              = var.aws_region
-    security_group_id   = aws_security_group.milvus.id
-    storage_type        = "efs"
-    efs_id              = aws_efs_file_system.milvus.id
-    discovery_required  = true
-    discovery_command   = "aws ecs list-tasks --cluster ${aws_ecs_cluster.milvus.name} --service-name ${aws_ecs_service.milvus.name} --region ${var.aws_region}"
+    deployment_id      = var.deployment_name
+    deployment_type    = "ecs"
+    backend_type       = "milvus-standalone-efs"
+    cluster_arn        = aws_ecs_cluster.milvus.arn
+    service_name       = aws_ecs_service.milvus.name
+    grpc_port          = 19530
+    metrics_port       = 9091
+    region             = var.aws_region
+    security_group_id  = aws_security_group.milvus.id
+    storage_type       = "efs"
+    efs_id             = aws_efs_file_system.milvus.id
+    discovery_required = true
+    discovery_command  = "aws ecs list-tasks --cluster ${aws_ecs_cluster.milvus.name} --service-name ${aws_ecs_service.milvus.name} --region ${var.aws_region}"
   }
 }

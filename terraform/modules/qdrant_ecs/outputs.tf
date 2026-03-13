@@ -82,18 +82,18 @@ output "grpc_port" {
 output "deployment_info" {
   description = "Complete deployment information for resource registry"
   value = {
-    deployment_id       = var.deployment_name
-    deployment_type     = "ecs"
-    backend_type        = "qdrant-efs"
-    cluster_arn         = aws_ecs_cluster.qdrant.arn
-    service_name        = aws_ecs_service.qdrant.name
-    rest_api_port       = 6333
-    grpc_port           = 6334
-    region              = var.aws_region
-    security_group_id   = aws_security_group.qdrant.id
-    storage_type        = "efs"
-    efs_id              = aws_efs_file_system.qdrant.id
-    discovery_required  = true
-    discovery_command   = "aws ecs list-tasks --cluster ${aws_ecs_cluster.qdrant.name} --service-name ${aws_ecs_service.qdrant.name} --region ${var.aws_region}"
+    deployment_id      = var.deployment_name
+    deployment_type    = "ecs"
+    backend_type       = "qdrant-efs"
+    cluster_arn        = aws_ecs_cluster.qdrant.arn
+    service_name       = aws_ecs_service.qdrant.name
+    rest_api_port      = 6333
+    grpc_port          = 6334
+    region             = var.aws_region
+    security_group_id  = aws_security_group.qdrant.id
+    storage_type       = "efs"
+    efs_id             = aws_efs_file_system.qdrant.id
+    discovery_required = true
+    discovery_command  = "aws ecs list-tasks --cluster ${aws_ecs_cluster.qdrant.name} --service-name ${aws_ecs_service.qdrant.name} --region ${var.aws_region}"
   }
 }
