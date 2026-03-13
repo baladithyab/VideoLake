@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { api } from '@/api/client';
+import { useInfrastructure } from '@/contexts/InfrastructureContext';
+import type { VectorStoreType } from '@/types/infrastructure';
 
 interface DeploymentConfig {
   embeddingModels: string[];
@@ -41,10 +42,13 @@ const STORE_COSTS: Record<string, number> = {
 
 export default function DeploymentReviewPage() {
   const navigate = useNavigate();
+  const { deployMultiple, operationInProgress, error: contextError } = useInfrastructure();
   const [config, setConfig] = useState<DeploymentConfig | null>(null);
   const [confirmed, setConfirmed] = useState(false);
-  const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Use context operation state for deploying
+  const deploying = operationInProgress;
 
   useEffect(() => {
     // Load config from localStorage
@@ -75,17 +79,18 @@ export default function DeploymentReviewPage() {
   const handleDeploy = async () => {
     if (!config) return;
 
-    setDeploying(true);
     setError(null);
 
     try {
-      // Start deployment
-      await api.deployInfrastructure({
-        vector_stores: config.vectorStores.filter(s => s !== 's3vector'), // S3 Vector is always deployed
-        wait_for_completion: false,
-      });
+      // Filter out s3vector as it's always deployed
+      const storesToDeploy = config.vectorStores
+        .filter(s => s !== 's3vector')
+        .map(s => s as VectorStoreType);
 
-      // Store deployment ID for progress tracking
+      // Start deployment using context
+      await deployMultiple(storesToDeploy);
+
+      // Store deployment metadata for progress tracking
       localStorage.setItem('deploymentInProgress', 'true');
       localStorage.setItem('deploymentStartTime', new Date().toISOString());
 
@@ -97,7 +102,6 @@ export default function DeploymentReviewPage() {
         ? (err.response as { data?: { detail?: string } })?.data?.detail
         : undefined;
       setError(errorMessage || 'Failed to start deployment. Please try again.');
-      setDeploying(false);
     }
   };
 
@@ -324,9 +328,11 @@ export default function DeploymentReviewPage() {
         </Card>
 
         {/* Error Display */}
-        {error && (
+        {(error || contextError) && (
           <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>
+              {error || contextError?.message || 'An error occurred'}
+            </AlertDescription>
           </Alert>
         )}
       </div>
