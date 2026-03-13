@@ -71,18 +71,18 @@ output "estimated_monthly_cost_usd" {
 output "deployment_info" {
   description = "Complete deployment information for resource registry"
   value = {
-    deployment_id            = var.deployment_name
-    deployment_type          = "ec2"
-    backend_type            = "lancedb-ebs"
-    endpoint                = "http://${aws_instance.lancedb.public_ip}:8000"
-    port                    = 8000
-    status                  = "running"
-    region                  = var.aws_region
-    instance_id             = aws_instance.lancedb.id
-    instance_arn            = aws_instance.lancedb.arn
-    ebs_volume_id           = aws_ebs_volume.lancedb_data.id
-    ebs_mount_point         = "/mnt/lancedb"
-    security_group_id       = aws_security_group.lancedb.id
-    estimated_cost_monthly  = 138 # t3.xlarge + 100GB gp3 + transfer
+    deployment_id          = var.deployment_name
+    deployment_type        = "ec2"
+    backend_type           = "lancedb-ebs"
+    endpoint               = "http://${aws_instance.lancedb.public_ip}:8000"
+    port                   = 8000
+    status                 = "running"
+    region                 = var.aws_region
+    instance_id            = aws_instance.lancedb.id
+    instance_arn           = aws_instance.lancedb.arn
+    ebs_volume_id          = aws_ebs_volume.lancedb_data.id
+    ebs_mount_point        = "/mnt/lancedb"
+    security_group_id      = aws_security_group.lancedb.id
+    estimated_cost_monthly = 138 # t3.xlarge + 100GB gp3 + transfer
   }
 }

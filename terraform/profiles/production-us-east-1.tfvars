@@ -47,9 +47,9 @@ flow_logs_traffic_type   = "ALL"
 enable_kms_encryption = true
 
 # Create secrets for:
-create_db_credentials = true  # Database credentials
-create_api_keys       = true  # External API keys
-create_app_secrets    = true  # JWT, session keys
+create_db_credentials = true # Database credentials
+create_api_keys       = true # External API keys
+create_app_secrets    = true # JWT, session keys
 
 # -----------------------------------------------------------------------------
 # Monitoring Configuration
@@ -58,10 +58,10 @@ create_app_secrets    = true  # JWT, session keys
 create_cloudwatch_dashboard = true
 
 # Alarm thresholds
-alb_5xx_threshold     = 10  # Alert if >10 5xx errors in 5 minutes
-ecs_cpu_threshold     = 80  # Alert if CPU >80% for 10 minutes
-ecs_memory_threshold  = 80  # Alert if Memory >80% for 10 minutes
-ecs_min_task_count    = 2   # Alert if running tasks < 2
+alb_5xx_threshold    = 10 # Alert if >10 5xx errors in 5 minutes
+ecs_cpu_threshold    = 80 # Alert if CPU >80% for 10 minutes
+ecs_memory_threshold = 80 # Alert if Memory >80% for 10 minutes
+ecs_min_task_count   = 2  # Alert if running tasks < 2
 
 # SNS notification email (REQUIRED - set via environment variable)
 # alarm_email = "ops@example.com"
@@ -70,25 +70,25 @@ ecs_min_task_count    = 2   # Alert if running tasks < 2
 # Vector Store Configuration
 # -----------------------------------------------------------------------------
 # S3Vector (Always enabled - serverless, cost-effective)
-deploy_s3vector     = true
+deploy_s3vector      = true
 s3vector_bucket_name = "s3vector-prod-vectors"
 
 # Optional: Enable additional vector stores for comparison
-deploy_opensearch   = false  # ~$50-100/month
-deploy_qdrant       = false  # ~$30-50/month
-deploy_lancedb_efs  = false  # ~$20-40/month
-deploy_pgvector     = true   # Aurora Serverless v2 for SQL workloads
+deploy_opensearch  = false # ~$50-100/month
+deploy_qdrant      = false # ~$30-50/month
+deploy_lancedb_efs = false # ~$20-40/month
+deploy_pgvector    = true  # Aurora Serverless v2 for SQL workloads
 
 # -----------------------------------------------------------------------------
 # ECS Configuration
 # -----------------------------------------------------------------------------
 # Backend API
-task_cpu    = 1024  # 1 vCPU
-task_memory = 2048  # 2 GB
-desired_count = 2   # HA: 2 tasks across AZs
+task_cpu      = 1024 # 1 vCPU
+task_memory   = 2048 # 2 GB
+desired_count = 2    # HA: 2 tasks across AZs
 
 # Spot instances for cost optimization (non-critical workloads)
-use_fargate_spot = false  # Set to true for 70% cost savings (with interruption risk)
+use_fargate_spot = false # Set to true for 70% cost savings (with interruption risk)
 
 # -----------------------------------------------------------------------------
 # ACM Certificate (HTTPS)
@@ -104,7 +104,7 @@ use_fargate_spot = false  # Set to true for 70% cost savings (with interruption 
 # -----------------------------------------------------------------------------
 # Benchmark Runner: Use spot instances for cost savings
 deploy_benchmark_runner = true
-benchmark_use_spot      = true  # 70% cost savings
+benchmark_use_spot      = true # 70% cost savings
 
 # Auto-scaling configuration
 enable_autoscaling     = true
@@ -114,13 +114,13 @@ autoscaling_cpu_target = 70
 
 # Data lifecycle policies
 shared_bucket_lifecycle_enabled = true
-shared_bucket_lifecycle_days    = 90  # Move to IA after 90 days
+shared_bucket_lifecycle_days    = 90 # Move to IA after 90 days
 
 # -----------------------------------------------------------------------------
 # Sample Datasets (Optional)
 # -----------------------------------------------------------------------------
 deploy_sample_datasets        = true
-sample_datasets_auto_populate = false  # Manual population to control costs
+sample_datasets_auto_populate = false # Manual population to control costs
 
 # -----------------------------------------------------------------------------
 # Embedding Providers

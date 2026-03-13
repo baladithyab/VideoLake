@@ -23,7 +23,7 @@ variable "instance_type" {
   default     = "ml.g4dn.xlarge"
 
   validation {
-    condition = can(regex("^ml\\.", var.instance_type))
+    condition     = can(regex("^ml\\.", var.instance_type))
     error_message = "Instance type must be a valid SageMaker instance type (e.g., ml.g4dn.xlarge)."
   }
 }

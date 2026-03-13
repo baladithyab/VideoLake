@@ -14,13 +14,13 @@ variable "deployment_name" {
 variable "task_cpu" {
   description = "CPU units for Fargate task (1024 = 1 vCPU)"
   type        = number
-  default     = 4096  # 4 vCPU
+  default     = 4096 # 4 vCPU
 }
 
 variable "task_memory_mb" {
   description = "Memory for Fargate task in MB"
   type        = number
-  default     = 16384  # 16 GB
+  default     = 16384 # 16 GB
 }
 
 variable "milvus_version" {

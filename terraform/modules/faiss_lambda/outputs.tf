@@ -166,21 +166,21 @@ output "deployment_instructions" {
 output "deployment_info" {
   description = "Complete deployment information for resource registry"
   value = {
-    deployment_id      = var.deployment_name
-    deployment_type    = "lambda"
-    backend_type       = "faiss-serverless"
-    function_name      = aws_lambda_function.faiss.function_name
-    function_arn       = aws_lambda_function.faiss.arn
-    function_url       = var.enable_function_url ? aws_lambda_function_url.faiss[0].function_url : null
-    index_bucket       = aws_s3_bucket.faiss_index.id
-    index_key          = var.faiss_index_key
-    memory_mb          = var.lambda_memory_mb
-    timeout_seconds    = var.lambda_timeout
-    region             = var.aws_region
-    runtime            = var.lambda_runtime
-    vector_dimension   = var.vector_dimension
-    cost_model         = "pay-per-invocation"
-    estimated_cost     = "$2-10/month for light use (1M requests free tier)"
+    deployment_id    = var.deployment_name
+    deployment_type  = "lambda"
+    backend_type     = "faiss-serverless"
+    function_name    = aws_lambda_function.faiss.function_name
+    function_arn     = aws_lambda_function.faiss.arn
+    function_url     = var.enable_function_url ? aws_lambda_function_url.faiss[0].function_url : null
+    index_bucket     = aws_s3_bucket.faiss_index.id
+    index_key        = var.faiss_index_key
+    memory_mb        = var.lambda_memory_mb
+    timeout_seconds  = var.lambda_timeout
+    region           = var.aws_region
+    runtime          = var.lambda_runtime
+    vector_dimension = var.vector_dimension
+    cost_model       = "pay-per-invocation"
+    estimated_cost   = "$2-10/month for light use (1M requests free tier)"
   }
 }
 

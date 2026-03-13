@@ -23,13 +23,13 @@ variable "backend_type" {
 variable "task_cpu" {
   description = "CPU units for Fargate task"
   type        = number
-  default     = 2048  # 2 vCPU
+  default     = 2048 # 2 vCPU
 }
 
 variable "task_memory_mb" {
   description = "Memory for Fargate task"
   type        = number
-  default     = 8192  # 8 GB
+  default     = 8192 # 8 GB
 }
 
 variable "lancedb_api_image" {

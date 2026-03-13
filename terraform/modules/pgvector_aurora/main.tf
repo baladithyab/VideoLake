@@ -83,13 +83,13 @@ resource "aws_kms_alias" "rds" {
 
 # Aurora PostgreSQL Serverless v2 cluster with pgvector
 resource "aws_rds_cluster" "pgvector" {
-  cluster_identifier     = "${var.deployment_name}-pgvector"
-  engine                 = "aurora-postgresql"
-  engine_mode            = "provisioned"
-  engine_version         = var.postgres_version
-  database_name          = var.database_name
-  master_username        = var.master_username
-  master_password        = var.master_password != "" ? var.master_password : random_password.master_password[0].result
+  cluster_identifier = "${var.deployment_name}-pgvector"
+  engine             = "aurora-postgresql"
+  engine_mode        = "provisioned"
+  engine_version     = var.postgres_version
+  database_name      = var.database_name
+  master_username    = var.master_username
+  master_password    = var.master_password != "" ? var.master_password : random_password.master_password[0].result
 
   serverlessv2_scaling_configuration {
     min_capacity = var.min_acu

@@ -223,11 +223,11 @@ resource "aws_lambda_function_url" "faiss" {
 
 # Lambda permission for function URL
 resource "aws_lambda_permission" "function_url" {
-  count         = var.enable_function_url ? 1 : 0
-  statement_id  = "AllowFunctionURLInvoke"
-  action        = "lambda:InvokeFunctionUrl"
-  function_name = aws_lambda_function.faiss.function_name
-  principal     = "*"
+  count                  = var.enable_function_url ? 1 : 0
+  statement_id           = "AllowFunctionURLInvoke"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.faiss.function_name
+  principal              = "*"
   function_url_auth_type = var.function_url_auth_type
 }
 
@@ -265,7 +265,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
   namespace           = "AWS/Lambda"
   period              = "300"
   statistic           = "Average"
-  threshold           = var.lambda_timeout * 1000 * 0.8  # 80% of timeout
+  threshold           = var.lambda_timeout * 1000 * 0.8 # 80% of timeout
   alarm_description   = "FAISS Lambda approaching timeout"
   treat_missing_data  = "notBreaching"
 
